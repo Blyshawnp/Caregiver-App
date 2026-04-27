@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+    /* Prevent iOS pull-to-refresh on the body so it feels app-like */
+    overscroll-behavior-y: contain;
+  }
+  body {
+    @apply bg-cream-100 text-ink-900 font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
+    /* Allow vertical scroll but prevent horizontal swipe gestures (iOS back) */
+    overscroll-behavior-x: contain;
+    /* Improve touch responsiveness */
+    touch-action: manipulation;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
+    font-feature-settings: "ss01";
+  }
+  /* Don't let buttons/links show the blue iOS tap flash */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  /* But keep text inputs selectable normally */
+  input, textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+/* Subtle paper-like grain texture for warmth without noise */
+.grain-overlay {
+  position: relative;
+}
+.grain-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(45, 50, 40, 0.025) 1px, transparent 1px);
+  background-size: 3px 3px;
+  border-radius: inherit;
+  opacity: 0.5;
+}
+
+/* When installed as a PWA on iOS, the status bar overlaps content; this
+   helper adds breathing room above the first element. Used selectively. */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

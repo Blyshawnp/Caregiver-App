@@ -2,6 +2,28 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import CheckInForm from "./check-in-form";
+import type { AssignmentStatus } from "@/lib/db-types";
+
+type ShiftForCheckIn = {
+  id: string;
+  caregiver_id: string | null;
+  assignment_status: AssignmentStatus | null;
+  scheduled_start: string;
+  scheduled_end: string;
+  organization_id: string;
+  clients: {
+    full_name: string;
+    address: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    geofence_radius_meters: number;
+  } | null;
+  check_ins: Array<{
+    id: string;
+    check_in_time: string | null;
+    check_out_time: string | null;
+  }>;
+};
 
 export default async function CheckInPage({
   params,
@@ -15,7 +37,7 @@ export default async function CheckInPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: shift } = await supabase
+  const { data: shiftRaw } = await supabase
     .from("shifts")
     .select(
       `
@@ -32,10 +54,11 @@ export default async function CheckInPage({
     .eq("id", id)
     .single();
 
-  if (!shift) notFound();
+  if (!shiftRaw) notFound();
+  const shift = shiftRaw as unknown as ShiftForCheckIn;
 
   // Only the assigned caregiver can check in
-  if ((shift as any).caregiver_id !== user.id) {
+  if (shift.caregiver_id !== user.id) {
     return (
       <main className="px-5 py-10 max-w-2xl mx-auto">
         <div className="bg-white rounded-3xl p-8 shadow-soft text-center">
@@ -55,7 +78,7 @@ export default async function CheckInPage({
   }
 
   // Must be accepted before check-in
-  if ((shift as any).assignment_status === "pending") {
+  if (shift.assignment_status === "pending") {
     return (
       <main className="px-5 py-10 max-w-2xl mx-auto">
         <div className="bg-white rounded-3xl p-8 shadow-soft text-center">
@@ -75,10 +98,26 @@ export default async function CheckInPage({
   }
 
   // Already checked in?
-  const existing = (shift as any).check_ins?.[0];
+  const existing = shift.check_ins[0];
   if (existing?.check_in_time) {
     redirect(`/schedule/${id}`);
   }
 
-  return <CheckInForm shift={shift as any} />;
+  // Form requires non-null clients (geofence)
+  if (!shift.clients) {
+    redirect(`/schedule/${id}`);
+  }
+
+  return (
+    <CheckInForm
+      shift={{
+        id: shift.id,
+        caregiver_id: shift.caregiver_id as string,
+        organization_id: shift.organization_id,
+        scheduled_start: shift.scheduled_start,
+        scheduled_end: shift.scheduled_end,
+        clients: shift.clients,
+      }}
+    />
+  );
 }

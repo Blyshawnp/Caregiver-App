@@ -18,6 +18,8 @@ type ActiveWatch = {
   check_in_id: string | null;
 };
 
+export type { ActiveWatch };
+
 /**
  * Watches the caregiver's location while they're checked in. Behaviors:
  *
@@ -157,7 +159,7 @@ async function performAutoCheckOut(
   const supabase = createClient();
 
   // Update check_in row with auto check-out info
-  const update: any = {
+  const update = {
     check_out_time: new Date().toISOString(),
     check_out_latitude: coords.latitude,
     check_out_longitude: coords.longitude,

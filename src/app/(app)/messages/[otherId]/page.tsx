@@ -39,6 +39,15 @@ export default async function ThreadPage({
 
   if (!other) notFound();
 
+  type ThreadMessage = {
+    id: string;
+    sender_id: string;
+    recipient_id: string | null;
+    content: string;
+    is_read: boolean;
+    created_at: string;
+  };
+
   // Fetch messages in this thread
   const { data: messages } = await supabase
     .from("messages")
@@ -47,7 +56,8 @@ export default async function ThreadPage({
       `and(sender_id.eq.${me.id},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${me.id})`
     )
     .order("created_at", { ascending: true })
-    .limit(500);
+    .limit(500)
+    .returns<ThreadMessage[]>();
 
   // Mark received messages as read
   await supabase
@@ -61,7 +71,7 @@ export default async function ThreadPage({
     <ThreadView
       me={me}
       other={other}
-      initialMessages={(messages ?? []) as any[]}
+      initialMessages={messages ?? []}
     />
   );
 }

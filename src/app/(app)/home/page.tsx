@@ -68,48 +68,80 @@ export default async function HomePage() {
 
   const { data: rows } = await query;
 
-  const shifts: ShiftRow[] =
-    (rows ?? []).map((r: any) => {
+  type ShiftQueryRow = {
+    id: string;
+    scheduled_start: string;
+    scheduled_end: string;
+    caregiver_id: string | null;
+    assignment_status: "pending" | "accepted" | "declined" | null;
+    profiles: { full_name: string } | null;
+    clients: {
+      full_name: string;
+      address: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      geofence_radius_meters: number;
+    } | null;
+    shift_types: { name: string; color: string } | null;
+    check_ins: Array<{ check_in_time: string | null; check_out_time: string | null }>;
+    shift_todos: Array<{ id: string; is_completed: boolean }>;
+  };
+
+  const shifts: ShiftRow[] = ((rows ?? []) as unknown as ShiftQueryRow[]).map(
+    (r) => {
       const todos = r.shift_todos ?? [];
       return {
         id: r.id,
         scheduled_start: r.scheduled_start,
         scheduled_end: r.scheduled_end,
         caregiver_id: r.caregiver_id,
-        caregiver_name: r.profiles?.[0]?.full_name ?? null,
-        client_name: r.clients?.[0]?.full_name ?? "Client",
-        client_address: r.clients?.[0]?.address ?? null,
-        client_lat: r.clients?.[0]?.latitude ?? null,
-        client_lng: r.clients?.[0]?.longitude ?? null,
-        geofence_radius_meters: r.clients?.[0]?.geofence_radius_meters ?? 150,
-        shift_type_name: r.shift_types?.[0]?.name ?? null,
-        shift_type_color: r.shift_types?.[0]?.color ?? null,
+        caregiver_name: r.profiles?.full_name ?? null,
+        client_name: r.clients?.full_name ?? "Client",
+        client_address: r.clients?.address ?? null,
+        client_lat: r.clients?.latitude ?? null,
+        client_lng: r.clients?.longitude ?? null,
+        geofence_radius_meters: r.clients?.geofence_radius_meters ?? 150,
+        shift_type_name: r.shift_types?.name ?? null,
+        shift_type_color: r.shift_types?.color ?? null,
         check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
         check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
         todo_total: todos.length,
-        todo_done: todos.filter((t: any) => t.is_completed).length,
+        todo_done: todos.filter((t) => t.is_completed).length,
         assignment_status: r.assignment_status ?? null,
       };
-    }) ?? [];
+    }
+  );
 
   // For admin/client: list of caregivers currently on shift
   let activeShifts: ActiveShift[] = [];
   if (profile.role !== "caregiver") {
+    type ActiveQueryRow = {
+      shift_id: string;
+      caregiver_name: string | null;
+      client_name: string | null;
+      check_in_time: string;
+      scheduled_end: string;
+      past_scheduled_end: boolean;
+      flagged_outside_geofence: boolean | null;
+      shift_type_color: string | null;
+    };
+
     const { data: activeRows } = await supabase
       .from("currently_on_shift")
       .select(
         "shift_id, caregiver_name, client_name, check_in_time, scheduled_end, past_scheduled_end, flagged_outside_geofence, shift_type_color"
       )
-      .order("check_in_time", { ascending: true });
+      .order("check_in_time", { ascending: true })
+      .returns<ActiveQueryRow[]>();
 
-    activeShifts = (activeRows ?? []).map((r: any) => ({
+    activeShifts = (activeRows ?? []).map((r) => ({
       shift_id: r.shift_id,
       caregiver_name: r.caregiver_name ?? "Caregiver",
       client_name: r.client_name ?? "Client",
       check_in_time: r.check_in_time,
       scheduled_end: r.scheduled_end,
       past_scheduled_end: r.past_scheduled_end,
-      flagged: r.flagged_outside_geofence,
+      flagged: r.flagged_outside_geofence ?? false,
       shift_type_color: r.shift_type_color ?? null,
     }));
   }

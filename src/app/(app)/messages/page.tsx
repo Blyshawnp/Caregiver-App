@@ -54,9 +54,20 @@ export default async function MessagesPage() {
     .order("created_at", { ascending: false })
     .limit(200);
 
+  type MessageRow = {
+    id: string;
+    sender_id: string;
+    recipient_id: string | null;
+    content: string;
+    is_read: boolean;
+    created_at: string;
+    sender: { full_name: string; role: "admin" | "client" | "caregiver" } | null;
+    recipient: { full_name: string; role: "admin" | "client" | "caregiver" } | null;
+  };
+
   // Group by "other person" (whoever isn't me in the message)
   const threadMap = new Map<string, Thread>();
-  for (const m of (messages ?? []) as any[]) {
+  for (const m of (messages ?? []) as unknown as MessageRow[]) {
     const isFromMe = m.sender_id === profile.id;
     const otherId = isFromMe ? m.recipient_id : m.sender_id;
     if (!otherId) continue; // skip org-broadcasts (recipient null) for now

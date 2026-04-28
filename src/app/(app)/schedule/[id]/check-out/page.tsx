@@ -3,6 +3,31 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import CheckOutForm from "./check-out-form";
 
+type ShiftForCheckOut = {
+  id: string;
+  caregiver_id: string | null;
+  organization_id: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  clients: {
+    full_name: string;
+    address: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    geofence_radius_meters: number;
+  } | null;
+  check_ins: Array<{
+    id: string;
+    check_in_time: string | null;
+    check_out_time: string | null;
+  }>;
+  shift_todos: Array<{
+    id: string;
+    task_name: string;
+    is_completed: boolean;
+  }>;
+};
+
 export default async function CheckOutPage({
   params,
 }: {
@@ -15,7 +40,7 @@ export default async function CheckOutPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: shift } = await supabase
+  const { data: shiftRaw } = await supabase
     .from("shifts")
     .select(
       `
@@ -32,9 +57,10 @@ export default async function CheckOutPage({
     .eq("id", id)
     .single();
 
-  if (!shift) notFound();
+  if (!shiftRaw) notFound();
+  const shift = shiftRaw as unknown as ShiftForCheckOut;
 
-  if ((shift as any).caregiver_id !== user.id) {
+  if (shift.caregiver_id !== user.id) {
     return (
       <main className="px-5 py-10 max-w-2xl mx-auto">
         <div className="bg-white rounded-3xl p-8 shadow-soft text-center">
@@ -50,22 +76,32 @@ export default async function CheckOutPage({
     );
   }
 
-  const existing = (shift as any).check_ins?.[0];
+  const existing = shift.check_ins[0];
   if (!existing?.check_in_time) {
     redirect(`/schedule/${id}/check-in`);
   }
-  if (existing?.check_out_time) {
+  if (existing.check_out_time) {
     redirect(`/schedule/${id}`);
   }
 
-  const todos = (shift as any).shift_todos ?? [];
+  // Pass a non-null clients object to the form (it requires geofence info)
+  if (!shift.clients) {
+    redirect(`/schedule/${id}`);
+  }
 
   return (
     <CheckOutForm
-      shift={shift as any}
+      shift={{
+        id: shift.id,
+        caregiver_id: shift.caregiver_id as string,
+        organization_id: shift.organization_id,
+        scheduled_start: shift.scheduled_start,
+        scheduled_end: shift.scheduled_end,
+        clients: shift.clients,
+      }}
       checkInId={existing.id}
       checkInTime={existing.check_in_time}
-      todos={todos}
+      todos={shift.shift_todos}
     />
   );
 }

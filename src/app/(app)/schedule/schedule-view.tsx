@@ -160,15 +160,26 @@ function ShiftCard({ shift }: { shift: ScheduleShift }) {
               On shift
             </span>
           )}
-          {!shift.has_check_in && shift.assignment_status === "pending" && (
-            <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-terracotta-400/15 px-1.5 py-0.5 rounded">
-              Pending
+          {shift.is_released && (
+            <span className="text-[10px] uppercase tracking-wider text-cream-50 font-medium bg-terracotta-500 px-1.5 py-0.5 rounded">
+              Available
             </span>
           )}
+          {!shift.has_check_in &&
+            !shift.is_released &&
+            shift.assignment_status === "pending" && (
+              <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-terracotta-400/15 px-1.5 py-0.5 rounded">
+                Pending
+              </span>
+            )}
         </div>
         <p className="text-xs text-ink-500">
           {formatTime(start)} – {formatTime(end)}
-          {shift.caregiver_name ? ` · ${shift.caregiver_name}` : " · Unassigned"}
+          {shift.is_released
+            ? " · Up for grabs"
+            : shift.caregiver_name
+              ? ` · ${shift.caregiver_name}`
+              : " · Unassigned"}
         </p>
       </div>
       <ArrowRightIcon size={16} className="text-ink-300 self-center" />

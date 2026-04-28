@@ -118,7 +118,12 @@ export default function NewShiftForm({
       created_by: currentUserId,
     };
 
-    let rows: any[] = [];
+    type ShiftInsert = typeof baseRow & {
+      scheduled_start: string;
+      scheduled_end: string;
+    };
+
+    let rows: ShiftInsert[] = [];
 
     if (mode === "single") {
       const startISO = combineDateTime(singleDate, startTime);
@@ -154,11 +159,18 @@ export default function NewShiftForm({
         return;
       }
 
-      rows = dates.map((d) => ({
-        ...baseRow,
-        scheduled_start: combineDateTime(d, startTime),
-        scheduled_end: combineDateTime(d, endTime),
-      }));
+      rows = dates
+        .map((d) => {
+          const start = combineDateTime(d, startTime);
+          const end = combineDateTime(d, endTime);
+          if (!start || !end) return null;
+          return {
+            ...baseRow,
+            scheduled_start: start,
+            scheduled_end: end,
+          };
+        })
+        .filter((r): r is ShiftInsert => r !== null);
     }
 
     setSubmitting(true);

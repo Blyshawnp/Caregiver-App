@@ -2,6 +2,19 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import EditShiftForm from "./edit-shift-form";
+import type { Role } from "@/lib/db-types";
+
+type EditableShift = {
+  id: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  caregiver_id: string | null;
+  client_id: string;
+  shift_type_id: string | null;
+  bonus_amount: number | null;
+  bonus_reason: string | null;
+  notes: string | null;
+};
 
 export default async function EditShiftPage({
   params,
@@ -19,7 +32,7 @@ export default async function EditShiftPage({
     .from("profiles")
     .select("role")
     .eq("id", user.id)
-    .single<{ role: "admin" | "client" | "caregiver" }>();
+    .single<{ role: Role }>();
 
   if (!profile || profile.role === "caregiver") {
     return (
@@ -47,7 +60,7 @@ export default async function EditShiftPage({
         "id, scheduled_start, scheduled_end, caregiver_id, client_id, shift_type_id, bonus_amount, bonus_reason, notes"
       )
       .eq("id", id)
-      .single(),
+      .single<EditableShift>(),
     supabase
       .from("profiles")
       .select("id, full_name")
@@ -62,7 +75,7 @@ export default async function EditShiftPage({
 
   return (
     <EditShiftForm
-      shift={shiftRes.data as any}
+      shift={shiftRes.data}
       caregivers={caregiversRes.data ?? []}
       shiftTypes={shiftTypesRes.data ?? []}
       clients={clientsRes.data ?? []}

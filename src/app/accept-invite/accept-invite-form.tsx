@@ -80,11 +80,19 @@ export default function AcceptInviteForm({
       return;
     }
 
-    // Mark the invitation as accepted
-    await supabase
-      .from("invitations")
-      .update({ accepted_at: new Date().toISOString() })
-      .eq("id", invitation.id);
+    // Mark the invitation as accepted via the RPC (security-definer function)
+    // so RLS can't silently block it. The token is the auth credential.
+    const { data: accepted, error: acceptError } = await supabase.rpc(
+      "accept_invitation",
+      { invitation_token: token }
+    );
+
+    if (acceptError) {
+      // Don't block the user from getting in; admin can clean up manually
+      console.error("Could not mark invitation accepted:", acceptError);
+    } else if (accepted === false) {
+      console.error("Invitation accept returned false");
+    }
 
     // If admin had set a pending pay rate (from invite form localStorage), apply it
     if (invitation.role === "caregiver") {

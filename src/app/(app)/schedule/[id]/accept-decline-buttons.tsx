@@ -13,7 +13,10 @@ export default function AcceptDeclineButtons({ shiftId }: { shiftId: string }) {
     setError(null);
     setLoading(status === "accepted" ? "accept" : "decline");
     const supabase = createClient();
-    const update: any = { assignment_status: status };
+    const update: {
+      assignment_status: "accepted" | "declined";
+      caregiver_id?: null;
+    } = { assignment_status: status };
     if (status === "declined") update.caregiver_id = null;
 
     // Use .select() to confirm the row was actually updated; if RLS silently

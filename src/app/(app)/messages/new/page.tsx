@@ -26,7 +26,10 @@ export default async function NewMessagePage() {
     .eq("is_active", true)
     .neq("id", profile.id)
     .order("role")
-    .order("full_name");
+    .order("full_name")
+    .returns<
+      { id: string; full_name: string; role: "admin" | "client" | "caregiver" }[]
+    >();
 
   const roleCopy: Record<string, string> = {
     admin: "Admin",
@@ -58,7 +61,7 @@ export default async function NewMessagePage() {
         </div>
       ) : (
         <ul className="space-y-2">
-          {people.map((p: any) => (
+          {people.map((p) => (
             <li key={p.id}>
               <Link
                 href={`/messages/${p.id}`}

@@ -71,7 +71,17 @@ export default function EditShiftForm({
 
     // If caregiver changed, reset assignment status to pending
     const caregiverChanged = (caregiverId || null) !== shift.caregiver_id;
-    const updates: any = {
+    const updates: {
+      client_id: string;
+      caregiver_id: string | null;
+      shift_type_id: string | null;
+      scheduled_start: string;
+      scheduled_end: string;
+      bonus_amount: number;
+      bonus_reason: string | null;
+      notes: string | null;
+      assignment_status?: "pending" | null;
+    } = {
       client_id: clientId,
       caregiver_id: caregiverId || null,
       shift_type_id: shiftTypeId || null,

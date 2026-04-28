@@ -47,7 +47,11 @@ export default function TasksView({
     setOptimistic((p) => ({ ...p, [todo.id]: newValue }));
 
     const supabase = createClient();
-    const update: any = {
+    const update: {
+      is_completed: boolean;
+      completed_at: string | null;
+      completed_by: string | null;
+    } = {
       is_completed: newValue,
       completed_at: newValue ? new Date().toISOString() : null,
       completed_by: newValue ? currentUserId : null,

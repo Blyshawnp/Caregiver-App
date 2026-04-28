@@ -25,25 +25,22 @@ type Shift = {
   };
 };
 
-type LocatedStatus = {
-  kind: "located";
-  coords: { latitude: number; longitude: number; accuracy: number };
-  distance: number | null;
-  withinFence: boolean;
-};
-
-type ReadyStatus = LocatedStatus | { kind: "denied" };
-
 type Status =
   | { kind: "init" }
   | { kind: "locating" }
-  | ReadyStatus
-  | { kind: "submitting"; previous: ReadyStatus }
-  | { kind: "error"; message: string; previous: ReadyStatus };
+  | { kind: "denied" }
+  | {
+      kind: "located";
+      coords: { latitude: number; longitude: number; accuracy: number };
+      distance: number | null;
+      withinFence: boolean;
+    };
 
 export default function CheckInForm({ shift }: { shift: Shift }) {
   const [status, setStatus] = useState<Status>({ kind: "init" });
   const [confirmingFlag, setConfirmingFlag] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Auto-request location on mount
   useEffect(() => {
@@ -52,7 +49,6 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
   }, []);
 
   async function runLocate() {
-    setConfirmingFlag(false);
     setStatus({ kind: "locating" });
     const coords = await getCurrentPosition();
 
@@ -78,40 +74,48 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
   }
 
   async function submitCheckIn(force = false) {
-    if (status.kind === "submitting") return;
+    // Guard: only proceed from located or denied state
+    if (status.kind !== "located" && status.kind !== "denied") return;
+    // Guard: prevent double-submit
+    if (submitting) return;
 
-    const currentStatus =
-      status.kind === "located" || status.kind === "denied"
-        ? status
-        : status.kind === "error"
-          ? status.previous
-          : null;
-
-    if (!currentStatus) return;
-
-    if (currentStatus.kind === "located" && !currentStatus.withinFence && !force) {
+    if (status.kind === "located" && !status.withinFence && !force) {
       setConfirmingFlag(true);
       return;
     }
 
-    setConfirmingFlag(false);
-    setStatus({ kind: "submitting", previous: currentStatus });
+    setSubmitting(true);
+    setSubmitError(null);
     const supabase = createClient();
 
     const flagged =
-      currentStatus.kind === "denied" ||
-      (currentStatus.kind === "located" && !currentStatus.withinFence);
+      status.kind === "denied" ||
+      (status.kind === "located" && !status.withinFence);
     const flagReason =
-      currentStatus.kind === "denied"
+      status.kind === "denied"
         ? "Location permission denied"
-        : currentStatus.kind === "located" && !currentStatus.withinFence
-          ? `Checked in ${formatDistance(currentStatus.distance ?? 0)} from client (radius ${shift.clients.geofence_radius_meters}m)`
+        : status.kind === "located" && !status.withinFence
+          ? `Checked in ${formatDistance(status.distance ?? 0)} from client (radius ${shift.clients.geofence_radius_meters}m)`
           : null;
 
-    const checkInRow: Record<string, string | number | boolean | null> = {
+    const checkInRow: {
+      shift_id: string;
+      caregiver_id: string;
+      check_in_time: string;
+      check_in_latitude?: number;
+      check_in_longitude?: number;
+      check_in_within_geofence: boolean;
+      flagged_outside_geofence: boolean;
+      flag_reason: string | null;
+      check_out_time: null;
+      check_out_latitude: null;
+      check_out_longitude: null;
+      check_out_within_geofence: null;
+    } = {
       shift_id: shift.id,
       caregiver_id: shift.caregiver_id,
       check_in_time: new Date().toISOString(),
+      check_in_within_geofence: false,
       flagged_outside_geofence: flagged,
       flag_reason: flagReason,
       // Reset check-out fields in case there's a stale row
@@ -121,12 +125,10 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
       check_out_within_geofence: null,
     };
 
-    if (currentStatus.kind === "located") {
-      checkInRow.check_in_latitude = currentStatus.coords.latitude;
-      checkInRow.check_in_longitude = currentStatus.coords.longitude;
-      checkInRow.check_in_within_geofence = currentStatus.withinFence;
-    } else {
-      checkInRow.check_in_within_geofence = false;
+    if (status.kind === "located") {
+      checkInRow.check_in_latitude = status.coords.latitude;
+      checkInRow.check_in_longitude = status.coords.longitude;
+      checkInRow.check_in_within_geofence = status.withinFence;
     }
 
     // Upsert: if a check_ins row already exists for this shift, update it.
@@ -138,20 +140,15 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
       .select("id");
 
     if (error) {
-      setStatus({
-        kind: "error",
-        message: error.message,
-        previous: currentStatus,
-      });
+      setSubmitError(error.message);
+      setSubmitting(false);
       return;
     }
     if (!writtenRows || writtenRows.length === 0) {
-      setStatus({
-        kind: "error",
-        message:
-          "Check-in did not save. Your account may not have permission. Try refreshing or contact the admin.",
-        previous: currentStatus,
-      });
+      setSubmitError(
+        "Check-in did not save. Your account may not have permission. Try refreshing or contact the admin."
+      );
+      setSubmitting(false);
       return;
     }
 
@@ -190,10 +187,6 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
   const start = new Date(shift.scheduled_start);
   const noClientCoords =
     shift.clients.latitude == null || shift.clients.longitude == null;
-  const displayStatus =
-    status.kind === "submitting" || status.kind === "error"
-      ? status.previous
-      : status;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -214,13 +207,13 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
       {/* Map-pin status card */}
       <section className="bg-white rounded-3xl shadow-soft p-6 mb-4 grain-overlay">
         <div className="relative">
-          {displayStatus.kind === "init" || displayStatus.kind === "locating" ? (
+          {status.kind === "init" || status.kind === "locating" ? (
             <LocatingState />
-          ) : displayStatus.kind === "denied" ? (
+          ) : status.kind === "denied" ? (
             <DeniedState onRetry={runLocate} />
-          ) : displayStatus.kind === "located" ? (
+          ) : status.kind === "located" ? (
             <LocatedState
-              status={displayStatus}
+              status={status}
               clientName={shift.clients.full_name}
               clientAddress={shift.clients.address}
               radius={shift.clients.geofence_radius_meters}
@@ -260,31 +253,23 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
         </div>
       )}
 
-      {status.kind === "error" && (
+      {submitError && (
         <div className="bg-terracotta-400/10 border border-terracotta-400/30 text-terracotta-600 rounded-2xl px-4 py-3 text-sm mb-4">
-          {status.message}
+          {submitError}
         </div>
       )}
 
       <div className="space-y-2">
-        {(displayStatus.kind === "located" || displayStatus.kind === "denied") &&
+        {(status.kind === "located" || status.kind === "denied") &&
           !confirmingFlag && (
             <button
-              type="button"
-              onClick={() => void submitCheckIn(false)}
-              className="block w-full bg-forest-600 hover:bg-forest-700 text-cream-50 py-3.5 rounded-2xl font-medium text-center transition active:scale-[0.99]"
+              onClick={() => submitCheckIn(false)}
+              disabled={submitting}
+              className="block w-full bg-forest-600 hover:bg-forest-700 disabled:opacity-70 text-cream-50 py-3.5 rounded-2xl font-medium text-center transition active:scale-[0.99]"
             >
-              Check in now
+              {submitting ? "Checking in..." : "Check in now"}
             </button>
           )}
-        {status.kind === "submitting" && (
-          <button
-            disabled
-            className="block w-full bg-forest-600 text-cream-50 py-3.5 rounded-2xl font-medium text-center opacity-70"
-          >
-            Checking in...
-          </button>
-        )}
         <Link
           href={`/schedule/${shift.id}`}
           className="block w-full bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-3.5 rounded-2xl font-medium text-center transition"
@@ -321,7 +306,6 @@ function DeniedState({ onRetry }: { onRetry: () => void }) {
         You can still check in, but it will be flagged for the admin to review.
       </p>
       <button
-        type="button"
         onClick={onRetry}
         className="text-sm text-forest-600 font-medium hover:underline"
       >
@@ -338,7 +322,7 @@ function LocatedState({
   radius,
   noCoords,
 }: {
-  status: LocatedStatus;
+  status: Extract<Status, { kind: "located" }>;
   clientName: string;
   clientAddress: string | null;
   radius: number;

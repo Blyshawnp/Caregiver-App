@@ -40,8 +40,8 @@ export default async function TasksPage({
         .is("check_ins.check_out_time", null)
         .not("check_ins.check_in_time", "is", null)
         .limit(1)
-        .maybeSingle();
-      shiftId = (active as any)?.id ?? null;
+        .maybeSingle<{ id: string }>();
+      shiftId = active?.id ?? null;
 
       if (!shiftId) {
         const { data: upcoming } = await supabase
@@ -52,8 +52,8 @@ export default async function TasksPage({
           .gte("scheduled_end", new Date().toISOString())
           .order("scheduled_start", { ascending: true })
           .limit(1)
-          .maybeSingle();
-        shiftId = (upcoming as any)?.id ?? null;
+          .maybeSingle<{ id: string }>();
+        shiftId = upcoming?.id ?? null;
       }
     } else {
       const { data: upcoming } = await supabase
@@ -62,8 +62,8 @@ export default async function TasksPage({
         .gte("scheduled_end", new Date().toISOString())
         .order("scheduled_start", { ascending: true })
         .limit(1)
-        .maybeSingle();
-      shiftId = (upcoming as any)?.id ?? null;
+        .maybeSingle<{ id: string }>();
+      shiftId = upcoming?.id ?? null;
     }
   }
 
@@ -97,7 +97,29 @@ export default async function TasksPage({
     );
   }
 
-  const { data: shift } = await supabase
+  type TasksShift = {
+    id: string;
+    caregiver_id: string | null;
+    scheduled_start: string;
+    scheduled_end: string;
+    organization_id: string;
+    clients: { full_name: string } | null;
+    check_ins: Array<{
+      check_in_time: string | null;
+      check_out_time: string | null;
+    }>;
+    shift_todos: Array<{
+      id: string;
+      task_name: string;
+      description: string | null;
+      is_completed: boolean;
+      completed_at: string | null;
+      sort_order: number;
+      notes: string | null;
+    }>;
+  };
+
+  const { data: shiftRaw } = await supabase
     .from("shifts")
     .select(
       `
@@ -122,17 +144,17 @@ export default async function TasksPage({
     .eq("id", shiftId)
     .single();
 
-  if (!shift) redirect("/schedule");
+  if (!shiftRaw) redirect("/schedule");
 
-  const shiftAny = shift as any;
-  const todos = (shiftAny.shift_todos ?? []).sort((a: any, b: any) => {
+  const shift = shiftRaw as unknown as TasksShift;
+  const todos = [...shift.shift_todos].sort((a, b) => {
     if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });
 
   const isAssignedCaregiver =
-    profile.role === "caregiver" && profile.id === shiftAny.caregiver_id;
-  const checkIn = shiftAny.check_ins?.[0];
+    profile.role === "caregiver" && profile.id === shift.caregiver_id;
+  const checkIn = shift.check_ins[0];
   const isOnShift = !!checkIn?.check_in_time && !checkIn?.check_out_time;
 
   return (
@@ -140,8 +162,8 @@ export default async function TasksPage({
       <header className="mb-6">
         <h1 className="font-display text-3xl text-ink-900">Tasks</h1>
         <p className="text-ink-500 text-sm">
-          {shiftAny.clients?.[0]?.full_name ?? "Client"} ·{" "}
-          {formatDateTime(new Date(shiftAny.scheduled_start))}
+          {shift.clients?.full_name} ·{" "}
+          {formatDateTime(new Date(shift.scheduled_start))}
           {isOnShift && (
             <span className="ml-2 text-[10px] uppercase tracking-wider bg-terracotta-500 text-cream-50 px-1.5 py-0.5 rounded font-medium">
               On shift
@@ -151,7 +173,7 @@ export default async function TasksPage({
       </header>
 
       <TasksView
-        shiftId={shiftAny.id}
+        shiftId={shift.id}
         todos={todos}
         canEdit={isAssignedCaregiver || profile.role !== "caregiver"}
         canCompleteTasks={isAssignedCaregiver}

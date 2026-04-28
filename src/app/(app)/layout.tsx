@@ -2,8 +2,36 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import BottomNav from "@/components/bottom-nav";
 import AppHeader from "@/components/app-header";
-import ShiftWatcher from "@/components/shift-watcher";
+import ShiftWatcher, {
+  type ActiveWatch,
+} from "@/components/shift-watcher";
 import InstallPrompt from "@/components/install-prompt";
+import type { Role } from "@/lib/db-types";
+
+type ProfileWithOrg = {
+  id: string;
+  full_name: string;
+  role: Role;
+  organization_id: string;
+  organizations: { name: string } | null;
+};
+
+type ActiveShiftRow = {
+  id: string;
+  scheduled_end: string;
+  organization_id: string;
+  clients: {
+    full_name: string;
+    latitude: number | null;
+    longitude: number | null;
+    geofence_radius_meters: number;
+  } | null;
+  check_ins: Array<{
+    id: string;
+    check_in_time: string | null;
+    check_out_time: string | null;
+  }>;
+};
 
 export default async function AppLayout({
   children,
@@ -20,19 +48,13 @@ export default async function AppLayout({
     .from("profiles")
     .select("id, full_name, role, organization_id, organizations(name)")
     .eq("id", user.id)
-    .single<{
-      id: string;
-      full_name: string;
-      role: "admin" | "client" | "caregiver";
-      organization_id: string;
-      organizations: { name: string } | null;
-    }>();
+    .single<ProfileWithOrg>();
 
   // If caregiver, look up their active (checked-in but not checked-out) shift
-  let activeWatch: any = null;
+  let activeWatch: ActiveWatch | null = null;
   if (profile?.role === "caregiver") {
     try {
-      const { data: active } = await supabase
+      const { data: activeRaw } = await supabase
         .from("shifts")
         .select(
           `
@@ -49,18 +71,18 @@ export default async function AppLayout({
         .limit(1)
         .maybeSingle();
 
-      if (active) {
+      if (activeRaw) {
+        const active = activeRaw as unknown as ActiveShiftRow;
         activeWatch = {
-          shift_id: (active as any).id,
+          shift_id: active.id,
           caregiver_id: profile.id,
-          organization_id: (active as any).organization_id,
-          scheduled_end: (active as any).scheduled_end,
-          client_lat: (active as any).clients?.[0]?.latitude ?? null,
-          client_lng: (active as any).clients?.[0]?.longitude ?? null,
-          geofence_radius:
-            (active as any).clients?.[0]?.geofence_radius_meters ?? 150,
-          client_name: (active as any).clients?.[0]?.full_name ?? "Client",
-          check_in_id: (active as any).check_ins?.[0]?.id ?? null,
+          organization_id: active.organization_id,
+          scheduled_end: active.scheduled_end,
+          client_lat: active.clients?.latitude ?? null,
+          client_lng: active.clients?.longitude ?? null,
+          geofence_radius: active.clients?.geofence_radius_meters ?? 150,
+          client_name: active.clients?.full_name ?? "Client",
+          check_in_id: active.check_ins[0]?.id ?? null,
         };
       }
     } catch {

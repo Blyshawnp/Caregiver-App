@@ -8,6 +8,12 @@ const DISMISS_DAYS = 14;
 
 type Platform = "ios" | "android" | "desktop" | "unsupported";
 
+// Chromium's beforeinstallprompt isn't in lib.dom.d.ts yet, so we model it.
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
 function detectPlatform(): Platform {
   if (typeof window === "undefined") return "unsupported";
   const ua = navigator.userAgent.toLowerCase();
@@ -18,8 +24,10 @@ function detectPlatform(): Platform {
 
 function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
-  // iOS-specific
-  if ((window.navigator as any).standalone === true) return true;
+  // iOS-specific. The `standalone` property is a non-standard Safari extension
+  // not in the lib types, so we narrow with a type guard instead of `as any`.
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  if (nav.standalone === true) return true;
   // PWA standard
   return window.matchMedia("(display-mode: standalone)").matches;
 }
@@ -42,7 +50,8 @@ export default function InstallPrompt() {
   const [platform, setPlatform] = useState<Platform>("unsupported");
   const [show, setShow] = useState(false);
   const [showIosSheet, setShowIosSheet] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     const p = detectPlatform();
@@ -61,7 +70,7 @@ export default function InstallPrompt() {
       // Listen for Chrome's beforeinstallprompt
       const handler = (e: Event) => {
         e.preventDefault();
-        setDeferredPrompt(e);
+        setDeferredPrompt(e as BeforeInstallPromptEvent);
         setShow(true);
       };
       window.addEventListener("beforeinstallprompt", handler);

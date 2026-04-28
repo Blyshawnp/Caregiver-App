@@ -48,9 +48,18 @@ export default async function MePage() {
       q = q.eq("caregiver_id", profile.id);
     }
 
+    type PayRow = {
+      shift_id: string;
+      hours_worked: number | null;
+      total_pay: number | null;
+      scheduled_start: string;
+      check_in_time: string | null;
+      caregiver_id: string;
+    };
+
     const { data: payRows } = await q;
 
-    for (const r of (payRows ?? []) as any[]) {
+    for (const r of (payRows ?? []) as PayRow[]) {
       // Use check_in_time if present, else scheduled_start
       const referenceTime = new Date(
         r.check_in_time ?? r.scheduled_start

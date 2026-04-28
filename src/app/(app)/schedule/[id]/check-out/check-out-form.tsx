@@ -126,15 +126,21 @@ export default function CheckOutForm({
           ? `Checked out ${formatDistance(status.distance ?? 0)} from client`
           : null;
 
-    const update: any = {
+    const update: {
+      check_out_time: string;
+      check_out_latitude?: number;
+      check_out_longitude?: number;
+      check_out_within_geofence: boolean;
+      flagged_outside_geofence?: boolean;
+      flag_reason?: string | null;
+    } = {
       check_out_time: new Date().toISOString(),
+      check_out_within_geofence: false,
     };
     if (status.kind === "located") {
       update.check_out_latitude = status.coords.latitude;
       update.check_out_longitude = status.coords.longitude;
       update.check_out_within_geofence = status.withinFence;
-    } else {
-      update.check_out_within_geofence = false;
     }
     // Don't overwrite the check-in flag if it was already flagged
     if (flagged) {

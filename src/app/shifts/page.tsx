@@ -89,7 +89,7 @@ export default async function ShiftsPage() {
 
               {/* Caregiver + Client */}
               <p className="text-ink-600 mb-2">
-                {shift.profiles?.full_name} • {shift.clients?.name}
+                {shift.profiles?.[0]?.full_name || "Caregiver"} • {shift.clients?.[0]?.name || "Client"}
               </p>
 
               {/* Notes */}

@@ -82,7 +82,7 @@ export default async function AppLayout({
           client_lng: active.clients?.longitude ?? null,
           geofence_radius: active.clients?.geofence_radius_meters ?? 150,
           client_name: active.clients?.full_name ?? "Client",
-          check_in_id: active.check_ins[0]?.id ?? null,
+          check_in_id: active.check_ins?.[0]?.id ?? null,
         };
       }
     } catch {

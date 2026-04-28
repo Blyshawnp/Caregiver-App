@@ -38,12 +38,12 @@ type ShiftDetail = {
     check_in_time: string | null;
     check_out_time: string | null;
     total_minutes: number | null;
-  }>;
+  }> | null;
   shift_todos: Array<{
     id: string;
     task_name: string;
     is_completed: boolean;
-  }>;
+  }> | null;
 };
 
 export default async function ShiftDetailPage({
@@ -109,8 +109,9 @@ export default async function ShiftDetailPage({
 
   const start = new Date(shift.scheduled_start);
   const end = new Date(shift.scheduled_end);
-  const checkIn = shift.check_ins[0];
-  const todos = shift.shift_todos;
+  const checkIns = shift.check_ins ?? [];
+  const checkIn = checkIns[0];
+  const todos = shift.shift_todos ?? [];
   const todosDone = todos.filter((t) => t.is_completed).length;
 
   const canEdit = profile?.role === "admin" || profile?.role === "client";

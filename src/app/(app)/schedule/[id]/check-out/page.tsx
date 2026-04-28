@@ -20,12 +20,12 @@ type ShiftForCheckOut = {
     id: string;
     check_in_time: string | null;
     check_out_time: string | null;
-  }>;
+  }> | null;
   shift_todos: Array<{
     id: string;
     task_name: string;
     is_completed: boolean;
-  }>;
+  }> | null;
 };
 
 export default async function CheckOutPage({
@@ -76,7 +76,7 @@ export default async function CheckOutPage({
     );
   }
 
-  const existing = shift.check_ins[0];
+  const existing = shift.check_ins?.[0];
   if (!existing?.check_in_time) {
     redirect(`/schedule/${id}/check-in`);
   }
@@ -101,7 +101,7 @@ export default async function CheckOutPage({
       }}
       checkInId={existing.id}
       checkInTime={existing.check_in_time}
-      todos={shift.shift_todos}
+      todos={shift.shift_todos ?? []}
     />
   );
 }

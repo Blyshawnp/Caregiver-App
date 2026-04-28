@@ -22,7 +22,7 @@ type ShiftForCheckIn = {
     id: string;
     check_in_time: string | null;
     check_out_time: string | null;
-  }>;
+  }> | null;
 };
 
 export default async function CheckInPage({
@@ -98,7 +98,7 @@ export default async function CheckInPage({
   }
 
   // Already checked in?
-  const existing = shift.check_ins[0];
+  const existing = shift.check_ins?.[0];
   if (existing?.check_in_time) {
     redirect(`/schedule/${id}`);
   }

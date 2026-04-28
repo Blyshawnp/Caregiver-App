@@ -107,7 +107,7 @@ export default async function TasksPage({
     check_ins: Array<{
       check_in_time: string | null;
       check_out_time: string | null;
-    }>;
+    }> | null;
     shift_todos: Array<{
       id: string;
       task_name: string;
@@ -116,7 +116,7 @@ export default async function TasksPage({
       completed_at: string | null;
       sort_order: number;
       notes: string | null;
-    }>;
+    }> | null;
   };
 
   const { data: shiftRaw } = await supabase
@@ -147,14 +147,14 @@ export default async function TasksPage({
   if (!shiftRaw) redirect("/schedule");
 
   const shift = shiftRaw as unknown as TasksShift;
-  const todos = [...shift.shift_todos].sort((a, b) => {
+  const todos = [...(shift.shift_todos ?? [])].sort((a, b) => {
     if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });
 
   const isAssignedCaregiver =
     profile.role === "caregiver" && profile.id === shift.caregiver_id;
-  const checkIn = shift.check_ins[0];
+  const checkIn = shift.check_ins?.[0];
   const isOnShift = !!checkIn?.check_in_time && !checkIn?.check_out_time;
 
   return (

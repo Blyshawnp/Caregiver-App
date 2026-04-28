@@ -74,7 +74,7 @@ export default async function ShiftsPage() {
                 <span
                   className="inline-block w-3 h-3 rounded-full"
                   style={{
-                    backgroundColor: shift.shift_types?.color || "#2F4F3E",
+                    backgroundColor: shift.shift_types?.[0]?.color || "#2F4F3E",
                   }}
                 />
                 <h2 className="text-xl font-display">

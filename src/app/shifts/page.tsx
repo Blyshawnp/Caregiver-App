@@ -78,7 +78,7 @@ export default async function ShiftsPage() {
                   }}
                 />
                 <h2 className="text-xl font-display">
-                  {shift.shift_types?.name || "Shift"}
+                  {shift.shift_types?.[0]?.name || "Shift"}
                 </h2>
               </div>
 

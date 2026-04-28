@@ -140,7 +140,7 @@ export default async function TasksPage({
       <header className="mb-6">
         <h1 className="font-display text-3xl text-ink-900">Tasks</h1>
         <p className="text-ink-500 text-sm">
-          {shiftAny.clients?.full_name} ·{" "}
+          {shiftAny.clients?.[0]?.full_name ?? "Client"} ·{" "}
           {formatDateTime(new Date(shiftAny.scheduled_start))}
           {isOnShift && (
             <span className="ml-2 text-[10px] uppercase tracking-wider bg-terracotta-500 text-cream-50 px-1.5 py-0.5 rounded font-medium">

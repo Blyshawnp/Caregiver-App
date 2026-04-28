@@ -40,7 +40,7 @@ export default async function AppLayout({
           scheduled_end,
           organization_id,
           clients ( full_name, latitude, longitude, geofence_radius_meters ),
-          check_ins!inner ( check_in_time, check_out_time )
+          check_ins!inner ( id, check_in_time, check_out_time )
         `
         )
         .eq("caregiver_id", profile.id)
@@ -55,11 +55,12 @@ export default async function AppLayout({
           caregiver_id: profile.id,
           organization_id: (active as any).organization_id,
           scheduled_end: (active as any).scheduled_end,
-          client_lat: (active as any).clients?.latitude ?? null,
-          client_lng: (active as any).clients?.longitude ?? null,
+          client_lat: (active as any).clients?.[0]?.latitude ?? null,
+          client_lng: (active as any).clients?.[0]?.longitude ?? null,
           geofence_radius:
-            (active as any).clients?.geofence_radius_meters ?? 150,
-          client_name: (active as any).clients?.full_name ?? "Client",
+            (active as any).clients?.[0]?.geofence_radius_meters ?? 150,
+          client_name: (active as any).clients?.[0]?.full_name ?? "Client",
+          check_in_id: (active as any).check_ins?.[0]?.id ?? null,
         };
       }
     } catch {

@@ -112,7 +112,10 @@ export default function AdminTimeAdjuster({
       }
     } else {
       // Insert new check_in row (caregiver never checked in)
-      const insert: {
+      // Use upsert on shift_id so if a row was created in the meantime
+      // (e.g. caregiver checked in just now, or stale page), we update it
+      // instead of failing on the unique constraint.
+      const upsertRow: {
         shift_id: string;
         caregiver_id: string;
         check_in_time: string;
@@ -132,18 +135,18 @@ export default function AdminTimeAdjuster({
         flag_reason: flagReason,
       };
 
-      const { data, error: insertError } = await supabase
+      const { data, error: upsertError } = await supabase
         .from("check_ins")
-        .insert(insert)
+        .upsert(upsertRow, { onConflict: "shift_id" })
         .select("id");
 
-      if (insertError) {
-        setError(insertError.message);
+      if (upsertError) {
+        setError(upsertError.message);
         setSubmitting(false);
         return;
       }
       if (!data || data.length === 0) {
-        setError("Insert did not save. Try refreshing.");
+        setError("Save did not complete. Try refreshing.");
         setSubmitting(false);
         return;
       }

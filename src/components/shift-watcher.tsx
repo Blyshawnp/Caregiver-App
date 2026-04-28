@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { haversineMeters, formatDistance } from "@/lib/geo";
 
@@ -14,43 +15,53 @@ type ActiveWatch = {
   client_lng: number | null;
   geofence_radius: number;
   client_name: string;
+  check_in_id: string | null;
 };
 
 /**
- * Renders a sticky reminder banner when:
- *   - The caregiver is checked in
- *   - It's past 8 PM (or past scheduled end), suggesting time to check out
+ * Watches the caregiver's location while they're checked in. Behaviors:
  *
- * Also watches the caregiver's location while checked in and notifies admin/client
- * when the caregiver leaves the geofence (one notification per leave event).
+ *  1) Past their scheduled end time AND past 8pm → if they leave the geofence,
+ *     auto-check them out using the geofence-leave time as their check-out
+ *     timestamp. Notifies admin/client.
  *
- * Note: this runs only while the app is open in a foreground tab. For
- * always-on detection (closed app, locked phone), a server-side cron would be
- * needed (Supabase Edge Functions or similar).
+ *  2) Before their scheduled end → just notify admin/client they left, but
+ *     keep them checked in (might be a bathroom break, errand, etc).
+ *
+ *  3) Sticky reminder banner shown when past scheduled end OR past 8pm,
+ *     suggesting check-out.
+ *
+ * Note: only runs while the caregiver has the app foregrounded. Server-side
+ * cron would handle locked-phone scenarios; not yet implemented.
  */
 export default function ShiftWatcher({
   active,
 }: {
   active: ActiveWatch | null;
 }) {
+  const router = useRouter();
   const [now, setNow] = useState(() => new Date());
   const leftFenceFiredRef = useRef(false);
+  const autoCheckedOutRef = useRef(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
-  // Geofence-leave watcher
+  // Geofence watcher
   useEffect(() => {
     if (!active) return;
     if (active.client_lat == null || active.client_lng == null) return;
     if (typeof window === "undefined" || !("geolocation" in navigator)) return;
 
     leftFenceFiredRef.current = false;
+    autoCheckedOutRef.current = false;
 
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
+        if (autoCheckedOutRef.current) return;
+
         const distance = haversineMeters(
           pos.coords.latitude,
           pos.coords.longitude,
@@ -58,17 +69,41 @@ export default function ShiftWatcher({
           active.client_lng as number
         );
 
-        if (distance > active.geofence_radius && !leftFenceFiredRef.current) {
-          leftFenceFiredRef.current = true;
-          await notifyAdminsAndClients(active, distance);
+        const inside = distance <= active.geofence_radius;
+
+        if (inside) {
+          // Reset so a future leave will fire again
+          if (distance <= active.geofence_radius * 0.9) {
+            leftFenceFiredRef.current = false;
+          }
+          return;
         }
-        // If they come back inside, allow another notification on next leave
-        if (distance <= active.geofence_radius * 0.9) {
-          leftFenceFiredRef.current = false;
+
+        // Outside fence
+        if (leftFenceFiredRef.current) return;
+        leftFenceFiredRef.current = true;
+
+        // Decide: auto-checkout or just notify?
+        const endTime = new Date(active.scheduled_end);
+        const cutoff8pm = new Date();
+        cutoff8pm.setHours(20, 0, 0, 0);
+        const nowTime = new Date();
+        const pastScheduled = nowTime > endTime;
+        const past8pm = nowTime >= cutoff8pm;
+
+        if (pastScheduled && past8pm) {
+          // Auto-checkout
+          autoCheckedOutRef.current = true;
+          await performAutoCheckOut(active, distance, pos.coords);
+          // Force a hard reload to refresh all state
+          window.location.href = `/schedule/${active.shift_id}`;
+        } else {
+          // Just notify admin/client
+          await notifyLeftGeofence(active, distance);
         }
       },
       () => {
-        // ignore errors; geofence watching is best-effort
+        /* ignore errors; best effort */
       },
       {
         enableHighAccuracy: false,
@@ -85,7 +120,6 @@ export default function ShiftWatcher({
   const scheduledEnd = new Date(active.scheduled_end);
   const cutoff8pm = new Date(now);
   cutoff8pm.setHours(20, 0, 0, 0);
-
   const pastScheduled = now > scheduledEnd;
   const past8pm = now >= cutoff8pm && now.getHours() >= 20;
   const showReminder = pastScheduled || past8pm;
@@ -106,34 +140,93 @@ export default function ShiftWatcher({
           ? "You're past your scheduled end. Tap to check out."
           : "It's past 8 PM. Tap to check out when you're ready."}
       </p>
+      <p className="text-[10px] text-cream-50/70 mt-1.5">
+        If you leave the location without checking out, you'll be checked out
+        automatically.
+      </p>
     </Link>
   );
 }
 
-async function notifyAdminsAndClients(
+async function performAutoCheckOut(
   active: ActiveWatch,
-  distance: number
+  distance: number,
+  coords: GeolocationCoordinates
 ) {
+  if (!active.check_in_id) return;
   const supabase = createClient();
 
-  // Find admins + clients in this org
+  // Update check_in row with auto check-out info
+  const update: any = {
+    check_out_time: new Date().toISOString(),
+    check_out_latitude: coords.latitude,
+    check_out_longitude: coords.longitude,
+    check_out_within_geofence: false,
+    flagged_outside_geofence: true,
+    flag_reason: `Auto-checked out: caregiver left geofence (${formatDistance(distance)} away) past scheduled end time`,
+  };
+
+  await supabase
+    .from("check_ins")
+    .update(update)
+    .eq("id", active.check_in_id);
+
+  // Notify everyone who needs to know
+  try {
+    const { data: recipients } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("organization_id", active.organization_id)
+      .in("role", ["admin", "client"]);
+
+    const { data: caregiver } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", active.caregiver_id)
+      .maybeSingle<{ full_name: string }>();
+
+    const name = caregiver?.full_name ?? "Caregiver";
+    const body = `${name} was auto-checked out at ${formatTime(new Date())} after leaving ${active.client_name}'s location (${formatDistance(distance)} away).`;
+
+    // Notify the caregiver themselves so they see what happened
+    const allRecipientIds = [
+      ...(recipients ?? []).map((r) => r.id),
+      active.caregiver_id,
+    ];
+
+    if (allRecipientIds.length > 0) {
+      await supabase.from("notifications").insert(
+        allRecipientIds.map((id) => ({
+          organization_id: active.organization_id,
+          recipient_id: id,
+          kind: "auto_check_out",
+          title: "Auto-checked out",
+          body,
+          link: `/schedule/${active.shift_id}`,
+          related_shift_id: active.shift_id,
+        }))
+      );
+    }
+  } catch {
+    /* notifications best effort */
+  }
+}
+
+async function notifyLeftGeofence(active: ActiveWatch, distance: number) {
+  const supabase = createClient();
   const { data: recipients } = await supabase
     .from("profiles")
     .select("id")
     .eq("organization_id", active.organization_id)
     .in("role", ["admin", "client"]);
-
   if (!recipients || recipients.length === 0) return;
 
-  // Get caregiver name for the body
   const { data: caregiver } = await supabase
     .from("profiles")
     .select("full_name")
     .eq("id", active.caregiver_id)
     .maybeSingle<{ full_name: string }>();
-
   const name = caregiver?.full_name ?? "A caregiver";
-  const body = `${name} left the geofence (${formatDistance(distance)} from ${active.client_name}) without checking out yet.`;
 
   await supabase.from("notifications").insert(
     recipients.map((r) => ({
@@ -141,9 +234,16 @@ async function notifyAdminsAndClients(
       recipient_id: r.id,
       kind: "left_geofence",
       title: "Caregiver left location",
-      body,
+      body: `${name} left the geofence (${formatDistance(distance)} from ${active.client_name}) without checking out yet.`,
       link: `/schedule/${active.shift_id}`,
       related_shift_id: active.shift_id,
     }))
   );
+}
+
+function formatTime(d: Date) {
+  return d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }

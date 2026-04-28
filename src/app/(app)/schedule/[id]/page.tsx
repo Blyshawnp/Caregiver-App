@@ -5,6 +5,7 @@ import { ClockIcon, MapPinIcon, ArrowRightIcon } from "@/components/icons";
 import DeleteShiftButton from "./delete-shift-button";
 import AcceptDeclineButtons from "./accept-decline-buttons";
 import LiveOnShiftCard from "./live-on-shift-card";
+import ForceCheckOutButton from "./force-check-out-button";
 
 // Force dynamic rendering: this page must always show fresh data
 // (check-in status changes mid-session and should reflect immediately)
@@ -37,6 +38,7 @@ export default async function ShiftDetailPage({
       scheduled_start,
       scheduled_end,
       caregiver_id,
+      organization_id,
       assignment_status,
       bonus_amount,
       bonus_reason,
@@ -44,7 +46,7 @@ export default async function ShiftDetailPage({
       profiles:caregiver_id ( full_name ),
       clients ( full_name, address ),
       shift_types ( name, color ),
-      check_ins ( check_in_time, check_out_time, total_minutes ),
+      check_ins ( id, check_in_time, check_out_time, total_minutes ),
       shift_todos ( id, task_name, is_completed )
     `
     )
@@ -224,6 +226,21 @@ export default async function ShiftDetailPage({
             >
               Check out
             </Link>
+          )}
+        {/* Admin/client can force-check-out a caregiver who's stuck on shift */}
+        {canEdit &&
+          checkIn?.check_in_time &&
+          !checkIn?.check_out_time &&
+          checkIn?.id && (
+            <ForceCheckOutButton
+              shiftId={id}
+              checkInId={checkIn.id}
+              caregiverName={
+                (shift as any).profiles?.full_name ?? "the caregiver"
+              }
+              organizationId={(shift as any).organization_id}
+              caregiverId={(shift as any).caregiver_id}
+            />
           )}
         {canEdit && (
           <>

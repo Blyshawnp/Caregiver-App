@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon } from "@/components/icons";
@@ -12,13 +12,18 @@ type Template = {
   default_for_new_shifts: boolean;
   sort_order: number;
   is_active: boolean;
+  caregiver_id: string | null;
 };
+
+type Caregiver = { id: string; full_name: string };
 
 export default function TemplatesList({
   templates,
+  caregivers,
   organizationId,
 }: {
   templates: Template[];
+  caregivers: Caregiver[];
   organizationId: string;
 }) {
   const router = useRouter();
@@ -26,10 +31,26 @@ export default function TemplatesList({
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newIsDefault, setNewIsDefault] = useState(true);
+  const [newCaregiverId, setNewCaregiverId] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("all"); // "all", "shared", caregiverId
 
-  const defaults = templates.filter((t) => t.default_for_new_shifts);
-  const optional = templates.filter((t) => !t.default_for_new_shifts);
+  const caregiverNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    caregivers.forEach((c) => m.set(c.id, c.full_name));
+    return m;
+  }, [caregivers]);
+
+  // Apply filter
+  const filtered = useMemo(() => {
+    if (filter === "all") return templates;
+    if (filter === "shared")
+      return templates.filter((t) => t.caregiver_id == null);
+    return templates.filter((t) => t.caregiver_id === filter);
+  }, [templates, filter]);
+
+  const defaults = filtered.filter((t) => t.default_for_new_shifts);
+  const optional = filtered.filter((t) => !t.default_for_new_shifts);
 
   async function addTemplate(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +63,7 @@ export default function TemplatesList({
       description: newDescription.trim() || null,
       default_for_new_shifts: newIsDefault,
       sort_order: maxSort + 10,
+      caregiver_id: newCaregiverId || null,
     });
     if (error) {
       alert(error.message);
@@ -50,6 +72,7 @@ export default function TemplatesList({
     setNewName("");
     setNewDescription("");
     setNewIsDefault(true);
+    setNewCaregiverId("");
     setAdding(false);
     router.refresh();
   }
@@ -63,10 +86,23 @@ export default function TemplatesList({
     router.refresh();
   }
 
-  async function deleteTemplate(id: string) {
-    if (!confirm("Delete this task from the master list? Existing shifts won't be affected.")) return;
+  async function reassignTemplate(id: string, caregiverId: string | null) {
     const supabase = createClient();
-    // Soft delete (preserves any shift_todos that reference it)
+    await supabase
+      .from("todo_templates")
+      .update({ caregiver_id: caregiverId })
+      .eq("id", id);
+    router.refresh();
+  }
+
+  async function deleteTemplate(id: string) {
+    if (
+      !confirm(
+        "Delete this task from the master list? Existing shifts won't be affected."
+      )
+    )
+      return;
+    const supabase = createClient();
     await supabase
       .from("todo_templates")
       .update({ is_active: false })
@@ -76,6 +112,36 @@ export default function TemplatesList({
 
   return (
     <div>
+      {/* Filter */}
+      {caregivers.length > 0 && (
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <span className="text-xs uppercase tracking-[0.18em] text-ink-500 mr-1">
+            Show:
+          </span>
+          <FilterPill
+            active={filter === "all"}
+            onClick={() => setFilter("all")}
+          >
+            All
+          </FilterPill>
+          <FilterPill
+            active={filter === "shared"}
+            onClick={() => setFilter("shared")}
+          >
+            Everyone
+          </FilterPill>
+          {caregivers.map((c) => (
+            <FilterPill
+              key={c.id}
+              active={filter === c.id}
+              onClick={() => setFilter(c.id)}
+            >
+              {c.full_name.split(" ")[0]}
+            </FilterPill>
+          ))}
+        </div>
+      )}
+
       {/* Defaults section */}
       <section className="mb-6">
         <div className="flex items-baseline justify-between mb-2 px-1">
@@ -85,8 +151,7 @@ export default function TemplatesList({
         </div>
         {defaults.length === 0 ? (
           <div className="bg-white/60 rounded-2xl p-5 text-center text-sm text-ink-500 border border-dashed border-ink-300/30">
-            No default tasks. Mark items below as default and they'll appear on
-            every new shift.
+            No default tasks here.
           </div>
         ) : (
           <ul className="space-y-2">
@@ -94,6 +159,12 @@ export default function TemplatesList({
               <li key={t.id}>
                 <TemplateRow
                   template={t}
+                  caregivers={caregivers}
+                  caregiverName={
+                    t.caregiver_id
+                      ? (caregiverNameById.get(t.caregiver_id) ?? null)
+                      : null
+                  }
                   isEditing={editingId === t.id}
                   onEdit={() => setEditingId(t.id)}
                   onCancelEdit={() => setEditingId(null)}
@@ -103,6 +174,7 @@ export default function TemplatesList({
                   }}
                   onToggleDefault={() => toggleDefault(t)}
                   onDelete={() => deleteTemplate(t.id)}
+                  onReassign={(cid) => reassignTemplate(t.id, cid)}
                 />
               </li>
             ))}
@@ -123,6 +195,12 @@ export default function TemplatesList({
               <li key={t.id}>
                 <TemplateRow
                   template={t}
+                  caregivers={caregivers}
+                  caregiverName={
+                    t.caregiver_id
+                      ? (caregiverNameById.get(t.caregiver_id) ?? null)
+                      : null
+                  }
                   isEditing={editingId === t.id}
                   onEdit={() => setEditingId(t.id)}
                   onCancelEdit={() => setEditingId(null)}
@@ -132,6 +210,7 @@ export default function TemplatesList({
                   }}
                   onToggleDefault={() => toggleDefault(t)}
                   onDelete={() => deleteTemplate(t.id)}
+                  onReassign={(cid) => reassignTemplate(t.id, cid)}
                 />
               </li>
             ))}
@@ -141,7 +220,10 @@ export default function TemplatesList({
 
       {/* Add new */}
       {adding ? (
-        <form onSubmit={addTemplate} className="bg-white rounded-2xl shadow-soft p-4 space-y-3">
+        <form
+          onSubmit={addTemplate}
+          className="bg-white rounded-2xl shadow-soft p-4 space-y-3"
+        >
           <input
             type="text"
             autoFocus
@@ -159,6 +241,23 @@ export default function TemplatesList({
             rows={2}
             className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm resize-none"
           />
+          <label className="block">
+            <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+              Assign to
+            </span>
+            <select
+              value={newCaregiverId}
+              onChange={(e) => setNewCaregiverId(e.target.value)}
+              className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+            >
+              <option value="">Everyone (shared task)</option>
+              {caregivers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  Only {c.full_name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex items-center gap-2 text-sm text-ink-700 cursor-pointer">
             <input
               type="checkbox"
@@ -176,6 +275,7 @@ export default function TemplatesList({
                 setNewName("");
                 setNewDescription("");
                 setNewIsDefault(true);
+                setNewCaregiverId("");
               }}
               className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
             >
@@ -183,21 +283,18 @@ export default function TemplatesList({
             </button>
             <button
               type="submit"
-              disabled={!newName.trim()}
-              className="flex-1 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
+              className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
             >
-              Add to master list
+              Add task
             </button>
           </div>
         </form>
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="w-full flex items-center gap-2 bg-cream-200/60 hover:bg-cream-200 text-ink-700 px-4 py-3 rounded-2xl font-medium transition active:scale-[0.99]"
+          className="w-full bg-white hover:bg-cream-50 text-forest-600 border border-forest-500/30 py-3 rounded-2xl font-medium text-sm transition flex items-center justify-center gap-1.5"
         >
-          <span className="w-7 h-7 rounded-full bg-white text-forest-600 grid place-items-center">
-            <PlusIcon size={16} />
-          </span>
+          <PlusIcon size={16} />
           Add task to master list
         </button>
       )}
@@ -205,101 +302,142 @@ export default function TemplatesList({
   );
 }
 
+function FilterPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+        active
+          ? "bg-forest-600 text-cream-50"
+          : "bg-white text-ink-700 hover:bg-cream-100 border border-cream-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function TemplateRow({
   template,
+  caregivers,
+  caregiverName,
   isEditing,
   onEdit,
   onCancelEdit,
   onSaved,
   onToggleDefault,
   onDelete,
+  onReassign,
 }: {
   template: Template;
+  caregivers: Caregiver[];
+  caregiverName: string | null;
   isEditing: boolean;
   onEdit: () => void;
   onCancelEdit: () => void;
   onSaved: () => void;
   onToggleDefault: () => void;
   onDelete: () => void;
+  onReassign: (caregiverId: string | null) => void;
 }) {
   const [name, setName] = useState(template.task_name);
   const [description, setDescription] = useState(template.description ?? "");
-  const [saving, setSaving] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  async function saveEdit() {
+    if (!name.trim()) return;
+    setSavingEdit(true);
+    const supabase = createClient();
+    await supabase
+      .from("todo_templates")
+      .update({
+        task_name: name.trim(),
+        description: description.trim() || null,
+      })
+      .eq("id", template.id);
+    setSavingEdit(false);
+    onSaved();
+  }
 
   if (isEditing) {
     return (
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          setSaving(true);
-          const supabase = createClient();
-          await supabase
-            .from("todo_templates")
-            .update({
-              task_name: name.trim(),
-              description: description.trim() || null,
-            })
-            .eq("id", template.id);
-          setSaving(false);
-          onSaved();
-        }}
-        className="bg-white rounded-2xl shadow-soft p-4 space-y-3"
-      >
+      <div className="bg-white rounded-2xl shadow-soft p-4 space-y-3">
         <input
           type="text"
-          autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={140}
           className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
-          required
         />
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Optional details"
           rows={2}
           className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm resize-none"
         />
+        <label className="block">
+          <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+            Assigned to
+          </span>
+          <select
+            value={template.caregiver_id ?? ""}
+            onChange={(e) => onReassign(e.target.value || null)}
+            className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+          >
+            <option value="">Everyone</option>
+            {caregivers.map((c) => (
+              <option key={c.id} value={c.id}>
+                Only {c.full_name}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="flex gap-2">
           <button
-            type="button"
-            onClick={() => {
-              setName(template.task_name);
-              setDescription(template.description ?? "");
-              onCancelEdit();
-            }}
-            className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2 rounded-xl text-sm font-medium transition"
+            onClick={onCancelEdit}
+            disabled={savingEdit}
+            className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50"
           >
             Cancel
           </button>
           <button
-            type="submit"
-            disabled={saving}
-            className="flex-1 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-cream-50 py-2 rounded-xl text-sm font-medium transition"
+            onClick={saveEdit}
+            disabled={savingEdit}
+            className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Save"}
+            {savingEdit ? "Saving..." : "Save"}
           </button>
         </div>
-      </form>
+      </div>
     );
   }
 
   return (
     <div className="bg-white rounded-2xl shadow-soft p-4 flex items-start gap-3">
-      <label className="flex items-center cursor-pointer mt-1 shrink-0">
+      <label className="flex items-center cursor-pointer pt-0.5">
         <input
           type="checkbox"
           checked={template.default_for_new_shifts}
           onChange={onToggleDefault}
           className="w-4 h-4 accent-forest-600"
-          aria-label="Default for new shifts"
         />
       </label>
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-ink-900 leading-snug">
+        <p className="font-medium text-ink-900 truncate flex items-center gap-2 flex-wrap">
           {template.task_name}
+          {caregiverName && (
+            <span className="text-[10px] uppercase tracking-wider bg-forest-100 text-forest-600 px-1.5 py-0.5 rounded font-medium">
+              for {caregiverName.split(" ")[0]}
+            </span>
+          )}
         </p>
         {template.description && (
           <p className="text-xs text-ink-500 mt-0.5">{template.description}</p>
@@ -308,37 +446,16 @@ function TemplateRow({
       <div className="flex gap-1 shrink-0">
         <button
           onClick={onEdit}
-          aria-label="Edit"
-          className="p-1.5 text-ink-500 hover:text-ink-900 transition"
+          className="text-xs text-forest-600 hover:underline"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-4 h-4"
-          >
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.4-9.6a2.1 2.1 0 113 3L12 19l-4 1 1-4 9.6-9.6z" />
-          </svg>
+          Edit
         </button>
+        <span className="text-ink-300">·</span>
         <button
           onClick={onDelete}
-          aria-label="Delete"
-          className="p-1.5 text-ink-300 hover:text-terracotta-600 transition"
+          className="text-xs text-terracotta-600 hover:underline"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-4 h-4"
-          >
-            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
-          </svg>
+          Delete
         </button>
       </div>
     </div>

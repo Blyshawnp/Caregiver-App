@@ -148,6 +148,13 @@ function ClientCard({ client }: { client: Client }) {
               )}
             </span>
           </div>
+
+          <a
+            href={`/clients/${client.id}/home-info`}
+            className="block mt-4 bg-cream-50 hover:bg-cream-100 text-forest-600 border border-forest-500/20 px-4 py-2.5 rounded-xl text-sm font-medium text-center transition"
+          >
+            Edit home info (wifi, contacts, notes) →
+          </a>
         </div>
       </div>
     );

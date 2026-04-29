@@ -3,6 +3,13 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowRightIcon, UserIcon, MapPinIcon } from "@/components/icons";
 import SignOutButton from "./sign-out-button";
+import EditablePhone from "./editable-phone";
+import {
+  getCurrentPayPeriod,
+  getPreviousPayPeriod,
+  formatPayPeriod,
+  roundUpToQuarter,
+} from "@/lib/pay";
 
 export default async function MePage() {
   const supabase = await createClient();
@@ -24,10 +31,10 @@ export default async function MePage() {
       organizations: { name: string } | null;
     }>();
 
-  // Pay period: Friday → next Friday. Cutoff at 8pm on Friday.
-  // A shift checked in before Friday 8pm goes in the period ending that Friday.
-  // We bucket by check-in time (or scheduled_start if not checked in yet).
-  const periods = computePayPeriods(new Date());
+  // Pay period: Friday 9 PM → next Friday 9 PM (Eastern).
+  const now = new Date();
+  const currentPeriod = getCurrentPayPeriod(now);
+  const previousPeriod = getPreviousPayPeriod(now);
 
   let currentTotal = 0;
   let currentHours = 0;
@@ -40,8 +47,8 @@ export default async function MePage() {
       .select(
         "shift_id, hours_worked, total_pay, scheduled_start, check_in_time, caregiver_id"
       )
-      .gte("scheduled_start", periods.previous.start.toISOString())
-      .lte("scheduled_start", periods.current.end.toISOString())
+      .gte("scheduled_start", previousPeriod.start.toISOString())
+      .lte("scheduled_start", currentPeriod.end.toISOString())
       .not("hours_worked", "is", null);
 
     if (profile.role === "caregiver") {
@@ -60,7 +67,6 @@ export default async function MePage() {
     const { data: payRows } = await q;
 
     for (const r of (payRows ?? []) as PayRow[]) {
-      // Use check_in_time if present, else scheduled_start
       const referenceTime = new Date(
         r.check_in_time ?? r.scheduled_start
       );
@@ -68,20 +74,24 @@ export default async function MePage() {
       const pay = Number(r.total_pay ?? 0);
 
       if (
-        referenceTime >= periods.current.start &&
-        referenceTime < periods.current.end
+        referenceTime >= currentPeriod.start &&
+        referenceTime < currentPeriod.end
       ) {
         currentHours += hours;
         currentTotal += pay;
       } else if (
-        referenceTime >= periods.previous.start &&
-        referenceTime < periods.previous.end
+        referenceTime >= previousPeriod.start &&
+        referenceTime < previousPeriod.end
       ) {
         previousHours += hours;
         previousTotal += pay;
       }
     }
   }
+
+  // Round UP to nearest $0.25 for display
+  const currentTotalRounded = roundUpToQuarter(currentTotal);
+  const previousTotalRounded = roundUpToQuarter(previousTotal);
 
   const roleCopy: Record<string, string> = {
     admin: "Administrator",
@@ -113,9 +123,11 @@ export default async function MePage() {
           </div>
         </div>
 
-        <dl className="divide-y divide-cream-200 text-sm">
+        <dl className="text-sm">
           <Row label="Email" value={profile?.email} />
-          <Row label="Phone" value={profile?.phone || "Not set"} />
+          {profile && (
+            <EditablePhone initialPhone={profile.phone} userId={profile.id} />
+          )}
           <Row
             label="Organization"
             value={profile?.organizations?.name ?? "—"}
@@ -140,31 +152,39 @@ export default async function MePage() {
                   This pay period
                 </p>
                 <p className="font-display text-3xl">
-                  ${currentTotal.toFixed(2)}
+                  ${currentTotalRounded.toFixed(2)}
                 </p>
                 <p className="text-xs text-cream-50/70">
                   {currentHours.toFixed(1)} hrs
                 </p>
                 <p className="text-[10px] text-cream-50/60 mt-1.5 leading-tight">
-                  {formatRange(periods.current)}
+                  {formatPayPeriod(currentPeriod)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-cream-50/70 mb-0.5">Last period</p>
                 <p className="font-display text-3xl">
-                  ${previousTotal.toFixed(2)}
+                  ${previousTotalRounded.toFixed(2)}
                 </p>
                 <p className="text-xs text-cream-50/70">
                   {previousHours.toFixed(1)} hrs
                 </p>
                 <p className="text-[10px] text-cream-50/60 mt-1.5 leading-tight">
-                  {formatRange(periods.previous)}
+                  {formatPayPeriod(previousPeriod)}
                 </p>
               </div>
             </div>
-            <p className="text-xs text-cream-50/70 mt-4 pt-3 border-t border-cream-50/15">
-              Pay periods run Friday to Friday, ending 8 PM.
-            </p>
+            <div className="mt-4 pt-3 border-t border-cream-50/15 flex items-center justify-between">
+              <p className="text-xs text-cream-50/70">
+                Periods run Fri – Fri, lock at 9 PM.
+              </p>
+              <Link
+                href={profile?.role === "caregiver" ? "/me/invoices" : "/payroll"}
+                className="text-xs text-cream-50 hover:underline font-medium"
+              >
+                View all →
+              </Link>
+            </div>
           </div>
         </section>
       )}
@@ -178,6 +198,26 @@ export default async function MePage() {
             label="Clients & geofence"
             Icon={MapPinIcon}
           />
+          <NavLink href="/payroll" label="Payroll" Icon={UserIcon} />
+        </section>
+      )}
+
+      {/* Client actions */}
+      {profile?.role === "client" && (
+        <section className="space-y-2 mb-4">
+          <NavLink href="/clients" label="Home info" Icon={MapPinIcon} />
+          <NavLink href="/payroll" label="Payroll" Icon={UserIcon} />
+        </section>
+      )}
+
+      {/* Caregiver actions */}
+      {profile?.role === "caregiver" && (
+        <section className="space-y-2 mb-4">
+          <NavLink
+            href="/me/invoices"
+            label="My invoices"
+            Icon={UserIcon}
+          />
         </section>
       )}
 
@@ -188,7 +228,7 @@ export default async function MePage() {
 
 function Row({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="flex justify-between py-3 first:pt-0 last:pb-0">
+    <div className="flex justify-between py-3 first:pt-0 last:pb-0 border-t border-cream-200 first:border-t-0">
       <dt className="text-ink-500">{label}</dt>
       <dd className="text-ink-900 font-medium text-right">{value ?? "—"}</dd>
     </div>
@@ -218,45 +258,4 @@ function NavLink({
   );
 }
 
-/**
- * Friday → Friday pay periods, ending at 8 PM local time.
- * "Current" is the period that includes "now".
- * "Previous" is the period before that.
- */
-function computePayPeriods(now: Date) {
-  // Find the last Friday at 8 PM that is ≤ now
-  const cutoff = new Date(now);
-  // Move backwards day by day until we hit Friday (5)
-  while (cutoff.getDay() !== 5) {
-    cutoff.setDate(cutoff.getDate() - 1);
-  }
-  cutoff.setHours(20, 0, 0, 0);
-
-  // If now is BEFORE this Friday's 8pm cutoff, the current period
-  // ends at this cutoff. Else (after 8pm Friday), current period ends
-  // at next Friday's 8pm cutoff.
-  let currentEnd: Date;
-  if (now < cutoff) {
-    currentEnd = cutoff;
-  } else {
-    currentEnd = new Date(cutoff);
-    currentEnd.setDate(currentEnd.getDate() + 7);
-  }
-  const currentStart = new Date(currentEnd);
-  currentStart.setDate(currentStart.getDate() - 7);
-
-  const previousEnd = new Date(currentStart);
-  const previousStart = new Date(previousEnd);
-  previousStart.setDate(previousStart.getDate() - 7);
-
-  return {
-    current: { start: currentStart, end: currentEnd },
-    previous: { start: previousStart, end: previousEnd },
-  };
-}
-
-function formatRange(p: { start: Date; end: Date }) {
-  const fmt = (d: Date) =>
-    d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `${fmt(p.start)} – ${fmt(p.end)}`;
-}
+/* Pay period helpers moved to @/lib/pay */

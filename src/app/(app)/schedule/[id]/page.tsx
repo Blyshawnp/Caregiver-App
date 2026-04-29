@@ -10,6 +10,12 @@ import AdminTimeAdjuster from "./admin-time-adjuster";
 import ReleaseShiftButton from "./release-shift-button";
 import ClaimShiftButton from "./claim-shift-button";
 import CancelReleaseButton from "./cancel-release-button";
+import HomeInfoCard from "@/components/home-info-card";
+import PayOverrideButton from "./pay-override-button";
+import {
+  computeShiftPay,
+  roundUpToQuarter,
+} from "@/lib/pay";
 import type { AssignmentStatus, Role } from "@/lib/db-types";
 
 // Force dynamic rendering: this page must always show fresh data
@@ -30,8 +36,26 @@ type ShiftDetail = {
   is_released: boolean | null;
   released_by: string | null;
   release_reason: string | null;
+  pay_override_amount: number | null;
+  pay_override_hours: number | null;
+  pay_override_rate: number | null;
+  pay_override_reason: string | null;
+  client_id: string;
+  shift_type_id: string | null;
   profiles: { full_name: string } | null;
-  clients: { full_name: string; address: string | null } | null;
+  clients: {
+    full_name: string;
+    address: string | null;
+    wifi_ssid: string | null;
+    wifi_password: string | null;
+    emergency_contact_1_name: string | null;
+    emergency_contact_1_phone: string | null;
+    emergency_contact_1_relationship: string | null;
+    emergency_contact_2_name: string | null;
+    emergency_contact_2_phone: string | null;
+    emergency_contact_2_relationship: string | null;
+    home_notes: string | null;
+  } | null;
   shift_types: { name: string; color: string } | null;
   check_ins: Array<{
     id: string;
@@ -80,8 +104,14 @@ export default async function ShiftDetailPage({
       is_released,
       released_by,
       release_reason,
+      pay_override_amount,
+      pay_override_hours,
+      pay_override_rate,
+      pay_override_reason,
+      client_id,
+      shift_type_id,
       profiles:caregiver_id ( full_name ),
-      clients ( full_name, address ),
+      clients ( full_name, address, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes ),
       shift_types ( name, color ),
       check_ins ( id, check_in_time, check_out_time, total_minutes ),
       shift_todos ( id, task_name, is_completed )
@@ -95,6 +125,66 @@ export default async function ShiftDetailPage({
   // Supabase's runtime values match our explicit shape; assert through unknown
   // because Supabase's inferred types nest differently for the same SQL.
   const shift = shiftRaw as unknown as ShiftDetail;
+
+  // Look up caregiver rate at the time of this shift
+  let hourlyRate: number | null = null;
+  if (shift.caregiver_id) {
+    const { data: rate } = await supabase
+      .from("caregiver_rates")
+      .select("hourly_rate")
+      .eq("caregiver_id", shift.caregiver_id)
+      .lte("effective_from", shift.scheduled_start)
+      .or(`effective_to.is.null,effective_to.gte.${shift.scheduled_start}`)
+      .order("effective_from", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ hourly_rate: number }>();
+    hourlyRate = rate?.hourly_rate ?? null;
+  }
+
+  // Check holiday multiplier
+  const shiftDate = shift.scheduled_start.split("T")[0];
+  const { data: holiday } = await supabase
+    .from("holidays")
+    .select("pay_multiplier")
+    .eq("holiday_date", shiftDate)
+    .or(
+      `organization_id.eq.${shift.organization_id},organization_id.is.null`
+    )
+    .order("organization_id", { nullsFirst: false })
+    .limit(1)
+    .maybeSingle<{ pay_multiplier: number }>();
+
+  // Compute current pay for this shift
+  const checkIn0 = (shift.check_ins ?? [])[0];
+  const totalMinutes =
+    checkIn0?.check_in_time && checkIn0?.check_out_time
+      ? Math.round(
+          (new Date(checkIn0.check_out_time).getTime() -
+            new Date(checkIn0.check_in_time).getTime()) /
+            60000
+        )
+      : null;
+  const computedPay = computeShiftPay({
+    totalMinutes,
+    hourlyRate,
+    bonusAmount: shift.bonus_amount,
+    holidayMultiplier: holiday?.pay_multiplier ?? null,
+    overrideAmount: shift.pay_override_amount,
+    overrideHours: shift.pay_override_hours,
+    overrideRate: shift.pay_override_rate,
+  });
+
+  // Is this shift in a locked period?
+  const { data: lockedPeriod } = await supabase
+    .from("pay_periods")
+    .select("id")
+    .eq("organization_id", shift.organization_id)
+    .eq("is_locked", true)
+    .lte("period_start", shift.scheduled_start)
+    .gte("period_end", shift.scheduled_start)
+    .limit(1)
+    .maybeSingle();
+  const isPayLocked = !!lockedPeriod;
 
   // If shift is released, fetch the releaser's name for the banner
   let releaserName: string | null = null;
@@ -222,6 +312,14 @@ export default async function ShiftDetailPage({
               }`}
             />
           )}
+          {canEdit && shift.caregiver_id && checkIn?.check_out_time && (
+            <Detail
+              label="Pay"
+              value={`$${roundUpToQuarter(computedPay.amount).toFixed(2)}${
+                computedPay.isOverridden ? " (adjusted)" : ""
+              }`}
+            />
+          )}
           {shift.notes && (
             <div>
               <p className="text-xs font-medium text-ink-500 uppercase tracking-wide mb-1">
@@ -234,6 +332,25 @@ export default async function ShiftDetailPage({
           )}
         </div>
       </section>
+
+      {/* Home info (wifi, emergency contacts, notes) */}
+      {shift.clients && (
+        <HomeInfoCard
+          info={{
+            wifi_ssid: shift.clients.wifi_ssid,
+            wifi_password: shift.clients.wifi_password,
+            emergency_contact_1_name: shift.clients.emergency_contact_1_name,
+            emergency_contact_1_phone: shift.clients.emergency_contact_1_phone,
+            emergency_contact_1_relationship:
+              shift.clients.emergency_contact_1_relationship,
+            emergency_contact_2_name: shift.clients.emergency_contact_2_name,
+            emergency_contact_2_phone: shift.clients.emergency_contact_2_phone,
+            emergency_contact_2_relationship:
+              shift.clients.emergency_contact_2_relationship,
+            home_notes: shift.clients.home_notes,
+          }}
+        />
+      )}
 
       {/* Todos summary */}
       {todos.length > 0 && (
@@ -279,9 +396,12 @@ export default async function ShiftDetailPage({
               ))}
             </ul>
             {todos.length > 5 && (
-              <p className="text-xs text-ink-500 mt-2">
-                + {todos.length - 5} more
-              </p>
+              <Link
+                href={`/tasks?shift=${id}`}
+                className="block text-xs text-forest-600 hover:underline mt-3 font-medium"
+              >
+                View all {todos.length} tasks →
+              </Link>
             )}
           </div>
         </section>
@@ -385,6 +505,20 @@ export default async function ShiftDetailPage({
                   }
                 : null
             }
+          />
+        )}
+        {/* Admin/client pay correction for this shift */}
+        {canEdit && shift.caregiver_id && (
+          <PayOverrideButton
+            shiftId={id}
+            currentOverrideAmount={shift.pay_override_amount}
+            currentOverrideHours={shift.pay_override_hours}
+            currentOverrideRate={shift.pay_override_rate}
+            currentOverrideReason={shift.pay_override_reason}
+            computedAmount={computedPay.amount}
+            computedHours={computedPay.hours}
+            computedRate={computedPay.rate}
+            isLocked={isPayLocked}
           />
         )}
         {canEdit && (

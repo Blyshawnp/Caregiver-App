@@ -18,14 +18,23 @@ export default async function TemplatesPage() {
 
   if (!profile || profile.role === "caregiver") redirect("/tasks");
 
-  const { data: templates } = await supabase
-    .from("todo_templates")
-    .select(
-      "id, task_name, description, default_for_new_shifts, sort_order, is_active"
-    )
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true })
-    .order("task_name", { ascending: true });
+  const [templatesRes, caregiversRes] = await Promise.all([
+    supabase
+      .from("todo_templates")
+      .select(
+        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id"
+      )
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("task_name", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("organization_id", profile.organization_id)
+      .eq("role", "caregiver")
+      .eq("is_active", true)
+      .order("full_name"),
+  ]);
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -38,13 +47,15 @@ export default async function TemplatesPage() {
         </Link>
         <h1 className="font-display text-3xl text-ink-900">Master tasks</h1>
         <p className="text-ink-500 text-sm">
-          Build a master list. Items marked as default will be added to every
-          new shift automatically.
+          Build a master list. Defaults are added to every new shift. Tasks
+          assigned to a specific caregiver only get added to that person's
+          shifts.
         </p>
       </header>
 
       <TemplatesList
-        templates={templates ?? []}
+        templates={templatesRes.data ?? []}
+        caregivers={caregiversRes.data ?? []}
         organizationId={profile.organization_id}
       />
     </main>

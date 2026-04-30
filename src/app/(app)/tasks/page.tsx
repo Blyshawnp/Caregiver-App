@@ -209,7 +209,8 @@ function ManageTemplatesLink() {
 }
 
 function formatDateTime(d: Date) {
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
     weekday: "short",
     month: "short",
     day: "numeric",

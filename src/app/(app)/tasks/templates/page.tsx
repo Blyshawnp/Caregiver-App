@@ -22,7 +22,7 @@ export default async function TemplatesPage() {
     supabase
       .from("todo_templates")
       .select(
-        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id"
+        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id, category"
       )
       .eq("is_active", true)
       .order("sort_order", { ascending: true })

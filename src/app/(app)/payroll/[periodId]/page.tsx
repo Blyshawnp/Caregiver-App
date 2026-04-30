@@ -91,7 +91,9 @@ export default async function PayrollPeriodPage({
         <p className="text-ink-500 text-sm">
           Locked{" "}
           {period.released_at &&
-            new Date(period.released_at).toLocaleDateString()}
+            new Date(period.released_at).toLocaleDateString("en-US", {
+              timeZone: "America/New_York",
+            })}
         </p>
       </header>
 

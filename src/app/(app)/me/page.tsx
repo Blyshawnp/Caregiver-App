@@ -99,7 +99,10 @@ export default async function MePage() {
     caregiver: "Caregiver",
   };
 
-  const showPay = currentHours > 0 || previousHours > 0;
+  const showPay =
+    currentHours > 0 ||
+    previousHours > 0 ||
+    profile?.role === "caregiver";
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">

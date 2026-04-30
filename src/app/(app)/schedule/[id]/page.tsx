@@ -16,6 +16,10 @@ import {
   computeShiftPay,
   roundUpToQuarter,
 } from "@/lib/pay";
+import {
+  formatTimeInTz,
+  formatDateInTz,
+} from "@/lib/datetime";
 import type { AssignmentStatus, Role } from "@/lib/db-types";
 
 // Force dynamic rendering: this page must always show fresh data
@@ -62,6 +66,8 @@ type ShiftDetail = {
     check_in_time: string | null;
     check_out_time: string | null;
     total_minutes: number | null;
+    flagged_outside_geofence: boolean | null;
+    flag_reason: string | null;
   }> | null;
   shift_todos: Array<{
     id: string;
@@ -88,7 +94,7 @@ export default async function ShiftDetailPage({
     .eq("id", user.id)
     .single<{ role: Role; id: string }>();
 
-  const { data: shiftRaw } = await supabase
+  const { data: shiftRaw, error: shiftError } = await supabase
     .from("shifts")
     .select(
       `
@@ -113,12 +119,38 @@ export default async function ShiftDetailPage({
       profiles:caregiver_id ( full_name ),
       clients ( full_name, address, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes ),
       shift_types ( name, color ),
-      check_ins ( id, check_in_time, check_out_time, total_minutes ),
+      check_ins ( id, check_in_time, check_out_time, total_minutes, flagged_outside_geofence, flag_reason ),
       shift_todos ( id, task_name, is_completed )
     `
     )
     .eq("id", id)
     .single();
+
+  if (shiftError) {
+    // If the query fails (e.g. a Batch B/A column doesn't exist because
+    // a migration wasn't run), surface a friendly error instead of 404.
+    return (
+      <main className="px-5 py-10 max-w-2xl mx-auto">
+        <div className="bg-white rounded-3xl p-8 shadow-soft text-center">
+          <h1 className="font-display text-2xl mb-2">Couldn't load this shift</h1>
+          <p className="text-ink-500 text-sm mb-2">
+            {shiftError.message}
+          </p>
+          <p className="text-xs text-ink-500 mb-5">
+            If this references a column like <code>pay_override_amount</code>,{" "}
+            <code>wifi_ssid</code>, or <code>is_released</code>, run the latest
+            migration in Supabase SQL Editor.
+          </p>
+          <Link
+            href="/schedule"
+            className="inline-block bg-forest-600 hover:bg-forest-700 text-cream-50 px-5 py-2.5 rounded-2xl text-sm font-medium transition"
+          >
+            Back to schedule
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   if (!shiftRaw) notFound();
 
@@ -131,14 +163,14 @@ export default async function ShiftDetailPage({
   if (shift.caregiver_id) {
     const { data: rate } = await supabase
       .from("caregiver_rates")
-      .select("hourly_rate")
+      .select("base_hourly_rate")
       .eq("caregiver_id", shift.caregiver_id)
       .lte("effective_from", shift.scheduled_start)
       .or(`effective_to.is.null,effective_to.gte.${shift.scheduled_start}`)
       .order("effective_from", { ascending: false })
       .limit(1)
-      .maybeSingle<{ hourly_rate: number }>();
-    hourlyRate = rate?.hourly_rate ?? null;
+      .maybeSingle<{ base_hourly_rate: number }>();
+    hourlyRate = rate?.base_hourly_rate ?? null;
   }
 
   // Check holiday multiplier
@@ -243,10 +275,10 @@ export default async function ShiftDetailPage({
           </p>
         </div>
         <h1 className="font-display text-3xl text-ink-900 leading-tight">
-          {formatDate(start)}
+          {formatDateInTz(start)}
         </h1>
         <p className="text-ink-500 text-sm">
-          {formatTime(start)} – {formatTime(end)}
+          {formatTimeInTz(start)} – {formatTimeInTz(end)}
         </p>
       </header>
 
@@ -289,6 +321,16 @@ export default async function ShiftDetailPage({
         />
       ) : (
         <StatusBanner tone="muted" label="Scheduled" value="Not yet started" />
+      )}
+
+      {/* Flagged-check-in/out reason banner */}
+      {checkIn?.flagged_outside_geofence && checkIn?.flag_reason && (
+        <div className="bg-terracotta-400/10 border border-terracotta-400/30 rounded-2xl px-4 py-3 mt-3">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-terracotta-600 font-medium mb-0.5">
+            Flagged
+          </p>
+          <p className="text-sm text-ink-900">{checkIn.flag_reason}</p>
+        </div>
       )}
 
       {/* Details */}
@@ -611,21 +653,6 @@ function DetailIcon({
       </div>
     </div>
   );
-}
-
-function formatTime(d: Date) {
-  return d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
 }
 
 function formatHours(minutes: number | null) {

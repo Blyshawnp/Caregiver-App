@@ -181,7 +181,9 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
 
     // Hard navigation to bypass any cached data on the shift detail page.
     // router.push + refresh can race in some Next.js versions; this is bulletproof.
-    window.location.href = `/schedule/${shift.id}`;
+    // Hard navigation with cache-buster so we never serve a stale page
+    // showing the "not yet started" state.
+    window.location.href = `/schedule/${shift.id}?refreshed=${Date.now()}`;
   }
 
   const start = new Date(shift.scheduled_start);

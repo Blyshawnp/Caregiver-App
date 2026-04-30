@@ -183,7 +183,7 @@ export default function CheckOutForm({
       }
     }
 
-    window.location.href = `/schedule/${shift.id}`;
+    window.location.href = `/schedule/${shift.id}?refreshed=${Date.now()}`;
   }
 
   const checkInDate = new Date(checkInTime);

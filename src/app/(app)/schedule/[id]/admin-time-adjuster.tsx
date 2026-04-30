@@ -176,7 +176,11 @@ export default function AdminTimeAdjuster({
         onClick={() => setOpen(true)}
         className="block w-full bg-white hover:bg-cream-50 text-ink-700 border border-cream-200 py-3 rounded-2xl font-medium text-center transition shadow-soft text-sm"
       >
-        {existing ? "Adjust check-in / check-out times" : "Manually check in caregiver"}
+        {existing
+          ? existing.check_in_time && !existing.check_out_time
+            ? "Manually check out / adjust times"
+            : "Adjust check-in / check-out times"
+          : "Manually check in caregiver"}
       </button>
     );
   }

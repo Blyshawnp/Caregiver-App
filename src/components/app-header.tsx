@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { BellIcon } from "./icons";
 import { createClient } from "@/lib/supabase/server";
+import NotificationBell from "./notification-bell";
 
 export default async function AppHeader({
   fullName,
@@ -11,14 +11,16 @@ export default async function AppHeader({
 }) {
   const initial = fullName.trim()[0]?.toUpperCase() ?? "?";
 
-  // Unread notification count
+  // Initial unread notification count, then realtime updates take over
   let unreadCount = 0;
+  let userId: string | null = null;
   try {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
+      userId = user.id;
       const { count } = await supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
@@ -43,18 +45,9 @@ export default async function AppHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/notifications"
-            aria-label="Notifications"
-            className="relative w-10 h-10 rounded-full grid place-items-center text-ink-700 hover:bg-cream-200 transition active:scale-95"
-          >
-            <BellIcon size={20} />
-            {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] rounded-full bg-terracotta-500 text-cream-50 text-[10px] font-medium flex items-center justify-center px-1">
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            )}
-          </Link>
+          {userId && (
+            <NotificationBell initialCount={unreadCount} userId={userId} />
+          )}
           <Link
             href="/me"
             aria-label="Profile"

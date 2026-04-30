@@ -194,5 +194,9 @@ function timeAgo(d: Date) {
   if (sec < 3600) return `${Math.floor(sec / 60)}m`;
   if (sec < 86400) return `${Math.floor(sec / 3600)}h`;
   if (sec < 604800) return `${Math.floor(sec / 86400)}d`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+  });
 }

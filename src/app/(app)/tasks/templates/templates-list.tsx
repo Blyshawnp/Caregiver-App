@@ -13,7 +13,26 @@ type Template = {
   sort_order: number;
   is_active: boolean;
   caregiver_id: string | null;
+  category: TaskCategory | null;
 };
+
+type TaskCategory = "morning" | "afternoon" | "evening" | "bedtime" | "general";
+
+const CATEGORY_LABELS: Record<TaskCategory, string> = {
+  morning: "Morning",
+  afternoon: "Afternoon",
+  evening: "Evening",
+  bedtime: "Bedtime",
+  general: "General",
+};
+
+const CATEGORY_ORDER: TaskCategory[] = [
+  "morning",
+  "afternoon",
+  "evening",
+  "bedtime",
+  "general",
+];
 
 type Caregiver = { id: string; full_name: string };
 
@@ -32,6 +51,7 @@ export default function TemplatesList({
   const [newDescription, setNewDescription] = useState("");
   const [newIsDefault, setNewIsDefault] = useState(true);
   const [newCaregiverId, setNewCaregiverId] = useState<string>("");
+  const [newCategory, setNewCategory] = useState<TaskCategory>("general");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all"); // "all", "shared", caregiverId
 
@@ -49,9 +69,6 @@ export default function TemplatesList({
     return templates.filter((t) => t.caregiver_id === filter);
   }, [templates, filter]);
 
-  const defaults = filtered.filter((t) => t.default_for_new_shifts);
-  const optional = filtered.filter((t) => !t.default_for_new_shifts);
-
   async function addTemplate(e: React.FormEvent) {
     e.preventDefault();
     if (!newName.trim()) return;
@@ -64,6 +81,7 @@ export default function TemplatesList({
       default_for_new_shifts: newIsDefault,
       sort_order: maxSort + 10,
       caregiver_id: newCaregiverId || null,
+      category: newCategory,
     });
     if (error) {
       alert(error.message);
@@ -73,6 +91,7 @@ export default function TemplatesList({
     setNewDescription("");
     setNewIsDefault(true);
     setNewCaregiverId("");
+    setNewCategory("general");
     setAdding(false);
     router.refresh();
   }
@@ -91,6 +110,15 @@ export default function TemplatesList({
     await supabase
       .from("todo_templates")
       .update({ caregiver_id: caregiverId })
+      .eq("id", id);
+    router.refresh();
+  }
+
+  async function changeCategory(id: string, category: TaskCategory) {
+    const supabase = createClient();
+    await supabase
+      .from("todo_templates")
+      .update({ category })
       .eq("id", id);
     router.refresh();
   }
@@ -142,81 +170,49 @@ export default function TemplatesList({
         </div>
       )}
 
-      {/* Defaults section */}
-      <section className="mb-6">
-        <div className="flex items-baseline justify-between mb-2 px-1">
-          <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
-            On every new shift ({defaults.length})
-          </h2>
-        </div>
-        {defaults.length === 0 ? (
-          <div className="bg-white/60 rounded-2xl p-5 text-center text-sm text-ink-500 border border-dashed border-ink-300/30">
-            No default tasks here.
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {defaults.map((t) => (
-              <li key={t.id}>
-                <TemplateRow
-                  template={t}
-                  caregivers={caregivers}
-                  caregiverName={
-                    t.caregiver_id
-                      ? (caregiverNameById.get(t.caregiver_id) ?? null)
-                      : null
-                  }
-                  isEditing={editingId === t.id}
-                  onEdit={() => setEditingId(t.id)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSaved={() => {
-                    setEditingId(null);
-                    router.refresh();
-                  }}
-                  onToggleDefault={() => toggleDefault(t)}
-                  onDelete={() => deleteTemplate(t.id)}
-                  onReassign={(cid) => reassignTemplate(t.id, cid)}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Group by category */}
+      {CATEGORY_ORDER.map((cat) => {
+        const tasksInCat = filtered.filter(
+          (t) => (t.category ?? "general") === cat
+        );
+        if (tasksInCat.length === 0) return null;
 
-      {/* Optional section */}
-      {optional.length > 0 && (
-        <section className="mb-6">
-          <div className="flex items-baseline justify-between mb-2 px-1">
-            <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
-              Optional ({optional.length})
-            </h2>
-          </div>
-          <ul className="space-y-2">
-            {optional.map((t) => (
-              <li key={t.id}>
-                <TemplateRow
-                  template={t}
-                  caregivers={caregivers}
-                  caregiverName={
-                    t.caregiver_id
-                      ? (caregiverNameById.get(t.caregiver_id) ?? null)
-                      : null
-                  }
-                  isEditing={editingId === t.id}
-                  onEdit={() => setEditingId(t.id)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSaved={() => {
-                    setEditingId(null);
-                    router.refresh();
-                  }}
-                  onToggleDefault={() => toggleDefault(t)}
-                  onDelete={() => deleteTemplate(t.id)}
-                  onReassign={(cid) => reassignTemplate(t.id, cid)}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+        return (
+          <section key={cat} className="mb-5">
+            <div className="flex items-baseline justify-between mb-2 px-1">
+              <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
+                {CATEGORY_LABELS[cat]} ({tasksInCat.length})
+              </h2>
+            </div>
+            <ul className="space-y-2">
+              {tasksInCat.map((t) => (
+                <li key={t.id}>
+                  <TemplateRow
+                    template={t}
+                    caregivers={caregivers}
+                    caregiverName={
+                      t.caregiver_id
+                        ? (caregiverNameById.get(t.caregiver_id) ?? null)
+                        : null
+                    }
+                    isEditing={editingId === t.id}
+                    onEdit={() => setEditingId(t.id)}
+                    onCancelEdit={() => setEditingId(null)}
+                    onSaved={() => {
+                      setEditingId(null);
+                      router.refresh();
+                    }}
+                    onToggleDefault={() => toggleDefault(t)}
+                    onDelete={() => deleteTemplate(t.id)}
+                    onReassign={(cid) => reassignTemplate(t.id, cid)}
+                    onChangeCategory={(c) => changeCategory(t.id, c)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
 
       {/* Add new */}
       {adding ? (
@@ -241,6 +237,22 @@ export default function TemplatesList({
             rows={2}
             className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm resize-none"
           />
+          <label className="block">
+            <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+              Time of day
+            </span>
+            <select
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value as TaskCategory)}
+              className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+            >
+              {CATEGORY_ORDER.map((cat) => (
+                <option key={cat} value={cat}>
+                  {CATEGORY_LABELS[cat]}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="block">
             <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
               Assign to
@@ -336,6 +348,7 @@ function TemplateRow({
   onToggleDefault,
   onDelete,
   onReassign,
+  onChangeCategory,
 }: {
   template: Template;
   caregivers: Caregiver[];
@@ -347,6 +360,7 @@ function TemplateRow({
   onToggleDefault: () => void;
   onDelete: () => void;
   onReassign: (caregiverId: string | null) => void;
+  onChangeCategory: (category: TaskCategory) => void;
 }) {
   const [name, setName] = useState(template.task_name);
   const [description, setDescription] = useState(template.description ?? "");
@@ -383,6 +397,22 @@ function TemplateRow({
           rows={2}
           className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm resize-none"
         />
+        <label className="block">
+          <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+            Time of day
+          </span>
+          <select
+            value={template.category ?? "general"}
+            onChange={(e) => onChangeCategory(e.target.value as TaskCategory)}
+            className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+          >
+            {CATEGORY_ORDER.map((cat) => (
+              <option key={cat} value={cat}>
+                {CATEGORY_LABELS[cat]}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="block">
           <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
             Assigned to
@@ -433,6 +463,11 @@ function TemplateRow({
       <div className="flex-1 min-w-0">
         <p className="font-medium text-ink-900 truncate flex items-center gap-2 flex-wrap">
           {template.task_name}
+          {template.default_for_new_shifts && (
+            <span className="text-[10px] uppercase tracking-wider bg-forest-600 text-cream-50 px-1.5 py-0.5 rounded font-medium">
+              Default
+            </span>
+          )}
           {caregiverName && (
             <span className="text-[10px] uppercase tracking-wider bg-forest-100 text-forest-600 px-1.5 py-0.5 rounded font-medium">
               for {caregiverName.split(" ")[0]}

@@ -2,6 +2,10 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { roundUpToQuarter } from "@/lib/pay";
+import {
+  formatTimeInTz,
+  formatShortDateInTz,
+} from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -97,15 +101,8 @@ export default async function InvoiceDetailPage({
         <h1 className="font-display text-3xl text-ink-900">
           {periodStart && periodEnd ? (
             <>
-              {periodStart.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}{" "}
-              –{" "}
-              {periodEnd.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
+              {formatShortDateInTz(periodStart).split(", ").slice(1).join(", ")} –{" "}
+              {formatShortDateInTz(periodEnd).split(", ").slice(1).join(", ")}
             </>
           ) : (
             "Invoice"
@@ -114,7 +111,10 @@ export default async function InvoiceDetailPage({
         <p className="text-ink-500 text-sm">
           Locked{" "}
           {snap.pay_periods?.released_at &&
-            new Date(snap.pay_periods.released_at).toLocaleDateString()}
+            new Date(snap.pay_periods.released_at).toLocaleDateString(
+              "en-US",
+              { timeZone: "America/New_York" }
+            )}
         </p>
       </header>
 
@@ -156,26 +156,14 @@ export default async function InvoiceDetailPage({
                   <li key={idx} className="py-3 first:pt-0 last:pb-0">
                     <div className="flex items-baseline justify-between gap-3 mb-0.5">
                       <p className="font-medium text-ink-900">
-                        {start.toLocaleDateString(undefined, {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {formatShortDateInTz(start)}
                       </p>
                       <p className="font-display text-sm">
                         ${roundUpToQuarter(amount).toFixed(2)}
                       </p>
                     </div>
                     <p className="text-xs text-ink-500">
-                      {start.toLocaleTimeString(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}{" "}
-                      –{" "}
-                      {end.toLocaleTimeString(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      {formatTimeInTz(start)} – {formatTimeInTz(end)}
                       {item.client_name && ` · ${item.client_name}`}
                     </p>
                     <p className="text-xs text-ink-500 mt-0.5">

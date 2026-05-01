@@ -18,6 +18,7 @@ type Invitation = {
   email: string;
   full_name: string;
   role: string;
+  status: "pending" | "accepted" | "expired" | "revoked";
   expires_at: string;
   accepted_at: string | null;
   token: string;
@@ -98,9 +99,9 @@ export default async function TeamPage() {
   // Pending (not-yet-accepted, not-expired) invitations
   const { data: invitationsRaw } = await supabase
     .from("invitations")
-    .select("id, email, full_name, role, expires_at, accepted_at, token")
+    .select("id, email, full_name, role, status, expires_at, accepted_at, token")
     .eq("organization_id", profile.organization_id)
-    .is("accepted_at", null)
+    .eq("status", "pending")
     .gte("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false });
 

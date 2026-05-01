@@ -10,7 +10,8 @@ type Invitation = {
   full_name: string;
   role: "admin" | "client" | "caregiver" | "family";
   organization_id: string;
-  organizations: { name: string } | null;
+  caregiver_hourly_rate: number | null;
+  organization_name: string | null;
 };
 
 export default function AcceptInviteForm({
@@ -64,62 +65,30 @@ export default function AcceptInviteForm({
       return;
     }
 
-    // Create the profile in the same org with the invited role
-    const { error: profileError } = await supabase.from("profiles").insert({
-      id: signUpData.user.id,
-      organization_id: invitation.organization_id,
-      role: invitation.role,
-      full_name: invitation.full_name,
-      email: invitation.email,
-      phone: phone.trim() || null,
-    });
-
-    if (profileError) {
-      setError(profileError.message);
-      setSubmitting(false);
-      return;
-    }
-
-    // Mark the invitation as accepted via the RPC (security-definer function)
-    // so RLS can't silently block it. The token is the auth credential.
+    // Finalize the invitation server-side so profile creation, acceptance
+    // metadata, and caregiver pay rate all come from the stored invitation.
     const { data: accepted, error: acceptError } = await supabase.rpc(
       "accept_invitation",
-      { invitation_token: token }
+      {
+        invitation_token: token,
+        invited_phone: phone.trim() || null,
+      }
     );
 
-    if (acceptError) {
-      // Don't block the user from getting in; admin can clean up manually
-      console.error("Could not mark invitation accepted:", acceptError);
-    } else if (accepted === false) {
-      console.error("Invitation accept returned false");
-    }
-
-    // If admin had set a pending pay rate (from invite form localStorage), apply it
-    if (invitation.role === "caregiver") {
-      try {
-        const pending = JSON.parse(
-          localStorage.getItem("pending_invite_rates") ?? "{}"
-        );
-        const rate = pending[token];
-        if (rate && rate > 0) {
-          await supabase.from("caregiver_rates").insert({
-            caregiver_id: signUpData.user.id,
-            base_hourly_rate: Number(rate),
-            effective_from: new Date().toISOString().split("T")[0],
-          });
-          delete pending[token];
-          localStorage.setItem("pending_invite_rates", JSON.stringify(pending));
-        }
-      } catch {
-        /* ignore storage errors */
-      }
+    if (acceptError || accepted === false) {
+      setError(
+        acceptError?.message ??
+          "Could not finalize this invitation. Contact your admin."
+      );
+      setSubmitting(false);
+      return;
     }
 
     router.push("/home");
     router.refresh();
   }
 
-  const orgName = invitation.organizations?.name ?? "the team";
+  const orgName = invitation.organization_name ?? "the team";
   const roleCopy: Record<string, string> = {
     admin: "administrator",
     client: "client",

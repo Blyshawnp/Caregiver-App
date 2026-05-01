@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -12,8 +11,6 @@ export default function InviteForm({
   organizationId: string;
   currentUserId: string;
 }) {
-  const router = useRouter();
-
   const [fullName, setFullName] = useState("");
   const [hasEmail, setHasEmail] = useState(true);
   const [email, setEmail] = useState("");
@@ -53,6 +50,12 @@ export default function InviteForm({
           email: email.trim().toLowerCase(),
           role,
           invited_by: currentUserId,
+          created_by: currentUserId,
+          caregiver_hourly_rate:
+            role === "caregiver" && hourlyRate
+              ? Number(hourlyRate)
+              : null,
+          status: "pending",
         })
         .select("token")
         .single();
@@ -65,18 +68,6 @@ export default function InviteForm({
 
       const link = `${window.location.origin}/accept-invite?token=${data.token}`;
       setCreatedLink(link);
-
-      if (role === "caregiver" && hourlyRate) {
-        try {
-          const pending = JSON.parse(
-            localStorage.getItem("pending_invite_rates") ?? "{}"
-          );
-          pending[data.token] = Number(hourlyRate);
-          localStorage.setItem("pending_invite_rates", JSON.stringify(pending));
-        } catch {
-          /* ignore */
-        }
-      }
 
       setSubmitting(false);
       return;
@@ -95,118 +86,33 @@ export default function InviteForm({
       return;
     }
 
-    const placeholderEmail = `${cleanUser}@noemail.local`;
-
-    // Step 1: Create the invitation FIRST while we are still admin (RLS needs is_admin)
-    const { data: invitationData, error: invitationError } = await supabase
-      .from("invitations")
-      .insert({
-        organization_id: organizationId,
-        full_name: fullName.trim(),
-        email: placeholderEmail,
+    const response = await fetch("/api/invitations/no-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullName: fullName.trim(),
         role,
-        invited_by: currentUserId,
-      })
-      .select("id")
-      .single();
-
-    if (invitationError || !invitationData) {
-      setError(invitationError?.message ?? "Could not create invitation.");
-      setSubmitting(false);
-      return;
-    }
-
-    // Step 2: Save admin session, then sign up the new user
-    const {
-      data: { session: adminSession },
-    } = await supabase.auth.getSession();
-
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: placeholderEmail,
-      password,
+        usernamePart: cleanUser,
+        password,
+        hourlyRate: role === "caregiver" && hourlyRate ? Number(hourlyRate) : null,
+      }),
     });
 
-    if (signUpError) {
-      if (adminSession) {
-        await supabase.auth.setSession({
-          access_token: adminSession.access_token,
-          refresh_token: adminSession.refresh_token,
-        });
-      }
-      // Roll back invitation
-      await supabase.from("invitations").delete().eq("id", invitationData.id);
-      setError(
-        signUpError.message.includes("already")
-          ? "That username is taken. Pick another."
-          : signUpError.message
-      );
+    const result = (await response.json()) as {
+      error?: string;
+      email?: string;
+      password?: string;
+    };
+
+    if (!response.ok || !result.email || !result.password) {
+      setError(result.error ?? "Could not create account.");
       setSubmitting(false);
       return;
     }
 
-    if (!signUpData.user) {
-      if (adminSession) {
-        await supabase.auth.setSession({
-          access_token: adminSession.access_token,
-          refresh_token: adminSession.refresh_token,
-        });
-      }
-      await supabase.from("invitations").delete().eq("id", invitationData.id);
-      setError("Could not create account.");
-      setSubmitting(false);
-      return;
-    }
-
-    const newUserId = signUpData.user.id;
-
-    // Step 3: Now signed in as the new user. The self-insert RLS policy will
-    // pass because we have a matching invitation.
-    const { error: profileError } = await supabase.from("profiles").insert({
-      id: newUserId,
-      organization_id: organizationId,
-      role,
-      full_name: fullName.trim(),
-      email: placeholderEmail,
-    });
-
-    if (profileError) {
-      // Sign admin back in to allow cleanup
-      if (adminSession) {
-        await supabase.auth.setSession({
-          access_token: adminSession.access_token,
-          refresh_token: adminSession.refresh_token,
-        });
-      }
-      await supabase.from("invitations").delete().eq("id", invitationData.id);
-      setError(`Profile error: ${profileError.message}`);
-      setSubmitting(false);
-      return;
-    }
-
-    // Step 4: Mark invitation accepted (RLS allows the user to update their own)
-    await supabase
-      .from("invitations")
-      .update({ accepted_at: new Date().toISOString() })
-      .eq("id", invitationData.id);
-
-    // Add caregiver pay rate if specified
-    if (role === "caregiver" && hourlyRate) {
-      await supabase.from("caregiver_rates").insert({
-        caregiver_id: newUserId,
-        base_hourly_rate: Number(hourlyRate),
-        effective_from: new Date().toISOString().split("T")[0],
-      });
-    }
-
-    // Sign the admin back in
-    if (adminSession) {
-      await supabase.auth.setSession({
-        access_token: adminSession.access_token,
-        refresh_token: adminSession.refresh_token,
-      });
-    }
-
-    setCreatedNoEmailCreds({ email: placeholderEmail, password });
+    setCreatedNoEmailCreds({ email: result.email, password: result.password });
     setSubmitting(false);
   }
 

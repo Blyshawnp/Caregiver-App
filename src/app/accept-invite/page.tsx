@@ -2,6 +2,19 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AcceptInviteForm from "./accept-invite-form";
 
+type Invitation = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: "admin" | "client" | "caregiver" | "family";
+  organization_id: string;
+  caregiver_hourly_rate: number | null;
+  status: "pending" | "accepted" | "expired" | "revoked";
+  expires_at: string;
+  accepted_at: string | null;
+  organization_name: string | null;
+};
+
 export default async function AcceptInvitePage({
   searchParams,
 }: {
@@ -12,29 +25,19 @@ export default async function AcceptInvitePage({
   if (!token) return <ErrorScreen message="No invitation token provided." />;
 
   const supabase = await createClient();
-  const { data: invitation } = await supabase
-    .from("invitations")
-    .select(
-      "id, email, full_name, role, organization_id, expires_at, accepted_at, organizations(name)"
-    )
-    .eq("token", token)
-    .maybeSingle<{
-      id: string;
-      email: string;
-      full_name: string;
-      role: "admin" | "client" | "caregiver" | "family";
-      organization_id: string;
-      expires_at: string;
-      accepted_at: string | null;
-      organizations: { name: string } | null;
-    }>();
+  const { data: invitation, error } = await supabase.rpc(
+    "get_invitation_by_token",
+    { invitation_token: token }
+  );
 
-  if (!invitation)
+  if (error || !invitation)
     return (
       <ErrorScreen message="This invitation link is invalid or has been removed." />
     );
 
-  if (invitation.accepted_at)
+  const invite = (Array.isArray(invitation) ? invitation[0] : invitation) as Invitation;
+
+  if (invite.status === "accepted" || invite.accepted_at)
     return (
       <ErrorScreen
         message="This invitation has already been accepted. Try signing in."
@@ -42,12 +45,17 @@ export default async function AcceptInvitePage({
       />
     );
 
-  if (new Date(invitation.expires_at) < new Date())
+  if (invite.status === "revoked")
+    return (
+      <ErrorScreen message="This invitation has been revoked. Ask the admin to send a new one." />
+    );
+
+  if (invite.status === "expired" || new Date(invite.expires_at) < new Date())
     return (
       <ErrorScreen message="This invitation has expired. Ask the admin to send a new one." />
     );
 
-  return <AcceptInviteForm invitation={invitation} token={token} />;
+  return <AcceptInviteForm invitation={invite} token={token} />;
 }
 
 function ErrorScreen({

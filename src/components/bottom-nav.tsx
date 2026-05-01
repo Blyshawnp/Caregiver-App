@@ -5,16 +5,24 @@ import { usePathname } from "next/navigation";
 import {
   HomeIcon,
   CalendarIcon,
-  CheckSquareIcon,
+  BellIcon,
+  GridIcon,
+  ListIcon,
   MessageIcon,
   UserIcon,
 } from "./icons";
 import { t, type Lang } from "@/lib/i18n";
+import type { Role } from "@/lib/db-types";
 
-type Role = "admin" | "client" | "caregiver" | "family" | "family";
+type NavItem = {
+  href: string;
+  label: string;
+  Icon: typeof HomeIcon;
+  key: string;
+};
 
 export default function BottomNav({
-  role: _role,
+  role,
   unreadMessages = 0,
   lang = "en",
 }: {
@@ -24,38 +32,7 @@ export default function BottomNav({
 }) {
   const pathname = usePathname();
 
-  const tabs = [
-    {
-      href: "/home",
-      label: t("nav.home", lang),
-      Icon: HomeIcon,
-      key: "home",
-    },
-    {
-      href: "/schedule",
-      label: t("nav.schedule", lang),
-      Icon: CalendarIcon,
-      key: "schedule",
-    },
-    {
-      href: "/tasks",
-      label: t("nav.tasks", lang),
-      Icon: CheckSquareIcon,
-      key: "tasks",
-    },
-    {
-      href: "/messages",
-      label: t("nav.messages", lang),
-      Icon: MessageIcon,
-      key: "messages",
-    },
-    {
-      href: "/me",
-      label: t("nav.me", lang),
-      Icon: UserIcon,
-      key: "me",
-    },
-  ];
+  const tabs = getTabs(role, lang);
 
   return (
     <nav
@@ -63,7 +40,10 @@ export default function BottomNav({
       className="fixed bottom-0 left-0 right-0 z-30 pb-[env(safe-area-inset-bottom)]"
     >
       <div className="mx-auto max-w-2xl px-3 pb-3">
-        <div className="bg-white/95 backdrop-blur-md border border-cream-200/80 shadow-lifted rounded-3xl px-1.5 py-1.5 grid grid-cols-5 gap-1">
+        <div
+          className="bg-white/95 backdrop-blur-md border border-cream-200/80 shadow-lifted rounded-3xl px-1.5 py-1.5 grid gap-1"
+          style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+        >
           {tabs.map(({ href, label, Icon, key }) => {
             const active =
               pathname === href || pathname?.startsWith(href + "/");
@@ -102,4 +82,101 @@ export default function BottomNav({
       </div>
     </nav>
   );
+}
+
+function getTabs(role: Role, lang: Lang): NavItem[] {
+  const commonCareTabs: NavItem[] = [
+    {
+      href: "/home",
+      label: t("nav.home", lang),
+      Icon: HomeIcon,
+      key: "home",
+    },
+    {
+      href: "/schedule",
+      label: t("nav.schedule", lang),
+      Icon: CalendarIcon,
+      key: "schedule",
+    },
+    {
+      href: "/messages",
+      label: t("nav.messages", lang),
+      Icon: MessageIcon,
+      key: "messages",
+    },
+    {
+      href: "/notifications",
+      label: t("nav.notifications", lang),
+      Icon: BellIcon,
+      key: "notifications",
+    },
+    {
+      href: "/me",
+      label: t("nav.me", lang),
+      Icon: UserIcon,
+      key: "me",
+    },
+  ];
+
+  switch (role) {
+    case "caregiver":
+      return commonCareTabs;
+    case "client":
+    case "family":
+      return commonCareTabs;
+    case "admin":
+      return [
+        {
+          href: "/home",
+          label: t("nav.home", lang),
+          Icon: HomeIcon,
+          key: "home",
+        },
+        {
+          href: "/clients",
+          label: t("nav.clients", lang),
+          Icon: GridIcon,
+          key: "clients",
+        },
+        {
+          href: "/team",
+          label: t("nav.team", lang),
+          Icon: UserIcon,
+          key: "team",
+        },
+        {
+          href: "/schedule",
+          label: t("nav.schedule", lang),
+          Icon: CalendarIcon,
+          key: "schedule",
+        },
+        {
+          href: "/me",
+          label: t("nav.me", lang),
+          Icon: ListIcon,
+          key: "me",
+        },
+      ];
+    default:
+      return [
+        {
+          href: "/home",
+          label: t("nav.home", lang),
+          Icon: HomeIcon,
+          key: "home",
+        },
+        {
+          href: "/messages",
+          label: t("nav.messages", lang),
+          Icon: MessageIcon,
+          key: "messages",
+        },
+        {
+          href: "/me",
+          label: t("nav.me", lang),
+          Icon: UserIcon,
+          key: "me",
+        },
+      ];
+  }
 }

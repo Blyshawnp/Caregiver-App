@@ -18,6 +18,9 @@ const en = {
   "nav.home": "Home",
   "nav.schedule": "Schedule",
   "nav.tasks": "Tasks",
+  "nav.clients": "Clients",
+  "nav.team": "Team",
+  "nav.notifications": "Alerts",
   "nav.messages": "Messages",
   "nav.me": "Me",
 
@@ -116,6 +119,9 @@ const es: Record<TranslationKey, string> = {
   "nav.home": "Inicio",
   "nav.schedule": "Horario",
   "nav.tasks": "Tareas",
+  "nav.clients": "Clientes",
+  "nav.team": "Equipo",
+  "nav.notifications": "Avisos",
   "nav.messages": "Mensajes",
   "nav.me": "Yo",
 

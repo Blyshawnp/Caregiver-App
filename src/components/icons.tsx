@@ -103,3 +103,57 @@ export const GridIcon = (p: IconProps) => (
     <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
   </Base>
 );
+
+export const StarOfLifeIcon = ({
+  size = 24,
+  ...rest
+}: IconProps) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+    {...rest}
+  >
+    <rect
+      x="10.65"
+      y="1.75"
+      width="2.7"
+      height="20.5"
+      rx="0.9"
+      fill="currentColor"
+    />
+    <rect
+      x="10.65"
+      y="1.75"
+      width="2.7"
+      height="20.5"
+      rx="0.9"
+      transform="rotate(60 12 12)"
+      fill="currentColor"
+    />
+    <rect
+      x="10.65"
+      y="1.75"
+      width="2.7"
+      height="20.5"
+      rx="0.9"
+      transform="rotate(-60 12 12)"
+      fill="currentColor"
+    />
+    <path
+      d="M12 7.2v9.6"
+      stroke="white"
+      strokeWidth="1.65"
+      strokeLinecap="round"
+    />
+    <path
+      d="M13.9 9.05c0-.95-.77-1.68-1.8-1.68-1.08 0-1.92.8-1.92 1.78 0 .92.74 1.45 1.58 1.9.93.49 1.88 1 1.88 2.1 0 1.06-.83 1.88-1.94 1.88-1.03 0-1.83-.66-1.96-1.62"
+      stroke="white"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);

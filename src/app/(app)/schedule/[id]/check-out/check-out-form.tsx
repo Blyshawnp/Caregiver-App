@@ -10,6 +10,7 @@ import {
   formatDistance,
 } from "@/lib/geo";
 import { MapPinIcon, ClockIcon } from "@/components/icons";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 type Shift = {
   id: string;
@@ -159,28 +160,11 @@ export default function CheckOutForm({
     }
 
     if (flagged) {
-      try {
-        const { data: admins } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("organization_id", shift.organization_id)
-          .eq("role", "admin");
-        if (admins && admins.length > 0) {
-          await supabase.from("notifications").insert(
-            admins.map((a) => ({
-              organization_id: shift.organization_id,
-              recipient_id: a.id,
-              kind: "check_out_flagged",
-              title: "Flagged check-out",
-              body: flagReason ?? "A caregiver checked out outside the geofence.",
-              link: `/schedule/${shift.id}`,
-              related_shift_id: shift.id,
-            }))
-          );
-        }
-      } catch {
-        /* best effort */
-      }
+      void sendNotificationEvent({
+        type: "check_out_flagged",
+        shiftId: shift.id,
+        flagReason,
+      });
     }
 
     window.location.href = `/schedule/${shift.id}?refreshed=${Date.now()}`;

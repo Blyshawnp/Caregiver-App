@@ -176,7 +176,7 @@ export default async function TasksPage({
         shiftId={shift.id}
         todos={todos}
         canEdit={isAssignedCaregiver || profile.role !== "caregiver"}
-        canCompleteTasks={isAssignedCaregiver}
+        canCompleteTasks={isAssignedCaregiver && isOnShift}
         currentUserId={profile.id}
       />
 

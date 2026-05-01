@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 export default function ForceCheckOutButton({
   shiftId,
@@ -54,22 +55,11 @@ export default function ForceCheckOutButton({
       return;
     }
 
-    // Notify the caregiver they were force-checked out
-    try {
-      await supabase.from("notifications").insert({
-        organization_id: organizationId,
-        recipient_id: caregiverId,
-        kind: "force_check_out",
-        title: "You were checked out",
-        body:
-          reason.trim() ||
-          "An admin manually checked you out. Tap to view shift details.",
-        link: `/schedule/${shiftId}`,
-        related_shift_id: shiftId,
-      });
-    } catch {
-      /* best effort */
-    }
+    void sendNotificationEvent({
+      type: "force_check_out",
+      shiftId,
+      reason,
+    });
 
     window.location.href = `/schedule/${shiftId}`;
   }

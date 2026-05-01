@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 export default function ReleaseShiftButton({
   shiftId,
@@ -53,45 +54,11 @@ export default function ReleaseShiftButton({
       return;
     }
 
-    // Notify all OTHER caregivers and admins in the org
-    try {
-      const { data: recipients } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .neq("id", caregiverId)
-        .in("role", ["admin", "caregiver"]);
-
-      if (recipients && recipients.length > 0) {
-        const date = new Date(shiftStart);
-        const dateStr = date.toLocaleDateString(undefined, {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        });
-        const timeStr = date.toLocaleTimeString(undefined, {
-          hour: "numeric",
-          minute: "2-digit",
-        });
-        const reasonSuffix = reason.trim() ? ` (${reason.trim()})` : "";
-        const body = `${caregiverName} released their ${dateStr} ${timeStr} shift with ${clientName}${reasonSuffix}. Tap to claim it.`;
-
-        await supabase.from("notifications").insert(
-          recipients.map((r) => ({
-            organization_id: organizationId,
-            recipient_id: r.id,
-            kind: "shift_released",
-            title: "Shift available",
-            body,
-            link: `/schedule/${shiftId}`,
-            related_shift_id: shiftId,
-          }))
-        );
-      }
-    } catch {
-      /* notifications are best effort */
-    }
+    void sendNotificationEvent({
+      type: "shift_released",
+      shiftId,
+      reason,
+    });
 
     window.location.href = `/schedule/${shiftId}`;
   }

@@ -1,7 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { ClockIcon, MapPinIcon, ArrowRightIcon } from "@/components/icons";
+import {
+  ClockIcon,
+  MapPinIcon,
+  ArrowRightIcon,
+  StarOfLifeIcon,
+} from "@/components/icons";
 import DeleteShiftButton from "./delete-shift-button";
 import AcceptDeclineButtons from "./accept-decline-buttons";
 import LiveOnShiftCard from "./live-on-shift-card";
@@ -10,11 +15,10 @@ import AdminTimeAdjuster from "./admin-time-adjuster";
 import ReleaseShiftButton from "./release-shift-button";
 import ClaimShiftButton from "./claim-shift-button";
 import CancelReleaseButton from "./cancel-release-button";
-import HomeInfoCard from "@/components/home-info-card";
-import EmergencyPanel from "@/components/emergency-panel";
 import PayOverrideButton from "./pay-override-button";
 import HandoffNote from "./handoff-note";
 import ShiftViewMarker from "./shift-view-marker";
+import TasksView from "@/app/(app)/tasks/tasks-view";
 import { getUserLanguage } from "@/lib/get-user-language";
 import { t as tr } from "@/lib/i18n";
 import {
@@ -58,29 +62,7 @@ type ShiftDetail = {
   clients: {
     full_name: string;
     address: string | null;
-    wifi_ssid: string | null;
-    wifi_password: string | null;
-    emergency_contact_1_name: string | null;
-    emergency_contact_1_phone: string | null;
-    emergency_contact_1_relationship: string | null;
-    emergency_contact_2_name: string | null;
-    emergency_contact_2_phone: string | null;
-    emergency_contact_2_relationship: string | null;
     home_notes: string | null;
-    preferred_hospital_name: string | null;
-    preferred_hospital_address: string | null;
-    preferred_hospital_phone: string | null;
-    primary_physician_name: string | null;
-    primary_physician_address: string | null;
-    primary_physician_phone: string | null;
-    has_panic_button: boolean | null;
-    panic_button_location: string | null;
-    has_medical_alert: boolean | null;
-    medical_alert_location: string | null;
-    first_aid_location: string | null;
-    hypoglycemia_kit_location: string | null;
-    fire_extinguisher_location: string | null;
-    aed_location: string | null;
   } | null;
   shift_types: { name: string; color: string } | null;
   check_ins: Array<{
@@ -94,7 +76,11 @@ type ShiftDetail = {
   shift_todos: Array<{
     id: string;
     task_name: string;
+    description: string | null;
     is_completed: boolean;
+    completed_at: string | null;
+    sort_order: number;
+    notes: string | null;
   }> | null;
 };
 
@@ -142,10 +128,10 @@ export default async function ShiftDetailPage({
       client_id,
       shift_type_id,
       profiles:caregiver_id ( full_name ),
-      clients ( full_name, address, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes, preferred_hospital_name, preferred_hospital_address, preferred_hospital_phone, primary_physician_name, primary_physician_address, primary_physician_phone, has_panic_button, panic_button_location, has_medical_alert, medical_alert_location, first_aid_location, hypoglycemia_kit_location, fire_extinguisher_location, aed_location ),
+      clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
       check_ins ( id, check_in_time, check_out_time, total_minutes, flagged_outside_geofence, flag_reason ),
-      shift_todos ( id, task_name, is_completed )
+      shift_todos ( id, task_name, description, is_completed, completed_at, sort_order, notes )
     `
     )
     .eq("id", id)
@@ -243,24 +229,6 @@ export default async function ShiftDetailPage({
     .maybeSingle();
   const isPayLocked = !!lockedPeriod;
 
-  // Allergies for this client (silent fail if table doesn't exist yet)
-  type AllergyRow = {
-    id: string;
-    name: string;
-    severity: "critical" | "mild" | "minor";
-    notes: string | null;
-  };
-  let allergies: AllergyRow[] = [];
-  try {
-    const { data: allergyRows } = await supabase
-      .from("client_allergies")
-      .select("id, name, severity, notes")
-      .eq("client_id", shift.client_id);
-    allergies = (allergyRows ?? []) as AllergyRow[];
-  } catch {
-    allergies = [];
-  }
-
   // If shift is released, fetch the releaser's name for the banner
   let releaserName: string | null = null;
   if (shift.is_released && shift.released_by) {
@@ -275,7 +243,22 @@ export default async function ShiftDetailPage({
   const start = new Date(shift.scheduled_start);
   const end = new Date(shift.scheduled_end);
   const checkIns = shift.check_ins ?? [];
-  const checkIn = checkIns[0];
+  let checkIn = checkIns[0];
+
+  if (!checkIn) {
+    const { data: directCheckIn } = await supabase
+      .from("check_ins")
+      .select(
+        "id, check_in_time, check_out_time, total_minutes, flagged_outside_geofence, flag_reason"
+      )
+      .eq("shift_id", id)
+      .order("check_in_time", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    if (directCheckIn) {
+      checkIn = directCheckIn;
+    }
+  }
   const todos = shift.shift_todos ?? [];
   const todosDone = todos.filter((t) => t.is_completed).length;
 
@@ -283,8 +266,13 @@ export default async function ShiftDetailPage({
   const isAssignedCaregiver =
     profile?.role === "caregiver" && profile.id === shift.caregiver_id;
   const isCaregiver = profile?.role === "caregiver";
-  const lang = await getUserLanguage();
   const isReleased = !!shift.is_released;
+  const canCompleteTasks =
+    isAssignedCaregiver &&
+    !!checkIn?.check_in_time &&
+    !checkIn?.check_out_time &&
+    !isReleased;
+  const lang = await getUserLanguage();
   const iReleasedThis =
     isCaregiver && shift.released_by === profile?.id && isReleased;
   const canClaim = isCaregiver && isReleased && !iReleasedThis;
@@ -420,55 +408,44 @@ export default async function ShiftDetailPage({
         </div>
       </section>
 
-      {/* Emergency safety panel - allergies, contacts, hospital, devices */}
-      {shift.clients && (
-        <EmergencyPanel
-          info={{
-            emergency_contact_1_name: shift.clients.emergency_contact_1_name,
-            emergency_contact_1_phone: shift.clients.emergency_contact_1_phone,
-            emergency_contact_1_relationship:
-              shift.clients.emergency_contact_1_relationship,
-            emergency_contact_2_name: shift.clients.emergency_contact_2_name,
-            emergency_contact_2_phone: shift.clients.emergency_contact_2_phone,
-            emergency_contact_2_relationship:
-              shift.clients.emergency_contact_2_relationship,
-            preferred_hospital_name: shift.clients.preferred_hospital_name,
-            preferred_hospital_address: shift.clients.preferred_hospital_address,
-            preferred_hospital_phone: shift.clients.preferred_hospital_phone,
-            primary_physician_name: shift.clients.primary_physician_name,
-            primary_physician_address: shift.clients.primary_physician_address,
-            primary_physician_phone: shift.clients.primary_physician_phone,
-            has_panic_button: shift.clients.has_panic_button,
-            panic_button_location: shift.clients.panic_button_location,
-            has_medical_alert: shift.clients.has_medical_alert,
-            medical_alert_location: shift.clients.medical_alert_location,
-            first_aid_location: shift.clients.first_aid_location,
-            hypoglycemia_kit_location: shift.clients.hypoglycemia_kit_location,
-            fire_extinguisher_location: shift.clients.fire_extinguisher_location,
-            aed_location: shift.clients.aed_location,
-          }}
-          allergies={allergies}
-        />
-      )}
+      <section className="mt-4 grid gap-2">
+        <Link
+          href="/emergency"
+          className="flex items-center justify-between bg-white hover:bg-red-50 px-5 py-4 rounded-2xl shadow-soft transition"
+        >
+          <span className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-red-600 text-cream-50 grid place-items-center shrink-0">
+              <StarOfLifeIcon size={20} />
+            </span>
+            <span>
+              <span className="block font-medium text-ink-900">
+                Emergency information
+              </span>
+              <span className="block text-xs text-ink-500">
+                Contacts, hospital, physician, medical devices, and safety info
+              </span>
+            </span>
+          </span>
+          <ArrowRightIcon size={16} className="text-ink-300" />
+        </Link>
 
-      {/* Home info (wifi, notes) */}
-      {shift.clients && (
-        <HomeInfoCard
-          info={{
-            wifi_ssid: shift.clients.wifi_ssid,
-            wifi_password: shift.clients.wifi_password,
-            emergency_contact_1_name: shift.clients.emergency_contact_1_name,
-            emergency_contact_1_phone: shift.clients.emergency_contact_1_phone,
-            emergency_contact_1_relationship:
-              shift.clients.emergency_contact_1_relationship,
-            emergency_contact_2_name: shift.clients.emergency_contact_2_name,
-            emergency_contact_2_phone: shift.clients.emergency_contact_2_phone,
-            emergency_contact_2_relationship:
-              shift.clients.emergency_contact_2_relationship,
-            home_notes: shift.clients.home_notes,
-          }}
-        />
-      )}
+        {(canEdit || isAssignedCaregiver) && (
+          <Link
+            href={`/schedule/${id}/home-access`}
+            className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition"
+          >
+            <span>
+              <span className="block font-medium text-ink-900">
+                Home access
+              </span>
+              <span className="block text-xs text-ink-500">
+                Wi-Fi and house notes
+              </span>
+            </span>
+            <ArrowRightIcon size={16} className="text-ink-300" />
+          </Link>
+        )}
+      </section>
 
       {/* Handoff note - editable by assigned caregiver, viewable by all roles */}
       <HandoffNote
@@ -514,60 +491,15 @@ export default async function ShiftDetailPage({
         </div>
       )}
 
-      {/* Todos summary */}
-      {todos.length > 0 && (
-        <section className="bg-white rounded-3xl shadow-soft p-5 mt-4 grain-overlay">
-          <div className="relative">
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="font-display text-base">Tasks</h2>
-              <span className="text-sm text-ink-500">
-                {todosDone} / {todos.length}
-              </span>
-            </div>
-            <ul className="space-y-1.5">
-              {todos.slice(0, 5).map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center gap-2.5 text-sm text-ink-700"
-                >
-                  <span
-                    className={`w-4 h-4 rounded border-2 grid place-items-center shrink-0 ${
-                      t.is_completed
-                        ? "bg-forest-500 border-forest-500"
-                        : "border-cream-200"
-                    }`}
-                  >
-                    {t.is_completed && (
-                      <svg
-                        className="w-3 h-3 text-cream-50"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={3}
-                      >
-                        <path d="M5 12l5 5L20 7" />
-                      </svg>
-                    )}
-                  </span>
-                  <span
-                    className={t.is_completed ? "line-through text-ink-300" : ""}
-                  >
-                    {t.task_name}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {todos.length > 5 && (
-              <Link
-                href={`/tasks?shift=${id}`}
-                className="block text-xs text-forest-600 hover:underline mt-3 font-medium"
-              >
-                View all {todos.length} tasks →
-              </Link>
-            )}
-          </div>
-        </section>
-      )}
+      <section className="mt-4">
+        <TasksView
+          shiftId={id}
+          todos={todos}
+          canEdit={canEdit}
+          canCompleteTasks={canCompleteTasks}
+          currentUserId={profile?.id ?? user.id}
+        />
+      </section>
 
       {/* Actions */}
       <div className="space-y-2 mt-6">

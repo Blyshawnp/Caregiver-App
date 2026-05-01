@@ -14,7 +14,13 @@ type HomeInfo = {
   home_notes: string | null;
 };
 
-export default function HomeInfoCard({ info }: { info: HomeInfo }) {
+export default function HomeInfoCard({
+  info,
+  title = "Home info",
+}: {
+  info: HomeInfo;
+  title?: string;
+}) {
   const [showWifiPassword, setShowWifiPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -37,7 +43,7 @@ export default function HomeInfoCard({ info }: { info: HomeInfo }) {
   return (
     <section className="bg-white rounded-3xl shadow-soft p-5 mt-4 grain-overlay">
       <div className="relative">
-        <h2 className="font-display text-base mb-3">Home info</h2>
+        <h2 className="font-display text-base mb-3">{title}</h2>
 
         <div className="space-y-3">
           {/* Emergency contacts */}

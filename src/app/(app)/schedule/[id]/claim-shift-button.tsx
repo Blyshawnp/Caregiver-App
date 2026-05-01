@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 export default function ClaimShiftButton({
   shiftId,
@@ -54,47 +55,10 @@ export default function ClaimShiftButton({
       return;
     }
 
-    // Notify the original releaser and admins
-    try {
-      const { data: admins } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("role", "admin");
-
-      const recipientIds = new Set<string>(
-        (admins ?? []).map((a) => a.id)
-      );
-      if (releasedById) recipientIds.add(releasedById);
-
-      if (recipientIds.size > 0) {
-        const date = new Date(shiftStart);
-        const dateStr = date.toLocaleDateString(undefined, {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        });
-        const timeStr = date.toLocaleTimeString(undefined, {
-          hour: "numeric",
-          minute: "2-digit",
-        });
-        const body = `${caregiverName} picked up the ${dateStr} ${timeStr} shift with ${clientName}.`;
-
-        await supabase.from("notifications").insert(
-          Array.from(recipientIds).map((id) => ({
-            organization_id: organizationId,
-            recipient_id: id,
-            kind: "shift_claimed",
-            title: "Shift covered",
-            body,
-            link: `/schedule/${shiftId}`,
-            related_shift_id: shiftId,
-          }))
-        );
-      }
-    } catch {
-      /* best effort */
-    }
+    void sendNotificationEvent({
+      type: "shift_claimed",
+      shiftId,
+    });
 
     window.location.href = `/schedule/${shiftId}`;
   }

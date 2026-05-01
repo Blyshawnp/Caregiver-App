@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 type Person = {
   id: string;
@@ -135,19 +136,11 @@ export default function ThreadView({
 
     setSending(false);
 
-    // Send a notification ping for the recipient (best effort)
-    try {
-      await supabase.from("notifications").insert({
-        organization_id: me.organization_id,
-        recipient_id: other.id,
-        kind: "new_message",
-        title: `Message from ${me.full_name}`,
-        body: content.slice(0, 120),
-        link: `/messages/${me.id}`,
-      });
-    } catch {
-      /* ignore */
-    }
+    void sendNotificationEvent({
+      type: "new_message",
+      recipientId: other.id,
+      preview: content,
+    });
   }
 
   return (

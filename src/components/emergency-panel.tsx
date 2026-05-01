@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { StarOfLifeIcon } from "./icons";
 
 type Allergy = {
   id: string;
@@ -80,10 +81,10 @@ export default function EmergencyPanel({
     <section className="bg-white rounded-3xl shadow-soft border-2 border-terracotta-500/30 mt-4 overflow-hidden">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 p-5 hover:bg-terracotta-400/5 transition text-left"
+        className="w-full flex items-center gap-3 p-5 hover:bg-red-50 transition text-left"
       >
-        <span className="w-10 h-10 rounded-xl bg-terracotta-500 text-cream-50 grid place-items-center shrink-0">
-          <ShieldIcon />
+        <span className="w-10 h-10 rounded-xl bg-red-600 text-cream-50 grid place-items-center shrink-0">
+          <StarOfLifeIcon size={20} />
         </span>
         <div className="flex-1 min-w-0">
           <p className="font-display text-lg text-ink-900">Emergency info</p>
@@ -346,22 +347,6 @@ function DeviceRow({
       </span>
       <span className="text-sm text-ink-900 text-right">{location}</span>
     </div>
-  );
-}
-
-function ShieldIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="w-5 h-5"
-    >
-      <path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z" />
-    </svg>
   );
 }
 

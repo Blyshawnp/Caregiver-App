@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { haversineMeters, formatDistance } from "@/lib/geo";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 type ActiveWatch = {
   shift_id: string;
@@ -173,79 +174,17 @@ async function performAutoCheckOut(
     .update(update)
     .eq("id", active.check_in_id);
 
-  // Notify everyone who needs to know
-  try {
-    const { data: recipients } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("organization_id", active.organization_id)
-      .in("role", ["admin", "client"]);
-
-    const { data: caregiver } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", active.caregiver_id)
-      .maybeSingle<{ full_name: string }>();
-
-    const name = caregiver?.full_name ?? "Caregiver";
-    const body = `${name} was auto-checked out at ${formatTime(new Date())} after leaving ${active.client_name}'s location (${formatDistance(distance)} away).`;
-
-    // Notify the caregiver themselves so they see what happened
-    const allRecipientIds = [
-      ...(recipients ?? []).map((r) => r.id),
-      active.caregiver_id,
-    ];
-
-    if (allRecipientIds.length > 0) {
-      await supabase.from("notifications").insert(
-        allRecipientIds.map((id) => ({
-          organization_id: active.organization_id,
-          recipient_id: id,
-          kind: "auto_check_out",
-          title: "Auto-checked out",
-          body,
-          link: `/schedule/${active.shift_id}`,
-          related_shift_id: active.shift_id,
-        }))
-      );
-    }
-  } catch {
-    /* notifications best effort */
-  }
+  await sendNotificationEvent({
+    type: "auto_check_out",
+    shiftId: active.shift_id,
+    distanceMeters: distance,
+  });
 }
 
 async function notifyLeftGeofence(active: ActiveWatch, distance: number) {
-  const supabase = createClient();
-  const { data: recipients } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("organization_id", active.organization_id)
-    .in("role", ["admin", "client"]);
-  if (!recipients || recipients.length === 0) return;
-
-  const { data: caregiver } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", active.caregiver_id)
-    .maybeSingle<{ full_name: string }>();
-  const name = caregiver?.full_name ?? "A caregiver";
-
-  await supabase.from("notifications").insert(
-    recipients.map((r) => ({
-      organization_id: active.organization_id,
-      recipient_id: r.id,
-      kind: "left_geofence",
-      title: "Caregiver left location",
-      body: `${name} left the geofence (${formatDistance(distance)} from ${active.client_name}) without checking out yet.`,
-      link: `/schedule/${active.shift_id}`,
-      related_shift_id: active.shift_id,
-    }))
-  );
-}
-
-function formatTime(d: Date) {
-  return d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
+  await sendNotificationEvent({
+    type: "left_geofence",
+    shiftId: active.shift_id,
+    distanceMeters: distance,
   });
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import NotificationBell from "./notification-bell";
+import { StarOfLifeIcon } from "./icons";
 
 export default async function AppHeader({
   fullName,
@@ -45,6 +46,14 @@ export default async function AppHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/emergency"
+            aria-label="Emergency information"
+            title="Emergency information"
+            className="relative w-10 h-10 rounded-full bg-red-600 text-cream-50 grid place-items-center hover:bg-red-700 transition active:scale-95 shadow-soft"
+          >
+            <StarOfLifeIcon size={18} />
+          </Link>
           {userId && (
             <NotificationBell initialCount={unreadCount} userId={userId} />
           )}

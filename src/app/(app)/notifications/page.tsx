@@ -25,7 +25,10 @@ export default async function NotificationsPage() {
         </p>
       </header>
 
-      <NotificationsList notifications={notifications ?? []} />
+      <NotificationsList
+        notifications={notifications ?? []}
+        currentUserId={user.id}
+      />
     </main>
   );
 }

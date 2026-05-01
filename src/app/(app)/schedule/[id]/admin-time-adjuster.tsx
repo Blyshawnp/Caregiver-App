@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 type Props = {
   shiftId: string;
@@ -152,20 +153,11 @@ export default function AdminTimeAdjuster({
       }
     }
 
-    // Notify caregiver of the manual change
-    try {
-      await supabase.from("notifications").insert({
-        organization_id: organizationId,
-        recipient_id: caregiverId as string,
-        kind: "time_adjusted",
-        title: "Your shift times were adjusted",
-        body: reason.trim(),
-        link: `/schedule/${shiftId}`,
-        related_shift_id: shiftId,
-      });
-    } catch {
-      /* best effort */
-    }
+    void sendNotificationEvent({
+      type: "time_adjusted",
+      shiftId,
+      reason,
+    });
 
     window.location.href = `/schedule/${shiftId}`;
   }

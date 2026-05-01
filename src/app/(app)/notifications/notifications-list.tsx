@@ -17,8 +17,10 @@ type Notification = {
 
 export default function NotificationsList({
   notifications,
+  currentUserId,
 }: {
   notifications: Notification[];
+  currentUserId: string;
 }) {
   const router = useRouter();
 
@@ -28,7 +30,8 @@ export default function NotificationsList({
       await supabase
         .from("notifications")
         .update({ is_read: true, read_at: new Date().toISOString() })
-        .eq("id", n.id);
+        .eq("id", n.id)
+        .eq("recipient_id", currentUserId);
     }
     if (n.link) {
       router.push(n.link);
@@ -42,6 +45,7 @@ export default function NotificationsList({
     await supabase
       .from("notifications")
       .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq("recipient_id", currentUserId)
       .eq("is_read", false);
     router.refresh();
   }

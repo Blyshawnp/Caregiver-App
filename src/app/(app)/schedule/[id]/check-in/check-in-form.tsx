@@ -9,6 +9,7 @@ import {
   formatDistance,
 } from "@/lib/geo";
 import { MapPinIcon } from "@/components/icons";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 type Shift = {
   id: string;
@@ -152,31 +153,12 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
       return;
     }
 
-    // Notify admins if the check-in was flagged
     if (flagged) {
-      try {
-        const { data: admins } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("organization_id", shift.organization_id)
-          .eq("role", "admin");
-
-        if (admins && admins.length > 0) {
-          await supabase.from("notifications").insert(
-            admins.map((a) => ({
-              organization_id: shift.organization_id,
-              recipient_id: a.id,
-              kind: "check_in_flagged",
-              title: "Flagged check-in",
-              body: flagReason ?? "A caregiver checked in outside the geofence.",
-              link: `/schedule/${shift.id}`,
-              related_shift_id: shift.id,
-            }))
-          );
-        }
-      } catch {
-        /* notifications best effort */
-      }
+      void sendNotificationEvent({
+        type: "check_in_flagged",
+        shiftId: shift.id,
+        flagReason,
+      });
     }
 
     // Hard navigation to bypass any cached data on the shift detail page.

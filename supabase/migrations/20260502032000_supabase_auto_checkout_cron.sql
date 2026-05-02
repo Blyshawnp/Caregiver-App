@@ -190,7 +190,13 @@ grant execute on function public.auto_checkout_after_8pm_geofence() to service_r
 do $do$
 begin
   if exists (select 1 from pg_extension where extname = 'pg_cron') then
-    perform cron.unschedule('auto-checkout-after-8pm-geofence');
+    if exists (
+      select 1
+      from cron.job
+      where jobname = 'auto-checkout-after-8pm-geofence'
+    ) then
+      perform cron.unschedule('auto-checkout-after-8pm-geofence');
+    end if;
 
     perform cron.schedule(
       'auto-checkout-after-8pm-geofence',

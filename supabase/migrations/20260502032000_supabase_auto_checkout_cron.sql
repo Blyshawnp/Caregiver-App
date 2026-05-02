@@ -199,7 +199,7 @@ begin
     );
   end if;
 exception
-  when undefined_schema or undefined_function then
+  when invalid_schema_name or undefined_function then
     raise notice 'pg_cron is not available. Use a Supabase Scheduled Edge Function fallback.';
 end
 $do$;

@@ -19,6 +19,21 @@ type ShiftRecord = {
   clients: { full_name: string | null } | null;
 };
 
+type ProposalRecord = {
+  id: string;
+  organization_id: string;
+  caregiver_id: string;
+  client_id: string | null;
+  scheduled_start: string;
+  scheduled_end: string;
+  notes: string | null;
+  status: "pending" | "approved" | "rejected" | "canceled";
+  rejection_reason: string | null;
+  shift_id: string | null;
+  profiles: { full_name: string | null } | null;
+  clients: { full_name: string | null } | null;
+};
+
 type NotificationInsert = {
   organization_id: string;
   recipient_id: string;
@@ -63,6 +78,20 @@ type NotificationRequest =
       type: "new_message";
       recipientId: string;
       preview: string;
+    }
+  | {
+      type: "shift_proposal_created";
+      proposalId: string;
+    }
+  | {
+      type: "shift_proposal_approved";
+      proposalId: string;
+      shiftId?: string | null;
+    }
+  | {
+      type: "shift_proposal_rejected";
+      proposalId: string;
+      reason?: string | null;
     };
 
 export async function POST(request: Request) {
@@ -145,6 +174,12 @@ async function buildNotificationRows(
       return buildForceCheckOutRows(admin, caller, payload);
     case "new_message":
       return buildNewMessageRows(admin, caller, payload);
+    case "shift_proposal_created":
+      return buildProposalCreatedRows(admin, caller, payload);
+    case "shift_proposal_approved":
+      return buildProposalApprovedRows(admin, caller, payload);
+    case "shift_proposal_rejected":
+      return buildProposalRejectedRows(admin, caller, payload);
     default:
       return assertNever(payload);
   }
@@ -408,6 +443,97 @@ async function buildNewMessageRows(
   ];
 }
 
+async function buildProposalCreatedRows(
+  admin: ReturnType<typeof createAdminClient>,
+  caller: CallerProfile,
+  payload: Extract<NotificationRequest, { type: "shift_proposal_created" }>
+) {
+  const proposal = await getProposal(admin, payload.proposalId);
+  assertSameOrg(caller, proposal.organization_id);
+
+  if (caller.role !== "caregiver" || proposal.caregiver_id !== caller.id) {
+    throw new Error("Only the proposing caregiver can notify.");
+  }
+
+  const recipientIds = await getRoleRecipientIds(admin, proposal.organization_id, [
+    "admin",
+  ]);
+  if (recipientIds.length === 0) return [];
+
+  const label = formatProposalLabel(proposal);
+  const notes = proposal.notes?.trim() ? ` · ${proposal.notes.trim()}` : "";
+
+  return recipientIds.map((recipientId) => ({
+    organization_id: proposal.organization_id,
+    recipient_id: recipientId,
+    kind: "shift_proposal_created",
+    title: "New shift proposal",
+    body: `${caller.full_name} proposed ${label}${notes}.`,
+    link: "/schedule/proposals",
+    related_shift_id: proposal.shift_id ?? undefined,
+  }));
+}
+
+async function buildProposalApprovedRows(
+  admin: ReturnType<typeof createAdminClient>,
+  caller: CallerProfile,
+  payload: Extract<NotificationRequest, { type: "shift_proposal_approved" }>
+) {
+  const proposal = await getProposal(admin, payload.proposalId);
+  assertSameOrg(caller, proposal.organization_id);
+
+  if (caller.role !== "admin") {
+    throw new Error("Only admins can approve proposals.");
+  }
+
+  if (!proposal.caregiver_id) return [];
+
+  const label = formatProposalLabel(proposal);
+  const shiftId = payload.shiftId ?? proposal.shift_id ?? undefined;
+
+  return [
+    {
+      organization_id: proposal.organization_id,
+      recipient_id: proposal.caregiver_id,
+      kind: "shift_proposal_approved",
+      title: "Shift proposal approved",
+      body: `Your proposal for ${label} was approved.`,
+      link: shiftId ? `/schedule/${shiftId}` : "/schedule/proposals",
+      related_shift_id: shiftId,
+    },
+  ];
+}
+
+async function buildProposalRejectedRows(
+  admin: ReturnType<typeof createAdminClient>,
+  caller: CallerProfile,
+  payload: Extract<NotificationRequest, { type: "shift_proposal_rejected" }>
+) {
+  const proposal = await getProposal(admin, payload.proposalId);
+  assertSameOrg(caller, proposal.organization_id);
+
+  if (caller.role !== "admin") {
+    throw new Error("Only admins can reject proposals.");
+  }
+
+  if (!proposal.caregiver_id) return [];
+
+  const label = formatProposalLabel(proposal);
+  const reasonSuffix = payload.reason?.trim() ? ` (${payload.reason.trim()})` : "";
+
+  return [
+    {
+      organization_id: proposal.organization_id,
+      recipient_id: proposal.caregiver_id,
+      kind: "shift_proposal_rejected",
+      title: "Shift proposal rejected",
+      body: `Your proposal for ${label} was rejected${reasonSuffix}.`,
+      link: "/schedule/proposals",
+      related_shift_id: proposal.shift_id ?? undefined,
+    },
+  ];
+}
+
 async function getShift(
   admin: ReturnType<typeof createAdminClient>,
   shiftId: string
@@ -432,6 +558,38 @@ async function getShift(
   }
 
   return shift as unknown as ShiftRecord;
+}
+
+async function getProposal(
+  admin: ReturnType<typeof createAdminClient>,
+  proposalId: string
+) {
+  const { data: proposal } = await admin
+    .from("shift_proposals")
+    .select(
+      `
+      id,
+      organization_id,
+      caregiver_id,
+      client_id,
+      scheduled_start,
+      scheduled_end,
+      notes,
+      status,
+      rejection_reason,
+      shift_id,
+      profiles:caregiver_id ( full_name ),
+      clients ( full_name )
+    `
+    )
+    .eq("id", proposalId)
+    .maybeSingle();
+
+  if (!proposal) {
+    throw new Error("Proposal not found.");
+  }
+
+  return proposal as unknown as ProposalRecord;
 }
 
 async function getRoleRecipientIds(
@@ -468,4 +626,20 @@ function formatTime(date: Date) {
 function formatDistance(meters: number) {
   if (meters < 1000) return `${Math.round(meters)}m`;
   return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function formatProposalLabel(proposal: ProposalRecord) {
+  const date = new Date(proposal.scheduled_start);
+  const dateStr = date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const timeStr = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const clientName = proposal.clients?.full_name ?? "general availability";
+
+  return `${dateStr} ${timeStr} with ${clientName}`;
 }

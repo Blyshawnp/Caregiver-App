@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { haversineMeters, formatDistance } from "@/lib/geo";
 import { sendNotificationEvent } from "@/lib/notify-client";
 
@@ -24,9 +22,8 @@ export type { ActiveWatch };
 /**
  * Watches the caregiver's location while they're checked in. Behaviors:
  *
- *  1) Past their scheduled end time AND past 8pm → if they leave the geofence,
- *     auto-check them out using the geofence-leave time as their check-out
- *     timestamp. Notifies admin/client.
+ *  1) Persist last-known location while on shift so a server-side cron can
+ *     make the auto-checkout decision after 8 PM without requiring the tab.
  *
  *  2) Before their scheduled end → just notify admin/client they left, but
  *     keep them checked in (might be a bathroom break, errand, etc).
@@ -34,18 +31,17 @@ export type { ActiveWatch };
  *  3) Sticky reminder banner shown when past scheduled end OR past 8pm,
  *     suggesting check-out.
  *
- * Note: only runs while the caregiver has the app foregrounded. Server-side
- * cron would handle locked-phone scenarios; not yet implemented.
+ * Note: geolocation collection still depends on the device sharing location.
+ * The checkout decision itself now runs on the server.
  */
 export default function ShiftWatcher({
   active,
 }: {
   active: ActiveWatch | null;
 }) {
-  const router = useRouter();
   const [now, setNow] = useState(() => new Date());
   const leftFenceFiredRef = useRef(false);
-  const autoCheckedOutRef = useRef(false);
+  const lastPingAtRef = useRef(0);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -59,12 +55,10 @@ export default function ShiftWatcher({
     if (typeof window === "undefined" || !("geolocation" in navigator)) return;
 
     leftFenceFiredRef.current = false;
-    autoCheckedOutRef.current = false;
+    lastPingAtRef.current = 0;
 
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
-        if (autoCheckedOutRef.current) return;
-
         const distance = haversineMeters(
           pos.coords.latitude,
           pos.coords.longitude,
@@ -73,6 +67,12 @@ export default function ShiftWatcher({
         );
 
         const inside = distance <= active.geofence_radius;
+
+        const nowMs = Date.now();
+        if (nowMs - lastPingAtRef.current >= 120_000 || !inside) {
+          lastPingAtRef.current = nowMs;
+          void persistLocationPing(active, distance, inside, pos.coords);
+        }
 
         if (inside) {
           // Reset so a future leave will fire again
@@ -86,24 +86,7 @@ export default function ShiftWatcher({
         if (leftFenceFiredRef.current) return;
         leftFenceFiredRef.current = true;
 
-        // Decide: auto-checkout or just notify?
-        const endTime = new Date(active.scheduled_end);
-        const cutoff8pm = new Date();
-        cutoff8pm.setHours(20, 0, 0, 0);
-        const nowTime = new Date();
-        const pastScheduled = nowTime > endTime;
-        const past8pm = nowTime >= cutoff8pm;
-
-        if (pastScheduled && past8pm) {
-          // Auto-checkout
-          autoCheckedOutRef.current = true;
-          await performAutoCheckOut(active, distance, pos.coords);
-          // Force a hard reload to refresh all state
-          window.location.href = `/schedule/${active.shift_id}`;
-        } else {
-          // Just notify admin/client
-          await notifyLeftGeofence(active, distance);
-        }
+        await notifyLeftGeofence(active, distance);
       },
       () => {
         /* ignore errors; best effort */
@@ -144,40 +127,35 @@ export default function ShiftWatcher({
           : "It's past 8 PM. Tap to check out when you're ready."}
       </p>
       <p className="text-[10px] text-cream-50/70 mt-1.5">
-        If you leave the location without checking out, you'll be checked out
-        automatically.
+        If you leave the location after 8 PM, the server can auto-check you out
+        based on your last known geofence ping.
       </p>
     </Link>
   );
 }
 
-async function performAutoCheckOut(
+async function persistLocationPing(
   active: ActiveWatch,
   distance: number,
+  withinGeofence: boolean,
   coords: GeolocationCoordinates
 ) {
   if (!active.check_in_id) return;
-  const supabase = createClient();
-
-  // Update check_in row with auto check-out info
-  const update = {
-    check_out_time: new Date().toISOString(),
-    check_out_latitude: coords.latitude,
-    check_out_longitude: coords.longitude,
-    check_out_within_geofence: false,
-    flagged_outside_geofence: true,
-    flag_reason: `Auto-checked out: caregiver left geofence (${formatDistance(distance)} away) past scheduled end time`,
-  };
-
-  await supabase
-    .from("check_ins")
-    .update(update)
-    .eq("id", active.check_in_id);
-
-  await sendNotificationEvent({
-    type: "auto_check_out",
-    shiftId: active.shift_id,
-    distanceMeters: distance,
+  await fetch("/api/shift-location", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      shiftId: active.shift_id,
+      checkInId: active.check_in_id,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      accuracy: coords.accuracy ?? null,
+      distanceMeters: distance,
+      withinGeofence,
+      recordedAt: new Date().toISOString(),
+    }),
   });
 }
 

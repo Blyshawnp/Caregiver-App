@@ -137,6 +137,21 @@ export default async function TeamPage() {
         </Link>
       </header>
 
+      <Link
+        href="/schedule/proposals"
+        className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft mb-6 transition"
+      >
+        <span>
+          <span className="block font-medium text-ink-900">
+            Shift proposals
+          </span>
+          <span className="block text-xs text-ink-500">
+            Review caregiver availability and proposed shifts
+          </span>
+        </span>
+        <ArrowRightIcon size={16} className="text-ink-300" />
+      </Link>
+
       {/* Pending invitations */}
       {invitations.length > 0 && (
         <section className="mb-6">

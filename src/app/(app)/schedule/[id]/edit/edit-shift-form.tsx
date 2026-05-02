@@ -14,7 +14,7 @@ type Shift = {
   scheduled_start: string;
   scheduled_end: string;
   caregiver_id: string | null;
-  client_id: string;
+  client_id: string | null;
   shift_type_id: string | null;
   bonus_amount: number | null;
   bonus_reason: string | null;
@@ -40,7 +40,7 @@ export default function EditShiftForm({
   const [date, setDate] = useState(formatDateLocal(startDate));
   const [startTime, setStartTime] = useState(formatTimeLocal(startDate));
   const [endTime, setEndTime] = useState(formatTimeLocal(endDate));
-  const [clientId, setClientId] = useState(shift.client_id);
+  const [clientId, setClientId] = useState(shift.client_id ?? "");
   const [caregiverId, setCaregiverId] = useState(shift.caregiver_id ?? "");
   const [shiftTypeId, setShiftTypeId] = useState(shift.shift_type_id ?? "");
   const [bonusAmount, setBonusAmount] = useState(
@@ -72,7 +72,7 @@ export default function EditShiftForm({
     // If caregiver changed, reset assignment status to pending
     const caregiverChanged = (caregiverId || null) !== shift.caregiver_id;
     const updates: {
-      client_id: string;
+      client_id: string | null;
       caregiver_id: string | null;
       shift_type_id: string | null;
       scheduled_start: string;
@@ -82,7 +82,7 @@ export default function EditShiftForm({
       notes: string | null;
       assignment_status?: "pending" | null;
     } = {
-      client_id: clientId,
+      client_id: clientId || null,
       caregiver_id: caregiverId || null,
       shift_type_id: shiftTypeId || null,
       scheduled_start: startISO,
@@ -160,9 +160,9 @@ export default function EditShiftForm({
             <select
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              required
               className={inputCls}
             >
+              <option value="">General availability</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.full_name}

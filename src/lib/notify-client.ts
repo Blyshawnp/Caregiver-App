@@ -34,6 +34,20 @@ type NotificationRequest =
       type: "new_message";
       recipientId: string;
       preview: string;
+    }
+  | {
+      type: "shift_proposal_created";
+      proposalId: string;
+    }
+  | {
+      type: "shift_proposal_approved";
+      proposalId: string;
+      shiftId?: string | null;
+    }
+  | {
+      type: "shift_proposal_rejected";
+      proposalId: string;
+      reason?: string | null;
     };
 
 export async function sendNotificationEvent(payload: NotificationRequest) {

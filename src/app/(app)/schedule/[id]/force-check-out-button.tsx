@@ -11,12 +11,14 @@ export default function ForceCheckOutButton({
   caregiverName,
   organizationId,
   caregiverId,
+  actorId,
 }: {
   shiftId: string;
   checkInId: string;
   caregiverName: string;
   organizationId: string;
   caregiverId: string;
+  actorId: string;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -32,6 +34,8 @@ export default function ForceCheckOutButton({
     const update = {
       check_out_time: new Date().toISOString(),
       check_out_within_geofence: false,
+      check_out_method: "admin_manual",
+      check_out_by: actorId,
       flagged_outside_geofence: true,
       flag_reason:
         reason.trim() ||

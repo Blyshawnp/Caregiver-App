@@ -10,7 +10,7 @@ export const revalidate = 0;
 type ShiftHomeAccess = {
   id: string;
   caregiver_id: string | null;
-  client_id: string;
+  client_id: string | null;
   clients: {
     full_name: string;
     wifi_ssid: string | null;
@@ -56,6 +56,7 @@ export default async function ShiftHomeAccessPage({
     profile.role === "admin" || profile.role === "client" || isAssignedCaregiver;
 
   if (!canAccess) redirect(`/schedule/${id}`);
+  if (!shift.client_id) redirect(`/schedule/${id}`);
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -99,7 +100,7 @@ export default async function ShiftHomeAccessPage({
 
       {(profile.role === "admin" || profile.role === "client") && (
         <Link
-          href={`/clients/${shift.client_id}/home-info`}
+        href={`/clients/${shift.client_id}/home-info`}
           className="mt-4 flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-3.5 rounded-2xl shadow-soft text-ink-900 font-medium transition"
         >
           Edit home info

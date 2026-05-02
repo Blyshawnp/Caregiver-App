@@ -248,7 +248,7 @@ function StartingSoonCard({
         </h2>
         <p className="text-ink-500 text-sm mb-5">
           {formatTime(startsAt)} · {shift.shift_type_name ?? "Shift"} for{" "}
-          {shift.client_name}
+          {shift.client_name ?? "General availability"}
         </p>
 
         {shift.client_address && (
@@ -427,6 +427,7 @@ function UpcomingRow({ shift, now }: { shift: ShiftRow; now: Date }) {
         <p className="text-xs text-ink-500">
           {formatTime(start)} – {formatTime(end)}
           {shift.caregiver_name ? ` · ${shift.caregiver_name}` : ""}
+          {shift.client_name ? ` · ${shift.client_name}` : " · General availability"}
         </p>
       </div>
       <ArrowRightIcon size={16} className="text-ink-300" />

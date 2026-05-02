@@ -27,6 +27,40 @@ export default function ScheduleView({
           <p className="text-ink-500 text-sm">
             {shifts.length} shift{shifts.length === 1 ? "" : "s"} · next 60 days
           </p>
+          {canCreate && (
+            <div className="flex gap-2 mt-2">
+              <Link
+                href="/schedule/new"
+                className="text-xs text-forest-600 hover:underline"
+              >
+                New shift
+              </Link>
+              {role === "admin" && (
+                <Link
+                  href="/schedule/recurring"
+                  className="text-xs text-forest-600 hover:underline"
+                >
+                  Recurring templates
+                </Link>
+              )}
+              <Link
+                href="/schedule/proposals"
+                className="text-xs text-forest-600 hover:underline"
+              >
+                Shift proposals
+              </Link>
+            </div>
+          )}
+          {role === "caregiver" && !canCreate && (
+            <div className="flex gap-2 mt-2">
+              <Link
+                href="/schedule/proposals"
+                className="text-xs text-forest-600 hover:underline"
+              >
+                Propose shift
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* View toggle */}
@@ -134,6 +168,14 @@ function ShiftCard({ shift }: { shift: ScheduleShift }) {
   const start = new Date(shift.scheduled_start);
   const end = new Date(shift.scheduled_end);
   const accent = shift.shift_type_color ?? "#3F6053";
+  const timingLabel = shift.is_released
+    ? "Up for grabs"
+    : shift.is_open
+      ? "Open to claim"
+      : shift.caregiver_name
+        ? shift.caregiver_name
+        : "Unassigned";
+  const clientLabel = shift.client_name ?? "General availability";
 
   return (
     <Link
@@ -165,6 +207,11 @@ function ShiftCard({ shift }: { shift: ScheduleShift }) {
               Available
             </span>
           )}
+          {shift.is_open && (
+            <span className="text-[10px] uppercase tracking-wider text-forest-700 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
+              Open
+            </span>
+          )}
           {!shift.has_check_in &&
             !shift.is_released &&
             shift.assignment_status === "pending" && (
@@ -174,12 +221,7 @@ function ShiftCard({ shift }: { shift: ScheduleShift }) {
             )}
         </div>
         <p className="text-xs text-ink-500">
-          {formatTime(start)} – {formatTime(end)}
-          {shift.is_released
-            ? " · Up for grabs"
-            : shift.caregiver_name
-              ? ` · ${shift.caregiver_name}`
-              : " · Unassigned"}
+          {formatTime(start)} – {formatTime(end)} · {timingLabel} · {clientLabel}
         </p>
       </div>
       <ArrowRightIcon size={16} className="text-ink-300 self-center" />

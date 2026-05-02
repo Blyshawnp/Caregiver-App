@@ -112,6 +112,14 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
       check_out_latitude: null;
       check_out_longitude: null;
       check_out_within_geofence: null;
+      check_out_method: null;
+      check_out_by: null;
+      last_location_at?: string;
+      last_location_latitude?: number;
+      last_location_longitude?: number;
+      last_location_accuracy_meters?: number;
+      last_location_distance_meters?: number | null;
+      last_location_within_geofence?: boolean;
     } = {
       shift_id: shift.id,
       caregiver_id: shift.caregiver_id,
@@ -124,12 +132,20 @@ export default function CheckInForm({ shift }: { shift: Shift }) {
       check_out_latitude: null,
       check_out_longitude: null,
       check_out_within_geofence: null,
+      check_out_method: null,
+      check_out_by: null,
     };
 
     if (status.kind === "located") {
       checkInRow.check_in_latitude = status.coords.latitude;
       checkInRow.check_in_longitude = status.coords.longitude;
       checkInRow.check_in_within_geofence = status.withinFence;
+      checkInRow.last_location_at = new Date().toISOString();
+      checkInRow.last_location_latitude = status.coords.latitude;
+      checkInRow.last_location_longitude = status.coords.longitude;
+      checkInRow.last_location_accuracy_meters = status.coords.accuracy;
+      checkInRow.last_location_distance_meters = status.distance ?? null;
+      checkInRow.last_location_within_geofence = status.withinFence;
     }
 
     // Upsert: if a check_ins row already exists for this shift, update it.

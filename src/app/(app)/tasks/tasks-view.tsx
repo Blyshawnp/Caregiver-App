@@ -4,6 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon } from "@/components/icons";
+import {
+  deriveTaskCategory,
+  TASK_CATEGORY_LABELS,
+  TASK_CATEGORY_ORDER,
+  type TaskCategory,
+} from "@/lib/task-categories";
 
 type Todo = {
   id: string;
@@ -31,8 +37,36 @@ export default function TasksView({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
+  const [activeCategory, setActiveCategory] = useState<TaskCategory | "all">("all");
+
+  const categorizedTodos = [...todos]
+    .map((todo) => ({
+      ...todo,
+      category: deriveTaskCategory({
+        taskName: todo.task_name,
+        description: todo.description,
+        notes: todo.notes,
+      }),
+    }))
+    .sort((a, b) => {
+      const aIndex = TASK_CATEGORY_ORDER.indexOf(a.category);
+      const bIndex = TASK_CATEGORY_ORDER.indexOf(b.category);
+      if (aIndex !== bIndex) return aIndex - bIndex;
+      if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+
+  const visibleCategories = TASK_CATEGORY_ORDER.filter((category) =>
+    categorizedTodos.some((todo) => todo.category === category)
+  );
+
+  const visibleTodos =
+    activeCategory === "all"
+      ? categorizedTodos
+      : categorizedTodos.filter((todo) => todo.category === activeCategory);
 
   const completedCount =
     todos.filter((t) =>
@@ -42,9 +76,10 @@ export default function TasksView({
     todos.length === 0 ? 0 : Math.round((completedCount / todos.length) * 100);
 
   async function toggle(todo: Todo) {
-    if (!canCompleteTasks) return;
+    if (!canCompleteTasks || savingIds[todo.id]) return;
     const newValue = !(optimistic[todo.id] ?? todo.is_completed);
     setOptimistic((p) => ({ ...p, [todo.id]: newValue }));
+    setSavingIds((current) => ({ ...current, [todo.id]: true }));
 
     const supabase = createClient();
     const update: {
@@ -59,7 +94,8 @@ export default function TasksView({
     const { error } = await supabase
       .from("shift_todos")
       .update(update)
-      .eq("id", todo.id);
+      .eq("id", todo.id)
+      .eq("shift_id", shiftId);
 
     if (error) {
       setOptimistic((p) => {
@@ -67,10 +103,20 @@ export default function TasksView({
         delete next[todo.id];
         return next;
       });
+      setSavingIds((current) => {
+        const next = { ...current };
+        delete next[todo.id];
+        return next;
+      });
       alert(error.message);
       return;
     }
 
+    setSavingIds((current) => {
+      const next = { ...current };
+      delete next[todo.id];
+      return next;
+    });
     startTransition(() => router.refresh());
   }
 
@@ -120,6 +166,11 @@ export default function TasksView({
                 style={{ width: `${progressPct}%` }}
               />
             </div>
+            <p className="text-xs text-ink-500 mt-3">
+              {canCompleteTasks
+                ? "Complete tasks here during the active shift."
+                : "Only the assigned caregiver can complete tasks during an active shift."}
+            </p>
           </div>
         </section>
       )}
@@ -137,21 +188,60 @@ export default function TasksView({
         </div>
       )}
 
-      {todos.length > 0 && (
-        <ul className="space-y-2 mb-4">
-          {todos.map((t) => (
-            <li key={t.id}>
-              <TaskRow
-                todo={t}
-                isComplete={optimistic[t.id] ?? t.is_completed}
-                canCompleteTasks={canCompleteTasks}
-                canEdit={canEdit}
-                onToggle={() => toggle(t)}
-                onDelete={() => deleteTask(t.id)}
-              />
-            </li>
+      {visibleCategories.length > 1 && (
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <FilterPill
+            active={activeCategory === "all"}
+            onClick={() => setActiveCategory("all")}
+          >
+            All
+          </FilterPill>
+          {visibleCategories.map((category) => (
+            <FilterPill
+              key={category}
+              active={activeCategory === category}
+              onClick={() => setActiveCategory(category)}
+            >
+              {TASK_CATEGORY_LABELS[category]}
+            </FilterPill>
           ))}
-        </ul>
+        </div>
+      )}
+
+      {todos.length > 0 && (
+        <div className="space-y-5 mb-4">
+          {visibleCategories.map((category) => {
+            const tasksInCategory = visibleTodos.filter(
+              (todo) => todo.category === category
+            );
+            if (tasksInCategory.length === 0) return null;
+
+            return (
+              <section key={category}>
+                <div className="flex items-baseline justify-between mb-2 px-1">
+                  <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
+                    {TASK_CATEGORY_LABELS[category]} ({tasksInCategory.length})
+                  </h2>
+                </div>
+                <ul className="space-y-2">
+                  {tasksInCategory.map((todo) => (
+                    <li key={todo.id}>
+                      <TaskRow
+                        todo={todo}
+                        isComplete={optimistic[todo.id] ?? todo.is_completed}
+                        isSaving={!!savingIds[todo.id]}
+                        canCompleteTasks={canCompleteTasks}
+                        canEdit={canEdit}
+                        onToggle={() => toggle(todo)}
+                        onDelete={() => deleteTask(todo.id)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
       )}
 
       {canEdit && (
@@ -205,6 +295,7 @@ export default function TasksView({
 function TaskRow({
   todo,
   isComplete,
+  isSaving,
   canCompleteTasks,
   canEdit,
   onToggle,
@@ -212,6 +303,7 @@ function TaskRow({
 }: {
   todo: Todo;
   isComplete: boolean;
+  isSaving: boolean;
   canCompleteTasks: boolean;
   canEdit: boolean;
   onToggle: () => void;
@@ -225,13 +317,17 @@ function TaskRow({
     >
       <button
         onClick={onToggle}
-        disabled={!canCompleteTasks}
+        disabled={!canCompleteTasks || isSaving}
         aria-label={isComplete ? "Mark incomplete" : "Mark complete"}
         className={`w-6 h-6 rounded-md border-2 grid place-items-center shrink-0 mt-0.5 transition ${
           isComplete
             ? "bg-forest-600 border-forest-600"
             : "border-ink-300 hover:border-forest-500"
-        } ${!canCompleteTasks ? "cursor-not-allowed" : "cursor-pointer active:scale-90"}`}
+        } ${
+          !canCompleteTasks || isSaving
+            ? "cursor-not-allowed"
+            : "cursor-pointer active:scale-90"
+        }`}
       >
         {isComplete && (
           <svg
@@ -264,6 +360,9 @@ function TaskRow({
             Done {formatTime(new Date(todo.completed_at))}
           </p>
         )}
+        {isSaving && (
+          <p className="text-xs text-ink-500 mt-1">Saving...</p>
+        )}
       </div>
 
       {canEdit && (
@@ -286,6 +385,29 @@ function TaskRow({
         </button>
       )}
     </div>
+  );
+}
+
+function FilterPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+        active
+          ? "bg-forest-600 text-cream-50"
+          : "bg-white text-ink-700 hover:bg-cream-100 border border-cream-200"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

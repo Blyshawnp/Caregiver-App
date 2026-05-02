@@ -56,7 +56,7 @@ type ShiftDetail = {
   handoff_note: string | null;
   handoff_note_at: string | null;
   first_viewed_at: string | null;
-  client_id: string;
+  client_id: string | null;
   shift_type_id: string | null;
   profiles: { full_name: string } | null;
   clients: {
@@ -69,6 +69,8 @@ type ShiftDetail = {
     id: string;
     check_in_time: string | null;
     check_out_time: string | null;
+    check_out_method: string | null;
+    check_out_by: string | null;
     total_minutes: number | null;
     flagged_outside_geofence: boolean | null;
     flag_reason: string | null;
@@ -130,7 +132,7 @@ export default async function ShiftDetailPage({
       profiles:caregiver_id ( full_name ),
       clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
-      check_ins ( id, check_in_time, check_out_time, total_minutes, flagged_outside_geofence, flag_reason ),
+      check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, total_minutes, flagged_outside_geofence, flag_reason ),
       shift_todos ( id, task_name, description, is_completed, completed_at, sort_order, notes )
     `
     )
@@ -249,7 +251,7 @@ export default async function ShiftDetailPage({
     const { data: directCheckIn } = await supabase
       .from("check_ins")
       .select(
-        "id, check_in_time, check_out_time, total_minutes, flagged_outside_geofence, flag_reason"
+        "id, check_in_time, check_out_time, check_out_method, check_out_by, total_minutes, flagged_outside_geofence, flag_reason"
       )
       .eq("shift_id", id)
       .order("check_in_time", { ascending: false, nullsFirst: false })
@@ -267,6 +269,7 @@ export default async function ShiftDetailPage({
     profile?.role === "caregiver" && profile.id === shift.caregiver_id;
   const isCaregiver = profile?.role === "caregiver";
   const isReleased = !!shift.is_released;
+  const isOpenShift = !shift.caregiver_id && !isReleased;
   const canCompleteTasks =
     isAssignedCaregiver &&
     !!checkIn?.check_in_time &&
@@ -275,7 +278,7 @@ export default async function ShiftDetailPage({
   const lang = await getUserLanguage();
   const iReleasedThis =
     isCaregiver && shift.released_by === profile?.id && isReleased;
-  const canClaim = isCaregiver && isReleased && !iReleasedThis;
+  const canClaim = isCaregiver && (isReleased || isOpenShift) && !iReleasedThis;
   // Caregivers can release shifts they're assigned to that haven't started yet
   // and they haven't checked in to.
   const canRelease =
@@ -356,6 +359,17 @@ export default async function ShiftDetailPage({
         <StatusBanner tone="muted" label="Scheduled" value="Not yet started" />
       )}
 
+      {isOpenShift && (
+        <div className="bg-forest-100 border border-forest-200 rounded-2xl px-4 py-3 mt-3">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-forest-700 font-medium mb-0.5">
+            Open shift
+          </p>
+          <p className="text-sm text-ink-900">
+            This shift is unassigned and available for an eligible caregiver to claim.
+          </p>
+        </div>
+      )}
+
       {/* Flagged-check-in/out reason banner */}
       {checkIn?.flagged_outside_geofence && checkIn?.flag_reason && (
         <div className="bg-terracotta-400/10 border border-terracotta-400/30 rounded-2xl px-4 py-3 mt-3">
@@ -366,10 +380,25 @@ export default async function ShiftDetailPage({
         </div>
       )}
 
+      {checkIn?.check_out_method === "auto_geofence_after_8pm" && (
+        <div className="bg-forest-100 border border-forest-200 rounded-2xl px-4 py-3 mt-3">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-forest-700 font-medium mb-0.5">
+            Auto checkout
+          </p>
+          <p className="text-sm text-ink-900">
+            This shift was auto-checked out after 8 PM because the last known caregiver
+            location was outside the client geofence.
+          </p>
+        </div>
+      )}
+
       {/* Details */}
       <section className="bg-white rounded-3xl shadow-soft p-5 mt-5 grain-overlay">
         <div className="relative space-y-4">
-          <Detail label="Client" value={shift.clients?.full_name} />
+          <Detail
+            label="Client"
+            value={shift.clients?.full_name ?? "General availability"}
+          />
           <Detail
             label="Caregiver"
             value={shift.profiles?.full_name ?? "Unassigned"}
@@ -429,7 +458,7 @@ export default async function ShiftDetailPage({
           <ArrowRightIcon size={16} className="text-ink-300" />
         </Link>
 
-        {(canEdit || isAssignedCaregiver) && (
+        {shift.client_id && (canEdit || isAssignedCaregiver) && (
           <Link
             href={`/schedule/${id}/home-access`}
             className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition"
@@ -507,14 +536,7 @@ export default async function ShiftDetailPage({
         {canClaim && profile?.id && profile.role === "caregiver" && (
           <ClaimShiftButton
             shiftId={id}
-            organizationId={shift.organization_id}
             caregiverId={profile.id}
-            caregiverName={
-              shift.profiles?.full_name ?? "Caregiver"
-            }
-            releasedById={shift.released_by}
-            shiftStart={shift.scheduled_start}
-            clientName={shift.clients?.full_name ?? "Client"}
           />
         )}
         {iReleasedThis && profile?.id && (
@@ -579,6 +601,7 @@ export default async function ShiftDetailPage({
               caregiverName={shift.profiles?.full_name ?? "the caregiver"}
               organizationId={shift.organization_id}
               caregiverId={shift.caregiver_id}
+              actorId={profile.id}
             />
           )}
         {/* Admin/client can manually create or adjust check-in/out times */}
@@ -588,6 +611,7 @@ export default async function ShiftDetailPage({
             caregiverId={shift.caregiver_id}
             caregiverName={shift.profiles?.full_name ?? "the caregiver"}
             organizationId={shift.organization_id}
+            actorId={profile.id}
             scheduledStart={shift.scheduled_start}
             scheduledEnd={shift.scheduled_end}
             existing={

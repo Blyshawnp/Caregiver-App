@@ -9,6 +9,7 @@ type Props = {
   caregiverId: string | null;
   caregiverName: string;
   organizationId: string;
+  actorId: string;
   scheduledStart: string;
   scheduledEnd: string;
   // Existing check-in row, if any
@@ -30,6 +31,7 @@ export default function AdminTimeAdjuster({
   caregiverId,
   caregiverName,
   organizationId,
+  actorId,
   scheduledStart,
   scheduledEnd,
   existing,
@@ -84,11 +86,15 @@ export default function AdminTimeAdjuster({
       const update: {
         check_in_time: string;
         check_out_time: string | null;
+        check_out_method: string | null;
+        check_out_by: string | null;
         flagged_outside_geofence: boolean;
         flag_reason: string;
       } = {
         check_in_time: checkInISO,
         check_out_time: checkOutISO,
+        check_out_method: checkOutISO ? "admin_manual" : null,
+        check_out_by: checkOutISO ? actorId : null,
         flagged_outside_geofence: true,
         flag_reason: flagReason,
       };
@@ -121,6 +127,8 @@ export default function AdminTimeAdjuster({
         caregiver_id: string;
         check_in_time: string;
         check_out_time: string | null;
+        check_out_method: string | null;
+        check_out_by: string | null;
         check_in_within_geofence: boolean;
         check_out_within_geofence: boolean | null;
         flagged_outside_geofence: boolean;
@@ -130,6 +138,8 @@ export default function AdminTimeAdjuster({
         caregiver_id: caregiverId as string,
         check_in_time: checkInISO,
         check_out_time: checkOutISO,
+        check_out_method: checkOutISO ? "admin_manual" : null,
+        check_out_by: checkOutISO ? actorId : null,
         check_in_within_geofence: false,
         check_out_within_geofence: checkOutISO ? false : null,
         flagged_outside_geofence: true,

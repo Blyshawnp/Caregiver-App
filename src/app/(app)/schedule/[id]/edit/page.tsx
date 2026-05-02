@@ -9,7 +9,7 @@ type EditableShift = {
   scheduled_start: string;
   scheduled_end: string;
   caregiver_id: string | null;
-  client_id: string;
+  client_id: string | null;
   shift_type_id: string | null;
   bonus_amount: number | null;
   bonus_reason: string | null;

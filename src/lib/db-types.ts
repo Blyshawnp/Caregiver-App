@@ -10,6 +10,7 @@
 
 export type Role = "admin" | "client" | "caregiver" | "family";
 export type AssignmentStatus = "pending" | "accepted" | "declined";
+export type ShiftProposalStatus = "pending" | "approved" | "rejected" | "canceled";
 
 export type ProfileRow = {
   id: string;
@@ -41,7 +42,7 @@ export type ShiftTypeRow = {
 export type ShiftRow = {
   id: string;
   organization_id: string;
-  client_id: string;
+  client_id: string | null;
   caregiver_id: string | null;
   shift_type_id: string | null;
   scheduled_start: string;
@@ -64,9 +65,39 @@ export type CheckInRow = {
   check_out_latitude: number | null;
   check_out_longitude: number | null;
   check_out_within_geofence: boolean | null;
+  check_out_method: string | null;
+  check_out_by: string | null;
   total_minutes: number | null;
   flagged_outside_geofence: boolean | null;
   flag_reason: string | null;
+  last_location_at: string | null;
+  last_location_latitude: number | null;
+  last_location_longitude: number | null;
+  last_location_accuracy_meters: number | null;
+  last_location_distance_meters: number | null;
+  last_location_within_geofence: boolean | null;
+};
+
+export type ShiftProposalRow = {
+  id: string;
+  organization_id: string;
+  caregiver_id: string;
+  client_id: string | null;
+  scheduled_start: string;
+  scheduled_end: string;
+  notes: string | null;
+  status: ShiftProposalStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  rejected_by: string | null;
+  rejected_at: string | null;
+  canceled_by: string | null;
+  canceled_at: string | null;
+  shift_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ShiftTodoRow = {

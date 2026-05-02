@@ -7,7 +7,7 @@ export type ShiftRow = {
   scheduled_end: string;
   caregiver_id: string | null;
   caregiver_name: string | null;
-  client_name: string;
+  client_name: string | null;
   client_address: string | null;
   client_lat: number | null;
   client_lng: number | null;
@@ -96,7 +96,7 @@ export default async function HomePage() {
         scheduled_end: r.scheduled_end,
         caregiver_id: r.caregiver_id,
         caregiver_name: r.profiles?.full_name ?? null,
-        client_name: r.clients?.full_name ?? "Client",
+        client_name: r.clients?.full_name ?? null,
         client_address: r.clients?.address ?? null,
         client_lat: r.clients?.latitude ?? null,
         client_lng: r.clients?.longitude ?? null,
@@ -137,7 +137,7 @@ export default async function HomePage() {
     activeShifts = (activeRows ?? []).map((r) => ({
       shift_id: r.shift_id,
       caregiver_name: r.caregiver_name ?? "Caregiver",
-      client_name: r.client_name ?? "Client",
+      client_name: r.client_name ?? null,
       check_in_time: r.check_in_time,
       scheduled_end: r.scheduled_end,
       past_scheduled_end: r.past_scheduled_end,
@@ -159,7 +159,7 @@ export default async function HomePage() {
 export type ActiveShift = {
   shift_id: string;
   caregiver_name: string;
-  client_name: string;
+  client_name: string | null;
   check_in_time: string;
   scheduled_end: string;
   past_scheduled_end: boolean;

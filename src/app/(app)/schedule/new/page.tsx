@@ -57,12 +57,32 @@ export default async function NewShiftPage() {
   ]);
 
   return (
-    <NewShiftForm
-      caregivers={caregiversRes.data ?? []}
-      shiftTypes={shiftTypesRes.data ?? []}
-      clients={clientsRes.data ?? []}
-      organizationId={profile.organization_id}
-      currentUserId={user.id}
-    />
+    <>
+      {profile.role === "admin" && (
+        <div className="px-5 pt-5 max-w-2xl mx-auto">
+          <Link
+            href="/schedule/recurring"
+            className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition"
+          >
+            <span>
+              <span className="block font-medium text-ink-900">
+                Recurring schedules
+              </span>
+              <span className="block text-xs text-ink-500">
+                Manage daily and weekly templates
+              </span>
+            </span>
+            <span className="text-ink-300">→</span>
+          </Link>
+        </div>
+      )}
+      <NewShiftForm
+        caregivers={caregiversRes.data ?? []}
+        shiftTypes={shiftTypesRes.data ?? []}
+        clients={clientsRes.data ?? []}
+        organizationId={profile.organization_id}
+        currentUserId={user.id}
+      />
+    </>
   );
 }

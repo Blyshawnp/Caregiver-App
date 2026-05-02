@@ -376,6 +376,11 @@ export default function NewShiftForm({
                 {mode === "bulk" ? "each shift" : "this shift"}.
               </p>
             )}
+            {!caregiverId && (
+              <p className="text-xs text-ink-500 mt-1.5">
+                Leaving this blank creates an open shift that eligible caregivers can claim.
+              </p>
+            )}
           </Field>
 
           <Field label="Shift type">

@@ -7,12 +7,13 @@ export type ScheduleShift = {
   scheduled_end: string;
   caregiver_id: string | null;
   caregiver_name: string | null;
-  client_name: string;
+  client_name: string | null;
   shift_type_name: string | null;
   shift_type_color: string | null;
   has_check_in: boolean;
   is_complete: boolean;
   is_released: boolean;
+  is_open: boolean;
   assignment_status: "pending" | "accepted" | "declined" | null;
 };
 
@@ -28,6 +29,14 @@ export default async function SchedulePage() {
     .select("role")
     .eq("id", user.id)
     .single<{ role: "admin" | "client" | "caregiver" | "family" }>();
+
+  if (profile?.role === "admin" || profile?.role === "client") {
+    try {
+      await supabase.rpc("generate_recurring_shifts");
+    } catch {
+      // Ignore until the migration is applied.
+    }
+  }
 
   const start = new Date();
   start.setDate(start.getDate() - 14);
@@ -80,12 +89,13 @@ export default async function SchedulePage() {
     scheduled_end: r.scheduled_end,
     caregiver_id: r.caregiver_id,
     caregiver_name: r.profiles?.full_name ?? null,
-    client_name: r.clients?.full_name ?? "Client",
+    client_name: r.clients?.full_name ?? null,
     shift_type_name: r.shift_types?.name ?? null,
     shift_type_color: r.shift_types?.color ?? null,
     has_check_in: !!r.check_ins?.[0]?.check_in_time,
     is_complete: !!r.check_ins?.[0]?.check_out_time,
     is_released: !!r.is_released,
+    is_open: !r.caregiver_id && !r.is_released && !r.check_ins?.[0]?.check_in_time,
     assignment_status: r.assignment_status ?? null,
   }));
 

@@ -132,11 +132,15 @@ export default function CheckOutForm({
       check_out_latitude?: number;
       check_out_longitude?: number;
       check_out_within_geofence: boolean;
+      check_out_method: string;
+      check_out_by: string;
       flagged_outside_geofence?: boolean;
       flag_reason?: string | null;
     } = {
       check_out_time: new Date().toISOString(),
       check_out_within_geofence: false,
+      check_out_method: "caregiver_self",
+      check_out_by: shift.caregiver_id,
     };
     if (status.kind === "located") {
       update.check_out_latitude = status.coords.latitude;

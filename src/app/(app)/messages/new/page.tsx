@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowRightIcon } from "@/components/icons";
+import UserAvatar from "@/components/user-avatar";
 
 export default async function NewMessagePage() {
   const supabase = await createClient();
@@ -21,14 +22,20 @@ export default async function NewMessagePage() {
   // Get all other people in the org
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, full_name, role")
+    .select("id, full_name, role, avatar_url, avatar_color")
     .eq("organization_id", profile.organization_id)
     .eq("is_active", true)
     .neq("id", profile.id)
     .order("role")
     .order("full_name")
     .returns<
-      { id: string; full_name: string; role: "admin" | "client" | "caregiver" | "family" }[]
+      {
+        id: string;
+        full_name: string;
+        role: "admin" | "client" | "caregiver" | "family";
+        avatar_url: string | null;
+        avatar_color: string | null;
+      }[]
     >();
 
   const roleCopy: Record<string, string> = {
@@ -67,17 +74,7 @@ export default async function NewMessagePage() {
                 href={`/messages/${p.id}`}
                 className="flex items-center gap-3 bg-white hover:bg-cream-50 px-4 py-3 rounded-2xl shadow-soft transition active:scale-[0.99]"
               >
-                <span
-                  className={`w-10 h-10 rounded-full grid place-items-center font-display text-base shrink-0 ${
-                    p.role === "admin"
-                      ? "bg-forest-600 text-cream-50"
-                      : p.role === "client"
-                        ? "bg-terracotta-500 text-cream-50"
-                        : "bg-forest-100 text-forest-600"
-                  }`}
-                >
-                  {p.full_name[0]?.toUpperCase()}
-                </span>
+                <UserAvatar person={p} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-ink-900 truncate">
                     {p.full_name}

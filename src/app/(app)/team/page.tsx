@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PlusIcon, ArrowRightIcon } from "@/components/icons";
+import UserAvatar from "@/components/user-avatar";
 
 type TeamMember = {
   id: string;
@@ -9,6 +10,8 @@ type TeamMember = {
   email: string;
   role: "admin" | "client" | "caregiver" | "family";
   is_active: boolean;
+  avatar_url: string | null;
+  avatar_color: string | null;
   shift_count: number;
   current_rate: number | null;
 };
@@ -62,7 +65,7 @@ export default async function TeamPage() {
   // Fetch all profiles in org
   const { data: peopleRaw } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role, is_active")
+    .select("id, full_name, email, role, is_active, avatar_url, avatar_color")
     .eq("organization_id", profile.organization_id)
     .order("role")
     .order("full_name");
@@ -223,17 +226,7 @@ function PersonRow({ person }: { person: TeamMember }) {
       href={`/team/${person.id}`}
       className="flex items-center gap-3 bg-white rounded-2xl p-4 shadow-soft hover:bg-cream-50 transition active:scale-[0.99]"
     >
-      <span
-        className={`w-10 h-10 rounded-full grid place-items-center font-display text-sm shrink-0 ${
-          person.role === "admin"
-            ? "bg-forest-600 text-cream-50"
-            : person.role === "client"
-              ? "bg-terracotta-500 text-cream-50"
-              : "bg-forest-100 text-forest-600"
-        }`}
-      >
-        {person.full_name[0]?.toUpperCase()}
-      </span>
+      <UserAvatar person={person} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="font-medium text-ink-900 truncate">{person.full_name}</p>

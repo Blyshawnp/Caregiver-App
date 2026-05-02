@@ -2,16 +2,19 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import NotificationBell from "./notification-bell";
 import { StarOfLifeIcon } from "./icons";
+import UserAvatar from "./user-avatar";
 
 export default async function AppHeader({
   fullName,
   orgName,
+  avatarUrl,
+  avatarColor,
 }: {
   fullName: string;
   orgName: string;
+  avatarUrl?: string | null;
+  avatarColor?: string | null;
 }) {
-  const initial = fullName.trim()[0]?.toUpperCase() ?? "?";
-
   // Initial unread notification count, then realtime updates take over
   let unreadCount = 0;
   let userId: string | null = null;
@@ -60,9 +63,16 @@ export default async function AppHeader({
           <Link
             href="/me"
             aria-label="Profile"
-            className="w-10 h-10 rounded-full bg-forest-600 text-cream-50 grid place-items-center font-display text-base hover:bg-forest-700 transition active:scale-95"
+            className="rounded-full hover:opacity-90 transition active:scale-95"
           >
-            {initial}
+            <UserAvatar
+              person={{
+                full_name: fullName,
+                avatar_url: avatarUrl,
+                avatar_color: avatarColor,
+              }}
+              size="sm"
+            />
           </Link>
         </div>
       </div>

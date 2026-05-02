@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ArrowRightIcon, UserIcon, MapPinIcon } from "@/components/icons";
 import SignOutButton from "./sign-out-button";
 import EditablePhone from "./editable-phone";
+import AvatarUploader from "./avatar-uploader";
 import LanguageSwitcher from "@/components/language-switcher";
 import {
   getCurrentPayPeriod,
@@ -23,7 +24,7 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, email, phone, language, organizations(name)"
+      "id, full_name, role, email, phone, language, avatar_url, avatar_color, organizations(name)"
     )
     .eq("id", user.id)
     .single<{
@@ -33,6 +34,8 @@ export default async function MePage() {
       email: string;
       phone: string | null;
       language: Lang | null;
+      avatar_url: string | null;
+      avatar_color: string | null;
       organizations: { name: string } | null;
     }>();
 
@@ -120,9 +123,16 @@ export default async function MePage() {
 
       <section className="bg-white rounded-3xl shadow-soft p-6 mb-4 grain-overlay">
         <div className="relative flex items-center gap-4 mb-5">
-          <span className="w-14 h-14 rounded-full bg-forest-600 text-cream-50 grid place-items-center font-display text-2xl">
-            {profile?.full_name?.[0] ?? "?"}
-          </span>
+          {profile && (
+            <AvatarUploader
+              userId={profile.id}
+              fullName={profile.full_name}
+              avatarUrl={profile.avatar_url}
+              avatarColor={profile.avatar_color}
+            />
+          )}
+        </div>
+        <div className="relative mb-5">
           <div className="min-w-0">
             <h2 className="font-display text-xl text-ink-900 truncate">
               {profile?.full_name}

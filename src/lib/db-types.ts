@@ -20,6 +20,8 @@ export type ProfileRow = {
   role: Role;
   is_active: boolean;
   organization_id: string;
+  avatar_url: string | null;
+  avatar_color: string | null;
 };
 
 export type ClientRow = {
@@ -128,7 +130,7 @@ export type ShiftTodoRow = {
  * - `shift_todos` → array
  */
 export type ShiftWithRelations = ShiftRow & {
-  profiles: Pick<ProfileRow, "full_name"> | null;
+  profiles: Pick<ProfileRow, "full_name" | "avatar_url" | "avatar_color"> | null;
   clients: Pick<
     ClientRow,
     | "full_name"

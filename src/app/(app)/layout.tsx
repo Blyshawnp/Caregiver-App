@@ -16,6 +16,8 @@ type ProfileWithOrg = {
   role: Role;
   organization_id: string;
   language: Lang | null;
+  avatar_url: string | null;
+  avatar_color: string | null;
   organizations: { name: string } | null;
 };
 
@@ -50,7 +52,7 @@ export default async function AppLayout({
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, organization_id, language, organizations(name)"
+      "id, full_name, role, organization_id, language, avatar_url, avatar_color, organizations(name)"
     )
     .eq("id", user.id)
     .single<ProfileWithOrg>();
@@ -117,6 +119,8 @@ export default async function AppLayout({
       <AppHeader
         fullName={profile?.full_name ?? "There"}
         orgName={profile?.organizations?.name ?? ""}
+        avatarUrl={profile?.avatar_url ?? null}
+        avatarColor={profile?.avatar_color ?? null}
       />
 
       <div className="flex-1 pb-24">

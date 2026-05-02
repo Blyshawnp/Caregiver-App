@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import UserAvatar from "@/components/user-avatar";
 
 type Person = {
   id: string;
@@ -12,6 +13,8 @@ type Person = {
   phone: string | null;
   role: "admin" | "client" | "caregiver" | "family";
   is_active: boolean;
+  avatar_url: string | null;
+  avatar_color: string | null;
 };
 
 type Rate = {
@@ -110,17 +113,7 @@ export default function TeamMemberDetail({
       {/* Header card */}
       <section className="bg-white rounded-3xl shadow-soft p-6 mb-4 grain-overlay">
         <div className="relative flex items-center gap-4 mb-4">
-          <span
-            className={`w-14 h-14 rounded-full grid place-items-center font-display text-2xl shrink-0 ${
-              person.role === "admin"
-                ? "bg-forest-600 text-cream-50"
-                : person.role === "client"
-                  ? "bg-terracotta-500 text-cream-50"
-                  : "bg-forest-100 text-forest-600"
-            }`}
-          >
-            {person.full_name[0]?.toUpperCase()}
-          </span>
+          <UserAvatar person={person} size="lg" />
           <div className="min-w-0 flex-1">
             <h1 className="font-display text-2xl text-ink-900 leading-tight truncate">
               {person.full_name}

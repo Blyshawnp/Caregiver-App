@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ListIcon, GridIcon, PlusIcon, ArrowRightIcon } from "@/components/icons";
 import type { ScheduleShift } from "./page";
 import { getShiftStatus } from "@/lib/shift-status";
+import UserAvatar from "@/components/user-avatar";
 
 type View = "list" | "calendar";
 
@@ -197,7 +198,7 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
           : shift.caregiver_name
             ? shift.caregiver_name
             : "Unassigned";
-  const clientLabel = shift.client_name ?? "General availability";
+  const clientLabel = shift.client_name ?? "Client scheduled";
   const activeStart = shift.check_in_time ? new Date(shift.check_in_time) : null;
   const elapsedMin = activeStart
     ? Math.max(0, Math.floor((now.getTime() - activeStart.getTime()) / 60_000))
@@ -300,6 +301,21 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
           )}
         </p>
       </div>
+      {shift.caregiver_name ? (
+        <UserAvatar
+          person={{
+            full_name: shift.caregiver_name,
+            avatar_url: shift.caregiver_avatar_url,
+            avatar_color: shift.caregiver_avatar_color,
+          }}
+          size="sm"
+          className="self-center"
+        />
+      ) : (
+        <span className="self-center w-9 h-9 rounded-full border border-dashed border-ink-300/50 text-ink-400 grid place-items-center text-xs font-display shrink-0">
+          ?
+        </span>
+      )}
       <ArrowRightIcon
         size={16}
         className={`self-center ${
@@ -385,7 +401,7 @@ function CalendarView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
               <button
                 key={k}
                 onClick={() => setSelectedKey(k)}
-                className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition ${
+                className={`relative min-h-16 rounded-xl flex flex-col items-start justify-start p-1.5 transition ${
                   isSelected
                     ? "bg-forest-600 text-cream-50"
                     : isToday
@@ -395,20 +411,29 @@ function CalendarView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
                         : "text-ink-300 hover:bg-cream-50"
                 }`}
               >
-                <span className="text-sm leading-none">{date.getDate()}</span>
+                <span className="text-xs leading-none">{date.getDate()}</span>
                 {dayShifts.length > 0 && (
-                  <span className="flex gap-0.5 absolute bottom-1.5">
-                    {dayShifts.slice(0, 3).map((s, i) => (
+                  <span className="mt-1 flex w-full flex-col gap-0.5">
+                    {dayShifts.slice(0, 2).map((s) => (
                       <span
-                        key={i}
-                        className="w-1 h-1 rounded-full"
+                        key={s.id}
+                        className="block h-1.5 rounded-full"
                         style={{
                           backgroundColor: isSelected
                             ? "#FCFAF5"
-                            : (s.shift_type_color ?? "#3F6053"),
+                            : shiftDisplayColor(s),
                         }}
                       />
                     ))}
+                    {dayShifts.length > 2 && (
+                      <span
+                        className={`text-[9px] leading-none ${
+                          isSelected ? "text-cream-50/80" : "text-ink-500"
+                        }`}
+                      >
+                        +{dayShifts.length - 2}
+                      </span>
+                    )}
                   </span>
                 )}
               </button>
@@ -514,4 +539,20 @@ function formatLongDate(d: Date) {
     month: "long",
     day: "numeric",
   });
+}
+
+function shiftDisplayColor(shift: ScheduleShift) {
+  const status = getShiftStatus(shift, {
+    check_in_time: shift.check_in_time,
+    check_out_time: shift.check_out_time,
+  });
+
+  if (status.kind === "active_checked_in") return "#B75F45";
+  if (status.kind === "completed") return "#6A7B45";
+  if (status.kind === "open_available" || shift.is_released) return "#4D7C7A";
+  if (shift.assignment_status === "pending") return "#8A6A3F";
+  if (status.kind === "past_unchecked" || status.kind === "open_expired") {
+    return "#9CA3AF";
+  }
+  return shift.shift_type_color ?? "#3F6053";
 }

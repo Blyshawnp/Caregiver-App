@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BellIcon, ArrowRightIcon } from "@/components/icons";
+import UserAvatar, { type AvatarProfile } from "@/components/user-avatar";
 
 type Notification = {
   id: string;
@@ -13,6 +14,9 @@ type Notification = {
   is_read: boolean;
   created_at: string;
   related_shift_id: string | null;
+  shifts?: {
+    profiles: AvatarProfile | null;
+  } | null;
 };
 
 export default function NotificationsList({
@@ -89,15 +93,19 @@ export default function NotificationsList({
                   : "bg-terracotta-400/10 hover:bg-terracotta-400/15 border border-terracotta-400/20"
               }`}
             >
-              <span
-                className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${
-                  n.is_read
-                    ? "bg-cream-200 text-ink-500"
-                    : "bg-terracotta-500 text-cream-50"
-                }`}
-              >
-                <BellIcon size={16} />
-              </span>
+              {n.shifts?.profiles ? (
+                <UserAvatar person={n.shifts.profiles} size="sm" />
+              ) : (
+                <span
+                  className={`w-9 h-9 rounded-xl grid place-items-center shrink-0 ${
+                    n.is_read
+                      ? "bg-cream-200 text-ink-500"
+                      : "bg-terracotta-500 text-cream-50"
+                  }`}
+                >
+                  <BellIcon size={16} />
+                </span>
+              )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2 mb-0.5">
                   <p className="font-medium text-ink-900 truncate">

@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { sendNotificationEvent } from "@/lib/notify-client";
+import UserAvatar from "@/components/user-avatar";
 
 type Person = {
   id: string;
   full_name: string;
   organization_id: string;
+  avatar_url: string | null;
+  avatar_color: string | null;
 };
 
 type Other = Person & { role: "admin" | "client" | "caregiver" | "family" };
@@ -153,17 +156,7 @@ export default function ThreadView({
           ← Back
         </Link>
         <div className="flex items-center gap-3">
-          <span
-            className={`w-11 h-11 rounded-full grid place-items-center font-display text-base shrink-0 ${
-              other.role === "admin"
-                ? "bg-forest-600 text-cream-50"
-                : other.role === "client"
-                  ? "bg-terracotta-500 text-cream-50"
-                  : "bg-forest-100 text-forest-600"
-            }`}
-          >
-            {other.full_name[0]?.toUpperCase()}
-          </span>
+          <UserAvatar person={other} size="md" />
           <div>
             <h1 className="font-display text-xl text-ink-900 leading-tight">
               {other.full_name}
@@ -185,6 +178,7 @@ export default function ThreadView({
               key={m.id}
               message={m}
               isFromMe={m.sender_id === me.id}
+              other={other}
               showTime={shouldShowTime(messages, i)}
             />
           ))
@@ -223,30 +217,35 @@ export default function ThreadView({
 function MessageBubble({
   message,
   isFromMe,
+  other,
   showTime,
 }: {
   message: Message;
   isFromMe: boolean;
+  other: Other;
   showTime: boolean;
 }) {
   return (
-    <div className={`flex flex-col ${isFromMe ? "items-end" : "items-start"}`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-          isFromMe
-            ? "bg-forest-600 text-cream-50 rounded-br-md"
-            : "bg-white text-ink-900 shadow-soft rounded-bl-md"
-        }`}
-      >
-        <p className="text-sm whitespace-pre-wrap break-words leading-snug">
-          {message.content}
-        </p>
+    <div className={`flex ${isFromMe ? "justify-end" : "justify-start"} gap-2`}>
+      {!isFromMe && <UserAvatar person={other} size="xs" className="mt-1" />}
+      <div className={`flex max-w-[80%] flex-col ${isFromMe ? "items-end" : "items-start"}`}>
+        <div
+          className={`rounded-2xl px-4 py-2.5 ${
+            isFromMe
+              ? "bg-forest-600 text-cream-50 rounded-br-md"
+              : "bg-white text-ink-900 shadow-soft rounded-bl-md"
+          }`}
+        >
+          <p className="text-sm whitespace-pre-wrap break-words leading-snug">
+            {message.content}
+          </p>
+        </div>
+        {showTime && (
+          <p className="text-[10px] text-ink-500 mt-0.5 px-2">
+            {formatTime(new Date(message.created_at))}
+          </p>
+        )}
       </div>
-      {showTime && (
-        <p className="text-[10px] text-ink-500 mt-0.5 px-2">
-          {formatTime(new Date(message.created_at))}
-        </p>
-      )}
     </div>
   );
 }

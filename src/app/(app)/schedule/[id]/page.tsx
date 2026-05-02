@@ -31,6 +31,7 @@ import {
 } from "@/lib/datetime";
 import { getShiftStatus } from "@/lib/shift-status";
 import type { AssignmentStatus, Role } from "@/lib/db-types";
+import UserAvatar from "@/components/user-avatar";
 
 // Force dynamic rendering: this page must always show fresh data
 // (check-in status changes mid-session and should reflect immediately)
@@ -59,7 +60,11 @@ type ShiftDetail = {
   first_viewed_at: string | null;
   client_id: string | null;
   shift_type_id: string | null;
-  profiles: { full_name: string } | null;
+  profiles: {
+    full_name: string;
+    avatar_url: string | null;
+    avatar_color: string | null;
+  } | null;
   clients: {
     full_name: string;
     address: string | null;
@@ -130,7 +135,7 @@ export default async function ShiftDetailPage({
       first_viewed_at,
       client_id,
       shift_type_id,
-      profiles:caregiver_id ( full_name ),
+      profiles:caregiver_id ( full_name, avatar_url, avatar_color ),
       clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
       check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, total_minutes, flagged_outside_geofence, flag_reason ),
@@ -279,6 +284,7 @@ export default async function ShiftDetailPage({
   const isAssignedCaregiver =
     profile?.role === "caregiver" && profile.id === shift.caregiver_id;
   const isCaregiver = profile?.role === "caregiver";
+  const canShowClientDetails = !isCaregiver || isAssignedCaregiver;
   const isReleased = !!shift.is_released;
   const isOpenShift = !shift.caregiver_id && !isReleased;
   const canCompleteTasks =
@@ -435,13 +441,28 @@ export default async function ShiftDetailPage({
         <div className="relative space-y-4">
           <Detail
             label="Client"
-            value={shift.clients?.full_name ?? "General availability"}
+            value={
+              canShowClientDetails
+                ? shift.clients?.full_name ?? "General availability"
+                : "Client scheduled"
+            }
           />
-          <Detail
-            label="Caregiver"
-            value={shift.profiles?.full_name ?? "Unassigned"}
-          />
-          {shift.clients?.address && (
+          <div className="flex justify-between items-center gap-3">
+            <span className="text-xs font-medium text-ink-500 uppercase tracking-wide shrink-0">
+              Caregiver
+            </span>
+            {shift.profiles ? (
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="text-sm text-ink-900 text-right truncate">
+                  {shift.profiles.full_name}
+                </span>
+                <UserAvatar person={shift.profiles} size="xs" />
+              </span>
+            ) : (
+              <span className="text-sm text-ink-900 text-right">Unassigned</span>
+            )}
+          </div>
+          {canShowClientDetails && shift.clients?.address && (
             <DetailIcon Icon={MapPinIcon} label="Location">
               {shift.clients.address}
             </DetailIcon>

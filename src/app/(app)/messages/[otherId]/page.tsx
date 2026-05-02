@@ -19,15 +19,21 @@ export default async function ThreadPage({
 
   const { data: me } = await supabase
     .from("profiles")
-    .select("id, full_name, organization_id")
+    .select("id, full_name, organization_id, avatar_url, avatar_color")
     .eq("id", user.id)
-    .single<{ id: string; full_name: string; organization_id: string }>();
+    .single<{
+      id: string;
+      full_name: string;
+      organization_id: string;
+      avatar_url: string | null;
+      avatar_color: string | null;
+    }>();
 
   if (!me) redirect("/login");
 
   const { data: other } = await supabase
     .from("profiles")
-    .select("id, full_name, role, organization_id")
+    .select("id, full_name, role, organization_id, avatar_url, avatar_color")
     .eq("id", otherId)
     .eq("organization_id", me.organization_id)
     .maybeSingle<{
@@ -35,6 +41,8 @@ export default async function ThreadPage({
       full_name: string;
       role: "admin" | "client" | "caregiver" | "family";
       organization_id: string;
+      avatar_url: string | null;
+      avatar_color: string | null;
     }>();
 
   if (!other) notFound();

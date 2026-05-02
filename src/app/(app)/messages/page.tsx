@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { MessageIcon, ArrowRightIcon, PlusIcon } from "@/components/icons";
+import UserAvatar from "@/components/user-avatar";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -10,6 +11,8 @@ type Thread = {
   other_id: string;
   other_name: string;
   other_role: "admin" | "client" | "caregiver" | "family";
+  other_avatar_url: string | null;
+  other_avatar_color: string | null;
   last_message: string;
   last_at: string;
   unread_count: number;
@@ -46,8 +49,8 @@ export default async function MessagesPage() {
       content,
       is_read,
       created_at,
-      sender:sender_id ( full_name, role ),
-      recipient:recipient_id ( full_name, role )
+      sender:sender_id ( full_name, role, avatar_url, avatar_color ),
+      recipient:recipient_id ( full_name, role, avatar_url, avatar_color )
     `
     )
     .or(`sender_id.eq.${profile.id},recipient_id.eq.${profile.id}`)
@@ -61,8 +64,18 @@ export default async function MessagesPage() {
     content: string;
     is_read: boolean;
     created_at: string;
-    sender: { full_name: string; role: "admin" | "client" | "caregiver" | "family" } | null;
-    recipient: { full_name: string; role: "admin" | "client" | "caregiver" | "family" } | null;
+    sender: {
+      full_name: string;
+      role: "admin" | "client" | "caregiver" | "family";
+      avatar_url: string | null;
+      avatar_color: string | null;
+    } | null;
+    recipient: {
+      full_name: string;
+      role: "admin" | "client" | "caregiver" | "family";
+      avatar_url: string | null;
+      avatar_color: string | null;
+    } | null;
   };
 
   // Group by "other person" (whoever isn't me in the message)
@@ -78,6 +91,8 @@ export default async function MessagesPage() {
         other_id: otherId,
         other_name: otherProfile?.full_name ?? "Unknown",
         other_role: otherProfile?.role ?? "caregiver",
+        other_avatar_url: otherProfile?.avatar_url ?? null,
+        other_avatar_color: otherProfile?.avatar_color ?? null,
         last_message: m.content,
         last_at: m.created_at,
         unread_count: 0,
@@ -143,17 +158,14 @@ export default async function MessagesPage() {
                     : "bg-white hover:bg-cream-50"
                 }`}
               >
-                <span
-                  className={`w-11 h-11 rounded-full grid place-items-center font-display text-base shrink-0 ${
-                    t.other_role === "admin"
-                      ? "bg-forest-600 text-cream-50"
-                      : t.other_role === "client"
-                        ? "bg-terracotta-500 text-cream-50"
-                        : "bg-forest-100 text-forest-600"
-                  }`}
-                >
-                  {t.other_name[0]?.toUpperCase()}
-                </span>
+                <UserAvatar
+                  person={{
+                    full_name: t.other_name,
+                    avatar_url: t.other_avatar_url,
+                    avatar_color: t.other_avatar_color,
+                  }}
+                  size="md"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-2 mb-0.5">
                     <p

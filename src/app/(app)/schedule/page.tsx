@@ -7,6 +7,8 @@ export type ScheduleShift = {
   scheduled_end: string;
   caregiver_id: string | null;
   caregiver_name: string | null;
+  caregiver_avatar_url: string | null;
+  caregiver_avatar_color: string | null;
   client_name: string | null;
   shift_type_name: string | null;
   shift_type_color: string | null;
@@ -28,9 +30,9 @@ export default async function SchedulePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, id")
     .eq("id", user.id)
-    .single<{ role: "admin" | "client" | "caregiver" | "family" }>();
+    .single<{ role: "admin" | "client" | "caregiver" | "family"; id: string }>();
 
   if (profile?.role === "admin" || profile?.role === "client") {
     try {
@@ -57,7 +59,7 @@ export default async function SchedulePage() {
       caregiver_id,
       assignment_status,
       is_released,
-      profiles:caregiver_id ( full_name ),
+      profiles:caregiver_id ( full_name, avatar_url, avatar_color ),
       clients ( full_name ),
       shift_types ( name, color ),
       check_ins ( check_in_time, check_out_time )
@@ -74,7 +76,11 @@ export default async function SchedulePage() {
     caregiver_id: string | null;
     assignment_status: "pending" | "accepted" | "declined" | null;
     is_released: boolean | null;
-    profiles: { full_name: string } | null;
+    profiles: {
+      full_name: string;
+      avatar_url: string | null;
+      avatar_color: string | null;
+    } | null;
     clients: { full_name: string } | null;
     shift_types: { name: string; color: string } | null;
     check_ins: Array<{
@@ -83,25 +89,33 @@ export default async function SchedulePage() {
     }>;
   };
 
+  const viewerRole = profile?.role ?? "caregiver";
   const shifts: ScheduleShift[] = (
     (rows ?? []) as unknown as ScheduleQueryRow[]
-  ).map((r) => ({
-    id: r.id,
-    scheduled_start: r.scheduled_start,
-    scheduled_end: r.scheduled_end,
-    caregiver_id: r.caregiver_id,
-    caregiver_name: r.profiles?.full_name ?? null,
-    client_name: r.clients?.full_name ?? null,
-    shift_type_name: r.shift_types?.name ?? null,
-    shift_type_color: r.shift_types?.color ?? null,
-    check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
-    check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
-    has_check_in: !!r.check_ins?.[0]?.check_in_time,
-    is_complete: !!r.check_ins?.[0]?.check_out_time,
-    is_released: !!r.is_released,
-    is_open: !r.caregiver_id && !r.is_released && !r.check_ins?.[0]?.check_in_time,
-    assignment_status: r.assignment_status ?? null,
-  }));
+  ).map((r) => {
+    const canShowClientDetails =
+      viewerRole !== "caregiver" || r.caregiver_id === profile?.id;
 
-  return <ScheduleView shifts={shifts} role={profile?.role ?? "caregiver"} />;
+    return {
+      id: r.id,
+      scheduled_start: r.scheduled_start,
+      scheduled_end: r.scheduled_end,
+      caregiver_id: r.caregiver_id,
+      caregiver_name: r.profiles?.full_name ?? null,
+      caregiver_avatar_url: r.profiles?.avatar_url ?? null,
+      caregiver_avatar_color: r.profiles?.avatar_color ?? null,
+      client_name: canShowClientDetails ? r.clients?.full_name ?? null : null,
+      shift_type_name: r.shift_types?.name ?? null,
+      shift_type_color: r.shift_types?.color ?? null,
+      check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
+      check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
+      has_check_in: !!r.check_ins?.[0]?.check_in_time,
+      is_complete: !!r.check_ins?.[0]?.check_out_time,
+      is_released: !!r.is_released,
+      is_open: !r.caregiver_id && !r.is_released && !r.check_ins?.[0]?.check_in_time,
+      assignment_status: r.assignment_status ?? null,
+    };
+  });
+
+  return <ScheduleView shifts={shifts} role={viewerRole} />;
 }

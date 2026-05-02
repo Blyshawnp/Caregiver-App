@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { sendPushForNotifications } from "@/lib/web-push";
 import type { Role } from "@/lib/db-types";
 
 type CallerProfile = {
@@ -57,6 +58,10 @@ type NotificationRequest =
     }
   | {
       type: "shift_claimed";
+      shiftId: string;
+    }
+  | {
+      type: "shift_assigned";
       shiftId: string;
     }
   | {
@@ -128,6 +133,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    void sendPushForNotifications(admin, rows).catch(() => {});
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message =
@@ -165,6 +172,8 @@ async function buildNotificationRows(
       return buildShiftReleasedRows(admin, caller, payload);
     case "shift_claimed":
       return buildShiftClaimedRows(admin, caller, payload);
+    case "shift_assigned":
+      return buildShiftAssignedRows(admin, caller, payload);
     case "left_geofence":
     case "auto_check_out":
       return buildGeofenceRows(admin, caller, payload);
@@ -305,6 +314,44 @@ async function buildShiftClaimedRows(
     link: `/schedule/${shift.id}`,
     related_shift_id: shift.id,
   }));
+}
+
+async function buildShiftAssignedRows(
+  admin: ReturnType<typeof createAdminClient>,
+  caller: CallerProfile,
+  payload: Extract<NotificationRequest, { type: "shift_assigned" }>
+) {
+  const shift = await getShift(admin, payload.shiftId);
+  assertSameOrg(caller, shift.organization_id);
+
+  if (caller.role !== "admin" && caller.role !== "client") {
+    throw new Error("Only admins or clients can notify assigned caregivers.");
+  }
+  if (!shift.caregiver_id) return [];
+
+  const date = new Date(shift.scheduled_start);
+  const dateStr = date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const timeStr = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const clientName = shift.clients?.full_name ?? "the client";
+
+  return [
+    {
+      organization_id: shift.organization_id,
+      recipient_id: shift.caregiver_id,
+      kind: "shift_assigned",
+      title: "New shift assigned",
+      body: `You were assigned a ${dateStr} ${timeStr} shift with ${clientName}.`,
+      link: `/schedule/${shift.id}`,
+      related_shift_id: shift.id,
+    },
+  ];
 }
 
 async function buildGeofenceRows(

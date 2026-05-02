@@ -41,29 +41,34 @@ export default async function HomePage() {
   const now = new Date();
   const horizon = new Date();
   horizon.setDate(horizon.getDate() + 14);
+  const lookback = new Date(now);
+  lookback.setDate(lookback.getDate() - 14);
+
+  const shiftSelect = `
+    id,
+    scheduled_start,
+    scheduled_end,
+    caregiver_id,
+    assignment_status,
+    profiles:caregiver_id ( full_name ),
+    clients ( full_name, address, latitude, longitude, geofence_radius_meters ),
+    shift_types ( name, color ),
+    check_ins ( check_in_time, check_out_time ),
+    shift_todos ( id, is_completed )
+  `;
 
   let query = supabase
     .from("shifts")
-    .select(
-      `
-      id,
-      scheduled_start,
-      scheduled_end,
-      caregiver_id,
-      assignment_status,
-      profiles:caregiver_id ( full_name ),
-      clients ( full_name, address, latitude, longitude, geofence_radius_meters ),
-      shift_types ( name, color ),
-      check_ins ( check_in_time, check_out_time ),
-      shift_todos ( id, is_completed )
-    `
-    )
-    .gte("scheduled_end", now.toISOString())
+    .select(shiftSelect)
     .lte("scheduled_start", horizon.toISOString())
     .order("scheduled_start", { ascending: true });
 
   if (profile.role === "caregiver") {
-    query = query.eq("caregiver_id", profile.id);
+    query = query
+      .eq("caregiver_id", profile.id)
+      .gte("scheduled_start", lookback.toISOString());
+  } else {
+    query = query.gte("scheduled_end", now.toISOString());
   }
 
   const { data: rows } = await query;
@@ -87,30 +92,36 @@ export default async function HomePage() {
     shift_todos: Array<{ id: string; is_completed: boolean }>;
   };
 
-  const shifts: ShiftRow[] = ((rows ?? []) as unknown as ShiftQueryRow[]).map(
-    (r) => {
-      const todos = r.shift_todos ?? [];
-      return {
-        id: r.id,
-        scheduled_start: r.scheduled_start,
-        scheduled_end: r.scheduled_end,
-        caregiver_id: r.caregiver_id,
-        caregiver_name: r.profiles?.full_name ?? null,
-        client_name: r.clients?.full_name ?? null,
-        client_address: r.clients?.address ?? null,
-        client_lat: r.clients?.latitude ?? null,
-        client_lng: r.clients?.longitude ?? null,
-        geofence_radius_meters: r.clients?.geofence_radius_meters ?? 150,
-        shift_type_name: r.shift_types?.name ?? null,
-        shift_type_color: r.shift_types?.color ?? null,
-        check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
-        check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
-        todo_total: todos.length,
-        todo_done: todos.filter((t) => t.is_completed).length,
-        assignment_status: r.assignment_status ?? null,
-      };
+  const mergedRows = new Map<string, ShiftQueryRow>();
+  for (const row of (rows ?? []) as unknown as ShiftQueryRow[]) {
+    mergedRows.set(row.id, row);
+  }
+
+  if (profile.role === "caregiver") {
+    const { data: activeRows } = await supabase
+      .from("shifts")
+      .select(
+        shiftSelect.replace(
+          "check_ins ( check_in_time, check_out_time )",
+          "check_ins!inner ( check_in_time, check_out_time )"
+        )
+      )
+      .eq("caregiver_id", profile.id)
+      .not("check_ins.check_in_time", "is", null)
+      .is("check_ins.check_out_time", null);
+
+    for (const row of (activeRows ?? []) as unknown as ShiftQueryRow[]) {
+      mergedRows.set(row.id, row);
     }
-  );
+  }
+
+  const shifts: ShiftRow[] = Array.from(mergedRows.values())
+    .map(mapShiftRow)
+    .sort(
+      (a, b) =>
+        new Date(a.scheduled_start).getTime() -
+        new Date(b.scheduled_start).getTime()
+    );
 
   // For admin/client: list of caregivers currently on shift
   let activeShifts: ActiveShift[] = [];
@@ -166,3 +177,43 @@ export type ActiveShift = {
   flagged: boolean;
   shift_type_color: string | null;
 };
+
+function mapShiftRow(r: {
+  id: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  caregiver_id: string | null;
+  assignment_status: "pending" | "accepted" | "declined" | null;
+  profiles: { full_name: string } | null;
+  clients: {
+    full_name: string;
+    address: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    geofence_radius_meters: number;
+  } | null;
+  shift_types: { name: string; color: string } | null;
+  check_ins: Array<{ check_in_time: string | null; check_out_time: string | null }>;
+  shift_todos: Array<{ id: string; is_completed: boolean }>;
+}): ShiftRow {
+  const todos = r.shift_todos ?? [];
+  return {
+    id: r.id,
+    scheduled_start: r.scheduled_start,
+    scheduled_end: r.scheduled_end,
+    caregiver_id: r.caregiver_id,
+    caregiver_name: r.profiles?.full_name ?? null,
+    client_name: r.clients?.full_name ?? null,
+    client_address: r.clients?.address ?? null,
+    client_lat: r.clients?.latitude ?? null,
+    client_lng: r.clients?.longitude ?? null,
+    geofence_radius_meters: r.clients?.geofence_radius_meters ?? 150,
+    shift_type_name: r.shift_types?.name ?? null,
+    shift_type_color: r.shift_types?.color ?? null,
+    check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
+    check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
+    todo_total: todos.length,
+    todo_done: todos.filter((t) => t.is_completed).length,
+    assignment_status: r.assignment_status ?? null,
+  };
+}

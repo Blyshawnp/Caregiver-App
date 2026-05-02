@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ListIcon, GridIcon, PlusIcon, ArrowRightIcon } from "@/components/icons";
 import type { ScheduleShift } from "./page";
+import { getShiftStatus } from "@/lib/shift-status";
 
 type View = "list" | "calendar";
 
@@ -15,7 +16,13 @@ export default function ScheduleView({
   role: "admin" | "client" | "caregiver" | "family";
 }) {
   const [view, setView] = useState<View>("list");
+  const [now, setNow] = useState(() => new Date());
   const canCreate = role === "admin" || role === "client";
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -81,9 +88,9 @@ export default function ScheduleView({
       </header>
 
       {view === "list" ? (
-        <ListView shifts={shifts} />
+        <ListView shifts={shifts} now={now} />
       ) : (
-        <CalendarView shifts={shifts} />
+        <CalendarView shifts={shifts} now={now} />
       )}
 
       {canCreate && (
@@ -126,7 +133,7 @@ function ToggleBtn({
 
 /* ========== LIST VIEW ========== */
 
-function ListView({ shifts }: { shifts: ScheduleShift[] }) {
+function ListView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
   const grouped = useMemo(() => groupByDay(shifts), [shifts]);
 
   if (shifts.length === 0) {
@@ -154,7 +161,7 @@ function ListView({ shifts }: { shifts: ScheduleShift[] }) {
           <ul className="space-y-2">
             {items.map((s) => (
               <li key={s.id}>
-                <ShiftCard shift={s} />
+                <ShiftCard shift={s} now={now} />
               </li>
             ))}
           </ul>
@@ -164,55 +171,108 @@ function ListView({ shifts }: { shifts: ScheduleShift[] }) {
   );
 }
 
-function ShiftCard({ shift }: { shift: ScheduleShift }) {
+function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
   const start = new Date(shift.scheduled_start);
   const end = new Date(shift.scheduled_end);
   const accent = shift.shift_type_color ?? "#3F6053";
-  const timingLabel = shift.is_released
-    ? "Up for grabs"
-    : shift.is_open
-      ? "Open to claim"
-      : shift.caregiver_name
-        ? shift.caregiver_name
-        : "Unassigned";
+  const status = getShiftStatus(
+    shift,
+    {
+      check_in_time: shift.check_in_time,
+      check_out_time: shift.check_out_time,
+    },
+    now
+  );
+  const isPastDimmed =
+    status.kind === "completed" ||
+    status.kind === "past_unchecked" ||
+    status.kind === "open_expired";
+  const timingLabel =
+    status.kind === "open_expired"
+      ? "Expired"
+      : shift.is_released
+        ? "Up for grabs"
+        : shift.is_open
+          ? "Open to claim"
+          : shift.caregiver_name
+            ? shift.caregiver_name
+            : "Unassigned";
   const clientLabel = shift.client_name ?? "General availability";
+  const activeStart = shift.check_in_time ? new Date(shift.check_in_time) : null;
+  const elapsedMin = activeStart
+    ? Math.max(0, Math.floor((now.getTime() - activeStart.getTime()) / 60_000))
+    : 0;
+  const activeElapsed =
+    elapsedMin >= 60
+      ? `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}m`
+      : `${elapsedMin}m`;
 
   return (
     <Link
       href={`/schedule/${shift.id}`}
-      className="flex items-stretch gap-4 bg-white rounded-2xl p-4 shadow-soft hover:bg-cream-50 transition active:scale-[0.99]"
+      className={`flex items-stretch gap-4 rounded-2xl p-4 shadow-soft transition active:scale-[0.99] ${
+        status.kind === "active_checked_in"
+          ? "bg-terracotta-500 text-cream-50 hover:bg-terracotta-600"
+          : isPastDimmed
+            ? "bg-white opacity-55 hover:opacity-80 hover:bg-cream-50"
+            : "bg-white hover:bg-cream-50"
+      }`}
     >
       <div
-        className="w-1 rounded-full shrink-0"
-        style={{ backgroundColor: accent }}
+        className={`w-1 rounded-full shrink-0 ${
+          status.kind === "active_checked_in" ? "bg-cream-50" : ""
+        }`}
+        style={{
+          backgroundColor:
+            status.kind === "active_checked_in" ? undefined : accent,
+        }}
         aria-hidden
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <p className="font-medium text-ink-900 truncate">
+          <p
+            className={`font-medium truncate ${
+              status.kind === "active_checked_in"
+                ? "text-cream-50"
+                : isPastDimmed
+                  ? "text-ink-500 line-through"
+                  : "text-ink-900"
+            }`}
+          >
             {shift.shift_type_name ?? "Shift"}
           </p>
-          {shift.is_complete && (
+          {status.kind === "completed" && (
             <span className="text-[10px] uppercase tracking-wider text-forest-600 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
               Done
             </span>
           )}
-          {shift.has_check_in && !shift.is_complete && (
-            <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-terracotta-400/15 px-1.5 py-0.5 rounded">
-              On shift
+          {status.kind === "active_checked_in" && (
+            <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-cream-50 px-1.5 py-0.5 rounded">
+              On shift now
             </span>
           )}
-          {shift.is_released && (
+          {shift.is_released && status.kind !== "open_expired" && (
             <span className="text-[10px] uppercase tracking-wider text-cream-50 font-medium bg-terracotta-500 px-1.5 py-0.5 rounded">
               Available
             </span>
           )}
-          {shift.is_open && (
+          {status.kind === "open_available" && (
             <span className="text-[10px] uppercase tracking-wider text-forest-700 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
               Open
             </span>
           )}
-          {!shift.has_check_in &&
+          {status.kind === "open_expired" && (
+            <span className="text-[10px] uppercase tracking-wider text-ink-500 font-medium bg-cream-200 px-1.5 py-0.5 rounded">
+              Expired
+            </span>
+          )}
+          {status.kind === "past_unchecked" && (
+            <span className="text-[10px] uppercase tracking-wider text-ink-500 font-medium bg-cream-200 px-1.5 py-0.5 rounded">
+              Missed
+            </span>
+          )}
+          {status.kind !== "active_checked_in" &&
+            !shift.has_check_in &&
             !shift.is_released &&
             shift.assignment_status === "pending" && (
               <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-terracotta-400/15 px-1.5 py-0.5 rounded">
@@ -220,18 +280,39 @@ function ShiftCard({ shift }: { shift: ScheduleShift }) {
               </span>
             )}
         </div>
-        <p className="text-xs text-ink-500">
-          {formatTime(start)} – {formatTime(end)} · {timingLabel} · {clientLabel}
+        <p
+          className={`text-xs ${
+            status.kind === "active_checked_in"
+              ? "text-cream-50/85"
+              : isPastDimmed
+                ? "text-ink-400 line-through"
+                : "text-ink-500"
+          }`}
+        >
+          {status.kind === "active_checked_in" && activeStart
+            ? `${activeElapsed} elapsed · started ${formatTime(activeStart)}`
+            : `${formatTime(start)} – ${formatTime(end)} · ${timingLabel} · ${clientLabel}`}
+          {status.kind === "active_checked_in" && (
+            <span className="ml-1">
+              · {clientLabel}
+              {now > end ? " · Overtime" : ""}
+            </span>
+          )}
         </p>
       </div>
-      <ArrowRightIcon size={16} className="text-ink-300 self-center" />
+      <ArrowRightIcon
+        size={16}
+        className={`self-center ${
+          status.kind === "active_checked_in" ? "text-cream-50/70" : "text-ink-300"
+        }`}
+      />
     </Link>
   );
 }
 
 /* ========== CALENDAR VIEW ========== */
 
-function CalendarView({ shifts }: { shifts: ScheduleShift[] }) {
+function CalendarView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
   const [monthOffset, setMonthOffset] = useState(0);
 
   const today = new Date();
@@ -349,7 +430,7 @@ function CalendarView({ shifts }: { shifts: ScheduleShift[] }) {
           <ul className="space-y-2">
             {selectedShifts.map((s) => (
               <li key={s.id}>
-                <ShiftCard shift={s} />
+                <ShiftCard shift={s} now={now} />
               </li>
             ))}
           </ul>

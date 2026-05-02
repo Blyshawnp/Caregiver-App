@@ -107,3 +107,57 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+self.addEventListener("push", (event) => {
+  let payload = {
+    title: "Caregiver",
+    body: "You have a new notification.",
+    url: "/notifications",
+    tag: "caregiver-notification",
+    sound: "normal",
+  };
+
+  try {
+    if (event.data) {
+      payload = { ...payload, ...event.data.json() };
+    }
+  } catch {
+    /* use default payload */
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "Caregiver", {
+      body: payload.body || "",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: payload.tag || "caregiver-notification",
+      renotify: payload.sound === "urgent",
+      requireInteraction: payload.sound === "urgent",
+      data: {
+        url: payload.url || "/notifications",
+        sound: payload.sound || "normal",
+      },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(
+    event.notification.data?.url || "/notifications",
+    self.location.origin
+  ).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client && client.url === targetUrl) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});

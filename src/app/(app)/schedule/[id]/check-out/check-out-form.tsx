@@ -3,14 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import {
   getCurrentPosition,
   haversineMeters,
   formatDistance,
 } from "@/lib/geo";
 import { MapPinIcon, ClockIcon } from "@/components/icons";
-import { sendNotificationEvent } from "@/lib/notify-client";
 
 type Shift = {
   id: string;
@@ -96,79 +94,62 @@ export default function CheckOutForm({
     });
   }
 
-  async function submitCheckOut(force = false) {
-    // Soft warning for incomplete tasks
-    if (incomplete.length > 0 && !confirmingIncomplete && !force) {
+  async function submitCheckOut({
+    allowIncomplete = false,
+    allowFlag = false,
+  }: {
+    allowIncomplete?: boolean;
+    allowFlag?: boolean;
+  } = {}) {
+    if (incomplete.length > 0 && !allowIncomplete) {
       setConfirmingIncomplete(true);
       return;
     }
 
-    // Geofence flag warning
     if (
       status.kind === "located" &&
       !status.withinFence &&
-      !confirmingFlag &&
-      !force
+      !allowFlag
     ) {
       setConfirmingFlag(true);
       return;
     }
 
     setStatus({ kind: "submitting" });
-    const supabase = createClient();
 
-    const flagged =
-      status.kind === "denied" ||
-      (status.kind === "located" && !status.withinFence);
-    const flagReason =
-      status.kind === "denied"
-        ? "Location permission denied at check-out"
-        : status.kind === "located" && !status.withinFence
-          ? `Checked out ${formatDistance(status.distance ?? 0)} from client`
-          : null;
-
-    const update: {
-      check_out_time: string;
-      check_out_latitude?: number;
-      check_out_longitude?: number;
-      check_out_within_geofence: boolean;
-      check_out_method: string;
-      check_out_by: string;
-      flagged_outside_geofence?: boolean;
-      flag_reason?: string | null;
-    } = {
-      check_out_time: new Date().toISOString(),
-      check_out_within_geofence: false,
-      check_out_method: "caregiver_self",
-      check_out_by: shift.caregiver_id,
-    };
-    if (status.kind === "located") {
-      update.check_out_latitude = status.coords.latitude;
-      update.check_out_longitude = status.coords.longitude;
-      update.check_out_within_geofence = status.withinFence;
-    }
-    // Don't overwrite the check-in flag if it was already flagged
-    if (flagged) {
-      update.flagged_outside_geofence = true;
-      update.flag_reason = flagReason;
-    }
-
-    const { error } = await supabase
-      .from("check_ins")
-      .update(update)
-      .eq("id", checkInId);
-
-    if (error) {
-      setStatus({ kind: "error", message: error.message });
-      return;
-    }
-
-    if (flagged) {
-      void sendNotificationEvent({
-        type: "check_out_flagged",
+    const response = await fetch("/api/checkout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
         shiftId: shift.id,
-        flagReason,
+        checkInId,
+        allowIncomplete,
+        location:
+          status.kind === "located"
+            ? {
+                kind: "located",
+                latitude: status.coords.latitude,
+                longitude: status.coords.longitude,
+                withinFence: status.withinFence,
+                distanceMeters: status.distance,
+              }
+            : status.kind === "denied"
+              ? { kind: "denied" }
+              : { kind: "unavailable" },
+      }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      setStatus({
+        kind: "error",
+        message: data?.error ?? "Checkout failed",
       });
+      return;
     }
 
     window.location.href = `/schedule/${shift.id}?refreshed=${Date.now()}`;
@@ -289,36 +270,6 @@ export default function CheckOutForm({
         </div>
       </section>
 
-      {/* Confirmation banners */}
-      {confirmingIncomplete && (
-        <div className="bg-terracotta-400/10 border border-terracotta-400/30 rounded-2xl p-4 mb-4 text-sm">
-          <p className="font-medium text-terracotta-600 mb-1">
-            {incomplete.length} unfinished task
-            {incomplete.length === 1 ? "" : "s"}
-          </p>
-          <p className="text-ink-700 mb-3">
-            Check out anyway? You can still come back to update tasks later.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setConfirmingIncomplete(false)}
-              className="flex-1 bg-white hover:bg-cream-50 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
-            >
-              Keep working
-            </button>
-            <button
-              onClick={() => {
-                setConfirmingIncomplete(false);
-                void submitCheckOut(false);
-              }}
-              className="flex-1 bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
-            >
-              Check out anyway
-            </button>
-          </div>
-        </div>
-      )}
-
       {confirmingFlag && status.kind === "located" && !status.withinFence && (
         <div className="bg-terracotta-400/10 border border-terracotta-400/30 rounded-2xl p-4 mb-4 text-sm">
           <p className="font-medium text-terracotta-600 mb-1">
@@ -338,7 +289,10 @@ export default function CheckOutForm({
             <button
               onClick={() => {
                 setConfirmingFlag(false);
-                void submitCheckOut(true);
+                void submitCheckOut({
+                  allowIncomplete: incomplete.length > 0,
+                  allowFlag: true,
+                });
               }}
               className="flex-1 bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
             >
@@ -357,7 +311,7 @@ export default function CheckOutForm({
       <div className="space-y-2">
         {!confirmingIncomplete && !confirmingFlag && (
           <button
-            onClick={() => submitCheckOut(false)}
+            onClick={() => submitCheckOut()}
             disabled={
               status.kind === "submitting" ||
               status.kind === "init" ||
@@ -377,6 +331,60 @@ export default function CheckOutForm({
           Cancel
         </Link>
       </div>
+
+      {confirmingIncomplete && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-900/45 px-4 py-6"
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="incomplete-checkout-title"
+            className="w-full max-w-md bg-white rounded-3xl shadow-lifted p-5"
+          >
+            <h2
+              id="incomplete-checkout-title"
+              className="font-display text-2xl text-ink-900 mb-2"
+            >
+              Some tasks are not completed
+            </h2>
+            <p className="text-sm text-ink-700 mb-4">
+              You still have unfinished tasks for this shift. If you check out
+              now, the client and admin will be notified.
+            </p>
+            <div className="bg-cream-100 rounded-2xl p-3 mb-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-ink-500 mb-1">
+                Unfinished
+              </p>
+              <p className="font-medium text-ink-900">
+                {incomplete.length} task
+                {incomplete.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => {
+                  setConfirmingIncomplete(false);
+                  router.push(`/tasks?shift=${shift.id}`);
+                }}
+                className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-3 rounded-2xl text-sm font-medium transition"
+              >
+                Go back to tasks
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmingIncomplete(false);
+                  void submitCheckOut({ allowIncomplete: true });
+                }}
+                className="flex-1 bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-3 rounded-2xl text-sm font-medium transition"
+              >
+                Check out anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

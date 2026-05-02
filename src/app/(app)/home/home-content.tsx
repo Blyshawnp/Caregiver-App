@@ -12,6 +12,7 @@ import {
 } from "@/components/icons";
 import type { ShiftRow } from "./page";
 import type { ActiveShift } from "./page";
+import { getShiftStatus } from "@/lib/shift-status";
 
 type State =
   | { kind: "checked_in"; shift: ShiftRow }
@@ -22,22 +23,34 @@ type State =
 function pickState(shifts: ShiftRow[], now: Date): State {
   // 1. Currently checked in?
   const active = shifts.find(
-    (s) => s.check_in_time && !s.check_out_time
+    (s) =>
+      getShiftStatus(
+        s,
+        { check_in_time: s.check_in_time, check_out_time: s.check_out_time },
+        now
+      ).kind === "active_checked_in"
   );
   if (active) return { kind: "checked_in", shift: active };
 
   // 2. Next shift not yet started/checked-in (skip pending/declined)
-  const next = shifts.find(
-    (s) =>
-      !s.check_in_time &&
-      s.assignment_status !== "pending" &&
-      s.assignment_status !== "declined"
-  );
+  const next = shifts.find((s) => {
+    const status = getShiftStatus(
+      s,
+      { check_in_time: s.check_in_time, check_out_time: s.check_out_time },
+      now
+    );
+    return status.kind === "ready_to_check_in" || status.kind === "upcoming";
+  });
   if (!next) return { kind: "no_shifts" };
 
-  const startsAt = new Date(next.scheduled_start);
-  const minsUntil = (startsAt.getTime() - now.getTime()) / 60000;
-  if (minsUntil <= 120) return { kind: "starting_soon", shift: next };
+  const status = getShiftStatus(
+    next,
+    { check_in_time: next.check_in_time, check_out_time: next.check_out_time },
+    now
+  );
+  if (status.kind === "ready_to_check_in") {
+    return { kind: "starting_soon", shift: next };
+  }
   return { kind: "upcoming", shift: next };
 }
 
@@ -63,9 +76,23 @@ export default function HomeContent({
   const upcomingList = useMemo(
     () =>
       shifts
-        .filter((s) => !s.check_out_time)
+        .filter((s) => {
+          const status = getShiftStatus(
+            s,
+            {
+              check_in_time: s.check_in_time,
+              check_out_time: s.check_out_time,
+            },
+            now
+          );
+          return (
+            status.kind === "active_checked_in" ||
+            status.kind === "ready_to_check_in" ||
+            status.kind === "upcoming"
+          );
+        })
         .slice(0, 4),
-    [shifts]
+    [shifts, now]
   );
   const pendingShifts = useMemo(
     () =>
@@ -148,9 +175,11 @@ export default function HomeContent({
 
 function CheckedInCard({ shift, now }: { shift: ShiftRow; now: Date }) {
   const startedAt = new Date(shift.check_in_time!);
+  const scheduledEnd = new Date(shift.scheduled_end);
   const elapsedMin = Math.max(0, Math.floor((now.getTime() - startedAt.getTime()) / 60000));
   const hours = Math.floor(elapsedMin / 60);
   const mins = elapsedMin % 60;
+  const isOvertime = now > scheduledEnd;
 
   const progress =
     shift.todo_total === 0
@@ -158,7 +187,10 @@ function CheckedInCard({ shift, now }: { shift: ShiftRow; now: Date }) {
       : Math.round((shift.todo_done / shift.todo_total) * 100);
 
   return (
-    <article className="bg-forest-600 text-cream-50 rounded-3xl p-6 shadow-lifted relative overflow-hidden">
+    <Link
+      href={`/schedule/${shift.id}`}
+      className="block bg-terracotta-500 text-cream-50 rounded-3xl p-6 shadow-lifted relative overflow-hidden transition hover:bg-terracotta-600 active:scale-[0.99]"
+    >
       {/* decorative */}
       <div
         aria-hidden
@@ -166,9 +198,9 @@ function CheckedInCard({ shift, now }: { shift: ShiftRow; now: Date }) {
       />
       <div className="relative">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-2 h-2 rounded-full bg-terracotta-400 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-cream-50 animate-pulse" />
           <p className="text-xs uppercase tracking-[0.2em] text-cream-50/70">
-            On shift
+            On shift right now
           </p>
         </div>
 
@@ -176,7 +208,12 @@ function CheckedInCard({ shift, now }: { shift: ShiftRow; now: Date }) {
           {hours > 0 ? `${hours}h ${mins}m` : `${mins} min`}
         </p>
         <p className="text-cream-50/80 text-sm mb-6">
-          worked so far · started {formatTime(startedAt)}
+          elapsed · started {formatTime(startedAt)}
+          {isOvertime && (
+            <span className="ml-2 bg-cream-50/15 px-1.5 py-0.5 rounded font-medium">
+              Overtime
+            </span>
+          )}
         </p>
 
         {shift.todo_total > 0 ? (
@@ -196,24 +233,12 @@ function CheckedInCard({ shift, now }: { shift: ShiftRow; now: Date }) {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-2.5">
-          <Link
-            href="/tasks"
-            className="bg-cream-50/15 hover:bg-cream-50/20 transition rounded-2xl py-3 text-center font-medium text-sm flex items-center justify-center gap-1.5"
-          >
-            <CheckSquareIcon size={16} />
-            Tasks
-          </Link>
-          <Link
-            href={`/schedule/${shift.id}/check-out`}
-            className="bg-terracotta-500 hover:bg-terracotta-600 transition rounded-2xl py-3 text-center font-medium text-sm flex items-center justify-center gap-1.5 active:scale-[0.99]"
-          >
-            Check out
-            <ArrowRightIcon size={16} />
-          </Link>
+        <div className="bg-cream-50/15 rounded-2xl py-3 px-4 font-medium text-sm flex items-center justify-between">
+          <span>Tap to check out</span>
+          <ArrowRightIcon size={16} />
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 
@@ -312,29 +337,12 @@ function UpcomingCard({
           </div>
         )}
 
-        {role === "caregiver" && shift.assignment_status === "accepted" ? (
-          <div className="space-y-2">
-            <Link
-              href={`/schedule/${shift.id}/check-in`}
-              className="block w-full bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl font-medium text-center transition active:scale-[0.99]"
-            >
-              Check in early
-            </Link>
-            <Link
-              href={`/schedule/${shift.id}`}
-              className="inline-flex items-center gap-1 text-sm font-medium text-forest-600 hover:gap-2 transition-all"
-            >
-              View details <ArrowRightIcon size={14} />
-            </Link>
-          </div>
-        ) : (
-          <Link
-            href={`/schedule/${shift.id}`}
-            className="inline-flex items-center gap-1 text-sm font-medium text-forest-600 hover:gap-2 transition-all"
-          >
-            View details <ArrowRightIcon size={14} />
-          </Link>
-        )}
+        <Link
+          href={`/schedule/${shift.id}`}
+          className="inline-flex items-center gap-1 text-sm font-medium text-forest-600 hover:gap-2 transition-all"
+        >
+          View details <ArrowRightIcon size={14} />
+        </Link>
       </div>
     </article>
   );

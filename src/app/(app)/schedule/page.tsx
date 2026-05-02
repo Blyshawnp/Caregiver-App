@@ -10,6 +10,8 @@ export type ScheduleShift = {
   client_name: string | null;
   shift_type_name: string | null;
   shift_type_color: string | null;
+  check_in_time: string | null;
+  check_out_time: string | null;
   has_check_in: boolean;
   is_complete: boolean;
   is_released: boolean;
@@ -92,6 +94,8 @@ export default async function SchedulePage() {
     client_name: r.clients?.full_name ?? null,
     shift_type_name: r.shift_types?.name ?? null,
     shift_type_color: r.shift_types?.color ?? null,
+    check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
+    check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
     has_check_in: !!r.check_ins?.[0]?.check_in_time,
     is_complete: !!r.check_ins?.[0]?.check_out_time,
     is_released: !!r.is_released,

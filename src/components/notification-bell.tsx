@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { categoryForNotificationKind, soundForNotificationKind } from "@/lib/push-categories";
+import { playNotificationSound } from "@/lib/notification-sounds";
+import { getPushPreferences, type PushPreferences } from "@/lib/push-client";
 import { BellIcon } from "./icons";
 
 export default function NotificationBell({
@@ -13,9 +16,13 @@ export default function NotificationBell({
   userId: string;
 }) {
   const [count, setCount] = useState(initialCount);
+  const [preferences, setPreferences] = useState<PushPreferences | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
+    void getPushPreferences()
+      .then(setPreferences)
+      .catch(() => {});
 
     // Subscribe to inserts on notifications for this user.
     // When a new notification arrives, bump the badge count and try to
@@ -33,14 +40,25 @@ export default function NotificationBell({
         (payload) => {
           setCount((c) => c + 1);
 
-          // Try to play a short beep (best effort, may be blocked)
-          try {
-            const audio = new Audio(
-              "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
-            );
-            void audio.play().catch(() => {});
-          } catch {
-            /* ignore */
+          const data = payload.new as {
+            kind?: string;
+            title?: string;
+            body?: string;
+          };
+          const kind = data.kind ?? "general";
+          const category = categoryForNotificationKind(kind);
+
+          if (preferences?.sounds_enabled && preferences[category]) {
+            const sound = soundForNotificationKind(kind);
+            const shouldPlay =
+              sound === "message"
+                ? preferences.message_sound_enabled
+                : sound === "urgent"
+                  ? preferences.urgent_incident_sound_enabled
+                  : true;
+            if (shouldPlay) {
+              void playNotificationSound(sound).catch(() => {});
+            }
           }
 
           // Try a system-level notification (requires permission already granted)
@@ -50,10 +68,6 @@ export default function NotificationBell({
               "Notification" in window &&
               Notification.permission === "granted"
             ) {
-              const data = payload.new as {
-                title?: string;
-                body?: string;
-              };
               new Notification(data.title ?? "Caregiver", {
                 body: data.body ?? "",
                 icon: "/icon-192.png",
@@ -92,7 +106,7 @@ export default function NotificationBell({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, preferences]);
 
   // Sync if initialCount changes (page navigation re-renders parent)
   useEffect(() => {

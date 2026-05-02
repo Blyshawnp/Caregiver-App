@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { sendNotificationEvent } from "@/lib/notify-client";
 
 type Caregiver = { id: string; full_name: string };
 type ShiftType = { id: string; name: string; color: string };
@@ -175,13 +176,27 @@ export default function NewShiftForm({
 
     setSubmitting(true);
     const supabase = createClient();
-    const { error } = await supabase.from("shifts").insert(rows);
+    const { data: createdShifts, error } = await supabase
+      .from("shifts")
+      .insert(rows)
+      .select("id, caregiver_id");
 
     if (error) {
       setError(error.message);
       setSubmitting(false);
       return;
     }
+
+    const assignedShiftIds =
+      createdShifts
+        ?.filter((shift) => shift.caregiver_id)
+        .map((shift) => shift.id) ?? [];
+
+    await Promise.all(
+      assignedShiftIds.map((shiftId) =>
+        sendNotificationEvent({ type: "shift_assigned", shiftId })
+      )
+    );
 
     router.push("/schedule");
     router.refresh();

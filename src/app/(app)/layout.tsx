@@ -6,6 +6,7 @@ import ShiftWatcher, {
   type ActiveWatch,
 } from "@/components/shift-watcher";
 import InstallPrompt from "@/components/install-prompt";
+import PushPermissionPrompt from "@/components/push-permission-prompt";
 import type { Role } from "@/lib/db-types";
 import type { Lang } from "@/lib/i18n";
 
@@ -133,6 +134,7 @@ export default async function AppLayout({
         lang={lang}
       />
       <InstallPrompt />
+      <PushPermissionPrompt />
     </div>
   );
 }

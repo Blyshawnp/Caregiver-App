@@ -16,6 +16,10 @@ type NotificationRequest =
       shiftId: string;
     }
   | {
+      type: "shift_assigned";
+      shiftId: string;
+    }
+  | {
       type: "left_geofence" | "auto_check_out";
       shiftId: string;
       distanceMeters: number;

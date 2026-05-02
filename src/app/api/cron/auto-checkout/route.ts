@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { haversineMeters, formatDistance } from "@/lib/geo";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendPushForNotifications } from "@/lib/web-push";
 
 type ActiveCheckInRow = {
   id: string;
@@ -220,5 +221,6 @@ async function insertAutoCheckoutNotifications(
 
   if (recipientRows.length > 0) {
     await admin.from("notifications").insert(recipientRows);
+    void sendPushForNotifications(admin, recipientRows).catch(() => {});
   }
 }

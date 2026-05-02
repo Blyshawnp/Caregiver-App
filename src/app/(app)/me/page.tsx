@@ -257,6 +257,11 @@ export default async function MePage() {
       {/* Help link, visible to all roles */}
       <section className="space-y-2 mb-4">
         <NavLink
+          href="/me/notifications"
+          label="Notification settings"
+          Icon={UserIcon}
+        />
+        <NavLink
           href="/help"
           label={t("me.helpAndHowTo", lang)}
           Icon={UserIcon}

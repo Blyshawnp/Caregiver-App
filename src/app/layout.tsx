@@ -72,11 +72,10 @@ export default function RootLayout({
       <body>
         <OfflineIndicator />
         {children}
-        {/* Register service worker after the app loads. Only in production
-            so it doesn't interfere with hot reload during development. */}
+        {/* Register service worker after the app loads for offline support and Web Push. */}
         <Script id="register-sw" strategy="afterInteractive">
           {`
-            if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
+            if ('serviceWorker' in navigator) {
               window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(() => {});
               });

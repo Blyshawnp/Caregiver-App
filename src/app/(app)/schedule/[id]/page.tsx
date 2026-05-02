@@ -29,6 +29,7 @@ import {
   formatTimeInTz,
   formatDateInTz,
 } from "@/lib/datetime";
+import { getShiftStatus } from "@/lib/shift-status";
 import type { AssignmentStatus, Role } from "@/lib/db-types";
 
 // Force dynamic rendering: this page must always show fresh data
@@ -263,6 +264,16 @@ export default async function ShiftDetailPage({
   }
   const todos = shift.shift_todos ?? [];
   const todosDone = todos.filter((t) => t.is_completed).length;
+  const shiftStatus = getShiftStatus(
+    {
+      scheduled_start: shift.scheduled_start,
+      scheduled_end: shift.scheduled_end,
+      caregiver_id: shift.caregiver_id,
+      assignment_status: shift.assignment_status,
+      is_released: shift.is_released,
+    },
+    checkIn
+  );
 
   const canEdit = profile?.role === "admin" || profile?.role === "client";
   const isAssignedCaregiver =
@@ -278,14 +289,19 @@ export default async function ShiftDetailPage({
   const lang = await getUserLanguage();
   const iReleasedThis =
     isCaregiver && shift.released_by === profile?.id && isReleased;
-  const canClaim = isCaregiver && (isReleased || isOpenShift) && !iReleasedThis;
+  const canClaim =
+    isCaregiver &&
+    (isReleased || isOpenShift) &&
+    !iReleasedThis &&
+    shiftStatus.canClaim;
   // Caregivers can release shifts they're assigned to that haven't started yet
   // and they haven't checked in to.
   const canRelease =
     isAssignedCaregiver &&
     shift.assignment_status === "accepted" &&
     !checkIn?.check_in_time &&
-    !isReleased;
+    !isReleased &&
+    !shiftStatus.isExpired;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -319,7 +335,7 @@ export default async function ShiftDetailPage({
       </header>
 
       {/* Status card */}
-      {isReleased ? (
+      {isReleased && shiftStatus.kind !== "open_expired" ? (
         <div className="bg-terracotta-500 text-cream-50 rounded-2xl px-5 py-4 relative overflow-hidden">
           <div
             aria-hidden
@@ -344,17 +360,37 @@ export default async function ShiftDetailPage({
           label="Awaiting your response"
           value="Accept or decline this shift below"
         />
-      ) : checkIn?.check_out_time ? (
+      ) : shiftStatus.kind === "completed" ? (
         <StatusBanner
           tone="forest"
-          label="Completed"
-          value={`${formatHours(checkIn.total_minutes)} worked`}
+          label="Checked out"
+          value={`${formatHours(checkIn?.total_minutes ?? null)} worked`}
         />
-      ) : checkIn?.check_in_time ? (
+      ) : shiftStatus.kind === "active_checked_in" && checkIn?.check_in_time ? (
         <LiveOnShiftCard
           checkInTime={checkIn.check_in_time}
           scheduledEnd={shift.scheduled_end}
         />
+      ) : shiftStatus.kind === "past_unchecked" ? (
+        <StatusBanner
+          tone="muted"
+          label="Missed"
+          value="Past without check-in"
+        />
+      ) : shiftStatus.kind === "open_expired" ? (
+        <StatusBanner
+          tone="muted"
+          label="Expired"
+          value="This open shift is past its scheduled end"
+        />
+      ) : shiftStatus.kind === "ready_to_check_in" ? (
+        <StatusBanner
+          tone="forest"
+          label="Scheduled"
+          value="Ready to check in"
+        />
+      ) : shiftStatus.kind === "upcoming" ? (
+        <StatusBanner tone="muted" label="Scheduled" value="Upcoming" />
       ) : (
         <StatusBanner tone="muted" label="Scheduled" value="Not yet started" />
       )}
@@ -365,7 +401,9 @@ export default async function ShiftDetailPage({
             Open shift
           </p>
           <p className="text-sm text-ink-900">
-            This shift is unassigned and available for an eligible caregiver to claim.
+            {shiftStatus.kind === "open_expired"
+              ? "This open shift is past its scheduled end and can no longer be claimed."
+              : "This shift is unassigned and available for an eligible caregiver to claim."}
           </p>
         </div>
       )}
@@ -555,7 +593,7 @@ export default async function ShiftDetailPage({
         {!isReleased &&
           isAssignedCaregiver &&
           shift.assignment_status === "accepted" &&
-          !checkIn?.check_in_time && (
+          shiftStatus.canCheckIn && (
             <Link
               href={`/schedule/${id}/check-in`}
               className="block bg-forest-600 hover:bg-forest-700 text-cream-50 py-3.5 rounded-2xl font-medium text-center transition"
@@ -565,8 +603,7 @@ export default async function ShiftDetailPage({
           )}
         {!isReleased &&
           isAssignedCaregiver &&
-          checkIn?.check_in_time &&
-          !checkIn?.check_out_time && (
+          shiftStatus.kind === "active_checked_in" && (
             <Link
               href={`/schedule/${id}/check-out`}
               className="block bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-3.5 rounded-2xl font-medium text-center transition"

@@ -465,20 +465,26 @@ function generatePassword(): string {
     "Gentle",
     "Mighty",
   ];
-  const animals = [
-    "Otter",
-    "Robin",
-    "Fox",
-    "Tiger",
-    "Whale",
-    "Hawk",
-    "Bear",
-    "Owl",
-    "Lynx",
-    "Heron",
+  const nouns = [
+    "River",
+    "Cedar",
+    "Maple",
+    "Stone",
+    "Meadow",
+    "Summit",
+    "Harbor",
+    "Garden",
+    "Valley",
+    "Beacon",
   ];
-  const a = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const b = animals[Math.floor(Math.random() * animals.length)];
-  const n = Math.floor(Math.random() * 90 + 10);
+  const a = adjectives[randomIndex(adjectives.length)];
+  const b = nouns[randomIndex(nouns.length)];
+  const n = randomIndex(900) + 100;
   return `${a}${b}${n}`;
+}
+
+function randomIndex(max: number) {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return values[0] % max;
 }

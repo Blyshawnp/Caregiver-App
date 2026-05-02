@@ -44,6 +44,8 @@ export default function TeamMemberDetail({
   // Password reset state for no-email accounts
   const [showResetCreds, setShowResetCreds] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [passwordUpdated, setPasswordUpdated] = useState(false);
   const isNoEmailAccount = person.email.endsWith("@noemail.local");
 
   async function saveRate() {
@@ -93,6 +95,34 @@ export default function TeamMemberDetail({
       .update({ is_active: !person.is_active })
       .eq("id", person.id);
     router.refresh();
+  }
+
+  async function resetPassword() {
+    setError(null);
+    setResettingPassword(true);
+    setPasswordUpdated(false);
+
+    const response = await fetch("/api/team/no-email-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId: person.id,
+        password: newPassword,
+      }),
+    });
+
+    const result = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not reset password.");
+      setResettingPassword(false);
+      return;
+    }
+
+    setPasswordUpdated(true);
+    setResettingPassword(false);
   }
 
   const roleCopy: Record<string, string> = {
@@ -253,6 +283,7 @@ export default function TeamMemberDetail({
                   setNewPassword(generatePassword());
                   setShowResetCreds(true);
                   setError(null);
+                  setPasswordUpdated(false);
                 }}
                 className="w-full bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
               >
@@ -285,12 +316,7 @@ export default function TeamMemberDetail({
                 )}
 
                 <p className="text-xs text-ink-500 mb-3">
-                  Note: Updating the password requires admin server-side access.
-                  For now, write down or text the new password to the caregiver,
-                  then go to <strong>Supabase Dashboard → Authentication →
-                  Users</strong>, find this user by email, click their row, and
-                  set the password to match. (We'll automate this when we add a
-                  server-side function.)
+                  Save the new password first, then send it to the caregiver.
                 </p>
 
                 <div className="flex gap-2">
@@ -298,16 +324,28 @@ export default function TeamMemberDetail({
                     onClick={() => {
                       setShowResetCreds(false);
                       setError(null);
+                      setPasswordUpdated(false);
                     }}
                     className="flex-1 bg-white hover:bg-cream-50 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
                   >
                     Cancel
                   </button>
+                  <button
+                    onClick={resetPassword}
+                    disabled={resettingPassword || newPassword.length < 8}
+                    className="flex-1 bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
+                  >
+                    {resettingPassword ? "Saving..." : passwordUpdated ? "Saved" : "Save"}
+                  </button>
                   <a
                     href={`sms:?&body=${encodeURIComponent(
                       `Caregiver app new password\nUsername: ${person.email}\nPassword: ${newPassword}`
                     )}`}
-                    className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition text-center"
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition text-center ${
+                      passwordUpdated
+                        ? "bg-forest-600 hover:bg-forest-700 text-cream-50"
+                        : "bg-cream-200 text-ink-400 pointer-events-none"
+                    }`}
                   >
                     Send by text
                   </a>
@@ -349,9 +387,15 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 
 function generatePassword(): string {
   const adjectives = ["Happy", "Bright", "Quick", "Calm", "Brave", "Kind", "Sunny", "Lucky", "Gentle", "Mighty"];
-  const animals = ["Otter", "Robin", "Fox", "Tiger", "Whale", "Hawk", "Bear", "Owl", "Lynx", "Heron"];
-  const a = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const b = animals[Math.floor(Math.random() * animals.length)];
-  const n = Math.floor(Math.random() * 90 + 10);
+  const nouns = ["River", "Cedar", "Maple", "Stone", "Meadow", "Summit", "Harbor", "Garden", "Valley", "Beacon"];
+  const a = adjectives[randomIndex(adjectives.length)];
+  const b = nouns[randomIndex(nouns.length)];
+  const n = randomIndex(900) + 100;
   return `${a}${b}${n}`;
+}
+
+function randomIndex(max: number) {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return values[0] % max;
 }

@@ -71,6 +71,7 @@ begin
       and ci.check_out_time is null
       and s.scheduled_end <= now()
       and ci.last_location_at is not null
+      and ci.last_location_at >= now() - interval '30 minutes'
   ),
   eligible as (
     select *

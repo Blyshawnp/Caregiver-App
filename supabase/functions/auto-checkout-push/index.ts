@@ -36,7 +36,7 @@ const DEFAULT_PREFS = {
   general: true,
 };
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
   const startedAt = new Date().toISOString();
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -44,6 +44,16 @@ Deno.serve(async () => {
     Deno.env.get("NEXT_PUBLIC_VAPID_PUBLIC_KEY");
   const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
   const subject = Deno.env.get("VAPID_SUBJECT");
+  const edgeSecret = Deno.env.get("AUTO_CHECKOUT_EDGE_SECRET");
+
+  if (!edgeSecret) {
+    return json({ error: "AUTO_CHECKOUT_EDGE_SECRET is not configured." }, 500);
+  }
+
+  const requestSecret = req.headers.get("x-auto-checkout-secret");
+  if (requestSecret !== edgeSecret) {
+    return json({ error: "Unauthorized" }, 401);
+  }
 
   if (!supabaseUrl || !serviceRoleKey) {
     return json({ error: "Supabase service role configuration is missing." }, 500);

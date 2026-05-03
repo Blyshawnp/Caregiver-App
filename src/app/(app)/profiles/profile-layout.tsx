@@ -7,27 +7,24 @@ type ProfileData = {
   id: string;
   full_name: string;
   role: string;
-  email?: string;
-  phone?: string | null;
-  avatar_url?: string | null;
-  avatar_color?: string | null;
-  bio?: string | null;
-  experience?: string | null;
-  skills?: string[] | null;
-  availability?: string | null;
+  email: string;
+  phone: string | null;
+  avatar_url: string | null;
+  avatar_color: string | null;
 };
 
 export default function ProfileLayout({ profile }: { profile: ProfileData }) {
   return (
     <main className="px-5 py-8 max-w-2xl mx-auto">
       <div className="bg-white rounded-[2.5rem] shadow-lifted overflow-hidden grain-overlay border border-cream-200">
+        {/* Header/Cover Area */}
         <div className="h-32 bg-forest-600 relative">
           <div className="absolute -bottom-12 left-8 p-1 bg-white rounded-full shadow-soft">
             <UserAvatar 
               person={{
                 full_name: profile.full_name,
-                avatar_url: profile.avatar_url,
-                avatar_color: profile.avatar_color,
+                avatar_url: profile.avatar_url ?? null,
+                avatar_color: profile.avatar_color ?? null,
                 id: profile.id
               }} 
               size="xl" 
@@ -45,6 +42,7 @@ export default function ProfileLayout({ profile }: { profile: ProfileData }) {
           </div>
 
           <div className="grid gap-6">
+            {/* Basic Info */}
             <section className="space-y-4">
               <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">Contact Details</h2>
               <div className="grid gap-3">
@@ -53,6 +51,7 @@ export default function ProfileLayout({ profile }: { profile: ProfileData }) {
               </div>
             </section>
 
+            {/* Role Specifics */}
             {profile.role === 'caregiver' && (
               <section className="space-y-4">
                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">Professional Profile</h2>

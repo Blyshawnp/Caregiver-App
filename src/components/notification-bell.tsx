@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { categoryForNotificationKind, soundForNotificationKind } from "@/lib/push-categories";
+import { soundForNotificationKind } from "@/lib/push-categories";
 import { playNotificationSound } from "@/lib/notification-sounds";
-import { getPushPreferences, type PushPreferences } from "@/lib/push-client";
 import { BellIcon } from "./icons";
 
 export default function NotificationBell({
@@ -16,28 +15,16 @@ export default function NotificationBell({
   userId: string;
 }) {
   const [count, setCount] = useState(initialCount);
-  const [preferences, setPreferences] = useState<PushPreferences | null>(null);
-  const preferencesRef = useRef<PushPreferences | null>(null);
-
-  useEffect(() => {
-    preferencesRef.current = preferences;
-  }, [preferences]);
 
   useEffect(() => {
     const supabase = createClient();
-    void getPushPreferences()
-      .then(setPreferences)
-      .catch(() => {});
 
-    // Subscribe to inserts on notifications for this user.
-    // When a new notification arrives, bump the badge count and try to
-    // play a soft sound + a system notification (if permission granted).
     const channel = supabase
-      .channel(`notifications-${userId}`)
+      .channel(`realtime-notifications-${userId}`)
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "notifications",
           filter: `recipient_id=eq.${userId}`,
@@ -45,57 +32,18 @@ export default function NotificationBell({
         (payload) => {
           void refetchCount();
 
-          const data = payload.new as {
-            kind?: string;
-            title?: string;
-            body?: string;
-          };
-          const kind = data.kind ?? "general";
-          const category = categoryForNotificationKind(kind);
-          const prefs = preferencesRef.current;
+          if (payload.eventType === "INSERT") {
+             const data = payload.new as { kind?: string; title?: string; body?: string };
+             const sound = soundForNotificationKind(data.kind || "general");
+             void playNotificationSound(sound).catch(() => {});
 
-          if (prefs?.sounds_enabled && prefs[category]) {
-            const sound = soundForNotificationKind(kind);
-            const shouldPlay =
-              sound === "message"
-                ? prefs.message_sound_enabled
-                : sound === "urgent"
-                  ? prefs.urgent_incident_sound_enabled
-                  : true;
-            if (shouldPlay) {
-              void playNotificationSound(sound).catch(() => {});
-            }
+             if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(data.title || "Caregiver", {
+                  body: data.body || "",
+                  icon: "/icon-192.png",
+                });
+             }
           }
-
-          // Try a system-level notification (requires permission already granted)
-          try {
-            if (
-              typeof window !== "undefined" &&
-              "Notification" in window &&
-              Notification.permission === "granted"
-            ) {
-              new Notification(data.title ?? "Caregiver", {
-                body: data.body ?? "",
-                icon: "/icon-192.png",
-                badge: "/icon-192.png",
-              });
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "notifications",
-          filter: `recipient_id=eq.${userId}`,
-        },
-        () => {
-          // When marking-as-read happens, refetch count to stay accurate
-          void refetchCount();
         }
       )
       .subscribe();
@@ -114,20 +62,14 @@ export default function NotificationBell({
     };
   }, [userId]);
 
-  // Sync if initialCount changes (page navigation re-renders parent)
-  useEffect(() => {
-    setCount(initialCount);
-  }, [initialCount]);
-
   return (
     <Link
       href="/notifications"
-      aria-label="Notifications"
       className="relative w-10 h-10 rounded-full grid place-items-center text-ink-700 hover:bg-cream-200 transition active:scale-95"
     >
       <BellIcon size={20} />
       {count > 0 && (
-        <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] rounded-full bg-terracotta-500 text-cream-50 text-[10px] font-medium flex items-center justify-center px-1">
+        <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] rounded-full bg-terracotta-500 text-cream-50 text-[10px] font-bold flex items-center justify-center px-1 border-2 border-white">
           {count > 9 ? "9+" : count}
         </span>
       )}

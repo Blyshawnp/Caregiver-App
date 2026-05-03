@@ -1,159 +1,130 @@
-import type { SVGProps } from "react";
+import React from "react";
 
-type IconProps = SVGProps<SVGSVGElement> & { size?: number };
-
-function Base({ size = 24, children, ...rest }: IconProps & { children: React.ReactNode }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...rest}
-    >
-      {children}
-    </svg>
-  );
-}
+export type IconProps = {
+  size?: number;
+  className?: string;
+};
 
 export const HomeIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2h-4v-7h-6v7H5a2 2 0 0 1-2-2v-9z" />
-  </Base>
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <polyline points="9 22 9 12 15 12 15 22" />
+  </svg>
 );
 
 export const CalendarIcon = (p: IconProps) => (
-  <Base {...p}>
-    <rect x="3" y="5" width="18" height="16" rx="2.5" />
-    <path d="M3 10h18M8 3v4M16 3v4" />
-  </Base>
-);
-
-export const CheckSquareIcon = (p: IconProps) => (
-  <Base {...p}>
-    <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
-    <path d="M8 12.5l3 3 5-6" />
-  </Base>
-);
-
-export const MessageIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M4 5.5C4 4.7 4.7 4 5.5 4h13c.8 0 1.5.7 1.5 1.5v9c0 .8-.7 1.5-1.5 1.5H10l-4 3.5V16H5.5C4.7 16 4 15.3 4 14.5v-9z" />
-  </Base>
-);
-
-export const UserIcon = (p: IconProps) => (
-  <Base {...p}>
-    <circle cx="12" cy="8" r="4" />
-    <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
-  </Base>
-);
-
-export const ClockIcon = (p: IconProps) => (
-  <Base {...p}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3.5 2" />
-  </Base>
-);
-
-export const MapPinIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z" />
-    <circle cx="12" cy="9" r="2.5" />
-  </Base>
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+    <line x1="16" x2="16" y1="2" y2="6" />
+    <line x1="8" x2="8" y1="2" y2="6" />
+    <line x1="3" x2="21" y1="10" y2="10" />
+  </svg>
 );
 
 export const BellIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2H4.5L6 16z" />
-    <path d="M10 20a2 2 0 0 0 4 0" />
-  </Base>
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </svg>
 );
 
-export const PlusIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M12 5v14M5 12h14" />
-  </Base>
+export const MessageIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+export const UserIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+export const StarOfLifeIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M12 3v18" />
+    <path d="m4.95 7.05 14.1 9.9" />
+    <path d="m19.05 7.05-14.1 9.9" />
+  </svg>
+);
+
+export const MapPinIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+    <circle cx="12" cy="10" r="3" />
+  </svg>
 );
 
 export const ArrowRightIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M5 12h14M13 5l7 7-7 7" />
-  </Base>
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M5 12h14" />
+    <path d="m12 5 7 7-7 7" />
+  </svg>
 );
 
-export const ListIcon = (p: IconProps) => (
-  <Base {...p}>
-    <path d="M8 6h13M8 12h13M8 18h13" />
-    <circle cx="4" cy="6" r="0.8" fill="currentColor" />
-    <circle cx="4" cy="12" r="0.8" fill="currentColor" />
-    <circle cx="4" cy="18" r="0.8" fill="currentColor" />
-  </Base>
+export const CheckSquareIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <polyline points="9 11 12 14 22 4" />
+    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+  </svg>
+);
+
+export const XIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
 );
 
 export const GridIcon = (p: IconProps) => (
-  <Base {...p}>
-    <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-    <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-    <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-    <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-  </Base>
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <rect width="7" height="7" x="3" y="3" rx="1" />
+    <rect width="7" height="7" x="14" y="3" rx="1" />
+    <rect width="7" height="7" x="14" y="14" rx="1" />
+    <rect width="7" height="7" x="3" y="14" rx="1" />
+  </svg>
 );
 
-export const StarOfLifeIcon = ({
-  size = 24,
-  ...rest
-}: IconProps) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true"
-    {...rest}
-  >
-    <rect
-      x="10.65"
-      y="1.75"
-      width="2.7"
-      height="20.5"
-      rx="0.9"
-      fill="currentColor"
-    />
-    <rect
-      x="10.65"
-      y="1.75"
-      width="2.7"
-      height="20.5"
-      rx="0.9"
-      transform="rotate(60 12 12)"
-      fill="currentColor"
-    />
-    <rect
-      x="10.65"
-      y="1.75"
-      width="2.7"
-      height="20.5"
-      rx="0.9"
-      transform="rotate(-60 12 12)"
-      fill="currentColor"
-    />
-    <path
-      d="M12 7.2v9.6"
-      stroke="white"
-      strokeWidth="1.65"
-      strokeLinecap="round"
-    />
-    <path
-      d="M13.9 9.05c0-.95-.77-1.68-1.8-1.68-1.08 0-1.92.8-1.92 1.78 0 .92.74 1.45 1.58 1.9.93.49 1.88 1 1.88 2.1 0 1.06-.83 1.88-1.94 1.88-1.03 0-1.83-.66-1.96-1.62"
-      stroke="white"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+export const ListIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <line x1="8" x2="21" y1="6" y2="6" />
+    <line x1="8" x2="21" y1="12" y2="12" />
+    <line x1="8" x2="21" y1="18" y2="18" />
+    <line x1="3" x2="3.01" y1="6" y2="6" />
+    <line x1="3" x2="3.01" y1="12" y2="12" />
+    <line x1="3" x2="3.01" y1="18" y2="18" />
+  </svg>
+);
+
+export const MailIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <rect width="20" height="16" x="2" y="4" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </svg>
+);
+
+export const PhoneIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.79 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+);
+
+export const ShieldIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+);
+
+export const HeartIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+  </svg>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
   </svg>
 );

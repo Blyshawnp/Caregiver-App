@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { BellIcon, ArrowRightIcon } from "@/components/icons";
+import { BellIcon, ArrowRightIcon, XIcon } from "@/components/icons";
 import UserAvatar, { type AvatarProfile } from "@/components/user-avatar";
 
 type Notification = {
@@ -27,15 +27,14 @@ export default function NotificationsList({
   currentUserId: string;
 }) {
   const router = useRouter();
+  const supabase = createClient();
 
   async function handleClick(n: Notification) {
     if (!n.is_read) {
-      const supabase = createClient();
       await supabase
         .from("notifications")
         .update({ is_read: true, read_at: new Date().toISOString() })
-        .eq("id", n.id)
-        .eq("recipient_id", currentUserId);
+        .eq("id", n.id);
     }
     if (n.link) {
       router.push(n.link);
@@ -44,8 +43,16 @@ export default function NotificationsList({
     }
   }
 
+  async function deleteNotification(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", id);
+    router.refresh();
+  }
+
   async function markAllRead() {
-    const supabase = createClient();
     await supabase
       .from("notifications")
       .update({ is_read: true, read_at: new Date().toISOString() })
@@ -84,7 +91,7 @@ export default function NotificationsList({
       )}
       <ul className="space-y-2">
         {notifications.map((n) => (
-          <li key={n.id}>
+          <li key={n.id} className="relative group">
             <button
               onClick={() => handleClick(n)}
               className={`w-full text-left flex items-start gap-3 rounded-2xl p-4 transition active:scale-[0.99] ${
@@ -106,7 +113,7 @@ export default function NotificationsList({
                   <BellIcon size={16} />
                 </span>
               )}
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pr-6">
                 <div className="flex items-baseline justify-between gap-2 mb-0.5">
                   <p className="font-medium text-ink-900 truncate">
                     {n.title}
@@ -121,10 +128,16 @@ export default function NotificationsList({
               </div>
               {n.link && (
                 <ArrowRightIcon
-                  size={14}
-                  className="text-ink-300 mt-1 shrink-0"
+                  size={14}            className="text-ink-300 mt-1 shrink-0"
                 />
               )}
+            </button>
+            <button
+               onClick={(e) => deleteNotification(e, n.id)}
+               className="absolute right-3 top-3 w-8 h-8 rounded-full bg-cream-100 text-ink-300 grid place-items-center opacity-0 group-hover:opacity-100 hover:bg-terracotta-50 hover:text-terracotta-600 transition"
+               aria-label="Clear notification"
+            >
+               <XIcon size={14} />
             </button>
           </li>
         ))}

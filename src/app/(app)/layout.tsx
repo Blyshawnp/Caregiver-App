@@ -59,7 +59,6 @@ export default async function AppLayout({
 
   const lang: Lang = profile?.language === "es" ? "es" : "en";
 
-  // If caregiver, look up their active (checked-in but not checked-out) shift
   let activeWatch: ActiveWatch | null = null;
   if (profile?.role === "caregiver") {
     try {
@@ -99,7 +98,6 @@ export default async function AppLayout({
     }
   }
 
-  // Unread message count for the Messages tab badge
   let unreadMessages = 0;
   if (profile) {
     try {
@@ -114,6 +112,20 @@ export default async function AppLayout({
     }
   }
 
+  let notificationCount = 0;
+  if (profile) {
+    try {
+      const { count } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("recipient_id", profile.id)
+        .eq("is_read", false);
+      notificationCount = count ?? 0;
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
     <div className="min-h-dvh flex flex-col bg-cream-100">
       <AppHeader
@@ -121,6 +133,8 @@ export default async function AppLayout({
         orgName={profile?.organizations?.name ?? ""}
         avatarUrl={profile?.avatar_url ?? null}
         avatarColor={profile?.avatar_color ?? null}
+        userId={profile?.id}
+        notificationCount={notificationCount}
       />
 
       <div className="flex-1 pb-24">

@@ -1,258 +1,187 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   disablePushNotifications,
   enablePushNotifications,
   getPushDeviceStatus,
+  getPushPreferences,
   isPushSupported,
   savePushPreferences,
   type PushPreferences,
 } from "@/lib/push-client";
 import { playNotificationSound } from "@/lib/notification-sounds";
 
-export default function NotificationSettings({
-  initialPreferences,
-}: {
-  initialPreferences: PushPreferences;
-}) {
-  const [preferences, setPreferences] = useState(initialPreferences);
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
-    "unsupported"
-  );
-  const [enabled, setEnabled] = useState(false);
+export default function NotificationSettings() {
+  const [supported, setPushSupported] = useState(false);
+  const [deviceEnabled, setDeviceEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<PushPreferences | null>(null);
 
   useEffect(() => {
-    if (!isPushSupported()) {
-      setPermission("unsupported");
-      return;
+    setPushSupported(isPushSupported());
+    async function init() {
+      try {
+        const [status, p] = await Promise.all([
+          getPushDeviceStatus(),
+          getPushPreferences(),
+        ]);
+        setDeviceEnabled(status.enabled);
+        setPrefs(p);
+      } catch {
+        /* ignore */
+      } finally {
+        setLoading(false);
+      }
     }
-    setPermission(Notification.permission);
-    void navigator.serviceWorker.ready
-      .then((registration) => registration.pushManager.getSubscription())
-      .then(async (subscription) => {
-        if (!subscription) {
-          setEnabled(false);
-          return;
-        }
-        const status = await getPushDeviceStatus(subscription.endpoint);
-        setEnabled(status.enabled);
-      })
-      .catch((error) => {
-        setEnabled(false);
-        setMessage(error instanceof Error ? error.message : "Could not verify push status.");
-      });
+    init();
   }, []);
 
-  async function updatePreference(key: keyof PushPreferences, value: boolean) {
-    const next = { ...preferences, [key]: value };
-    setPreferences(next);
-    setMessage(null);
-    try {
-      const saved = await savePushPreferences({ [key]: value });
-      setPreferences(saved);
-    } catch (error) {
-      setPreferences(preferences);
-      setMessage(error instanceof Error ? error.message : "Could not save settings.");
-    }
-  }
-
-  async function enable() {
+  async function toggleDevice() {
     setSaving(true);
-    setMessage(null);
     try {
-      const subscription = await enablePushNotifications();
-      setPermission(Notification.permission);
-      const status = await getPushDeviceStatus(subscription.endpoint);
-      setEnabled(status.enabled && !!subscription);
-      setMessage("Push notifications are enabled on this device.");
-    } catch (error) {
-      setPermission(isPushSupported() ? Notification.permission : "unsupported");
-      setMessage(error instanceof Error ? error.message : "Could not enable notifications.");
+      if (deviceEnabled) {
+        await disablePushNotifications();
+        setDeviceEnabled(false);
+      } else {
+        await enablePushNotifications();
+        setDeviceEnabled(true);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not update device");
     } finally {
       setSaving(false);
     }
   }
 
-  async function disable() {
-    setSaving(true);
-    setMessage(null);
+  async function updatePref(key: keyof PushPreferences, val: boolean) {
+    if (!prefs) return;
+    const next = { ...prefs, [key]: val };
+    setPrefs(next);
     try {
-      await disablePushNotifications();
-      setEnabled(false);
-      setMessage("Push notifications are disabled on this device.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not disable notifications.");
-    } finally {
-      setSaving(false);
+      await savePushPreferences({ [key]: val });
+    } catch {
+      setPrefs(prefs); // rollback
     }
   }
+
+  if (loading) return <div className="p-10 text-center text-ink-500">Loading settings...</div>;
 
   return (
-    <main className="px-5 py-6 max-w-2xl mx-auto">
-      <Link
-        href="/me"
-        className="text-sm text-forest-600 hover:underline mb-3 inline-block"
-      >
-        ← Back to Me
-      </Link>
-
-      <header className="mb-6">
-        <h1 className="font-display text-3xl text-ink-900">
-          Notification settings
-        </h1>
-        <p className="text-ink-500 text-sm">
-          Choose what can alert this browser and which sounds the app should try
-          to play while open.
-        </p>
+    <main className="px-5 py-6 max-w-2xl mx-auto space-y-6">
+      <header>
+        <h1 className="font-display text-3xl text-ink-900">Notifications</h1>
+        <p className="text-ink-500 text-sm">Manage how you get alerts.</p>
       </header>
 
-      <section className="bg-white rounded-3xl shadow-soft p-5 mb-4 grain-overlay">
-        <div className="relative">
-          <p className="text-xs uppercase tracking-[0.18em] text-ink-500 mb-1">
-            This device
-          </p>
-          <p className="font-medium text-ink-900 mb-1">
-            {permission === "unsupported"
-              ? "Not supported"
-              : permission === "denied"
-                ? "Blocked by browser"
-                : enabled
-                  ? "Push enabled"
-                  : "Push disabled"}
-          </p>
-          <p className="text-sm text-ink-500 mb-4">
-            {permission === "denied"
-              ? "Enable notifications in your browser or device settings, then return here."
-              : "You can enable or disable this browser without affecting your other devices."}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={enable}
-              disabled={saving || permission === "unsupported" || permission === "denied"}
-              className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl text-sm font-medium transition disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Enable this device"}
-            </button>
-            <button
-              onClick={disable}
-              disabled={saving || !enabled}
-              className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-3 rounded-2xl text-sm font-medium transition disabled:opacity-60"
-            >
-              Disable
-            </button>
+      <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
+        <h2 className="font-display text-xl mb-1">Push Alerts</h2>
+        <p className="text-xs text-ink-500 mb-4">
+          Enable native notifications on this device to stay updated instantly.
+        </p>
+
+        {!supported ? (
+          <div className="bg-cream-50 p-4 rounded-2xl text-sm text-ink-700">
+            Push notifications are not supported in this browser or device.
           </div>
-          {message && <p className="text-sm text-ink-500 mt-3">{message}</p>}
-        </div>
+        ) : (
+          <button
+            onClick={toggleDevice}
+            disabled={saving}
+            className={`w-full py-3.5 rounded-2xl font-medium transition active:scale-[0.98] ${
+              deviceEnabled
+                ? "bg-cream-200 text-ink-700 hover:bg-cream-300"
+                : "bg-forest-600 text-cream-50 hover:bg-forest-700 shadow-soft"
+            }`}
+          >
+            {saving ? "Updating..." : deviceEnabled ? "Disable on this device" : "Enable on this device"}
+          </button>
+        )}
       </section>
 
-      <section className="bg-white rounded-3xl shadow-soft p-5 mb-4 grain-overlay">
-        <div className="relative flex flex-col gap-3">
-          <ToggleRow
-            label="Messages"
-            description="New message alerts."
-            checked={preferences.messages}
-            onChange={(value) => updatePreference("messages", value)}
-          />
-          <ToggleRow
-            label="Shift assignments"
-            description="Shift updates, claims, releases, check-in flags, and checkout alerts."
-            checked={preferences.shift_assignments}
-            onChange={(value) => updatePreference("shift_assignments", value)}
-          />
-          <ToggleRow
-            label="Trades"
-            description="Trade offers, counters, approvals, and cancellations."
-            checked={preferences.trades}
-            onChange={(value) => updatePreference("trades", value)}
-          />
-          <ToggleRow
-            label="Incidents"
-            description="Incident and urgent safety alerts."
-            checked={preferences.incidents}
-            onChange={(value) => updatePreference("incidents", value)}
-          />
-          <ToggleRow
-            label="General notifications"
-            description="Other app alerts that do not fit a specific category."
-            checked={preferences.general}
-            onChange={(value) => updatePreference("general", value)}
-          />
-        </div>
-      </section>
+      {prefs && (
+        <>
+          <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
+            <h2 className="font-display text-xl mb-4">Alert Types</h2>
+            <div className="space-y-4">
+              <ToggleRow
+                label="Messages"
+                checked={prefs.messages}
+                onChange={(v) => updatePref("messages", v)}
+              />
+              <ToggleRow
+                label="Shift assignments"
+                checked={prefs.shift_assignments}
+                onChange={(v) => updatePref("shift_assignments", v)}
+              />
+              <ToggleRow
+                label="Incidents"
+                checked={prefs.incidents}
+                onChange={(v) => updatePref("incidents", v)}
+              />
+              <ToggleRow
+                label="Shift trades"
+                checked={prefs.trades}
+                onChange={(v) => updatePref("trades", v)}
+              />
+            </div>
+          </section>
 
-      <section className="bg-white rounded-3xl shadow-soft p-5 grain-overlay">
-        <div className="relative flex flex-col gap-3">
-          <ToggleRow
-            label="Sounds"
-            description="Best-effort in-app sounds while Caregiver is open."
-            checked={preferences.sounds_enabled}
-            onChange={(value) => updatePreference("sounds_enabled", value)}
-          />
-          <ToggleRow
-            label="Message sound"
-            description="A softer tone for new messages."
-            checked={preferences.message_sound_enabled}
-            onChange={(value) => updatePreference("message_sound_enabled", value)}
-          />
-          <ToggleRow
-            label="Urgent incident sound"
-            description="A repeated tone for urgent incident alerts."
-            checked={preferences.urgent_incident_sound_enabled}
-            onChange={(value) =>
-              updatePreference("urgent_incident_sound_enabled", value)
-            }
-          />
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={() => playNotificationSound("message")}
-              className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2.5 rounded-2xl text-sm font-medium transition"
-            >
-              Test message
-            </button>
-            <button
-              onClick={() => playNotificationSound("urgent")}
-              className="flex-1 bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-2.5 rounded-2xl text-sm font-medium transition"
-            >
-              Test urgent
-            </button>
-          </div>
-          <p className="text-xs text-ink-500">
-            Browsers may block sounds until you interact with the page. Native
-            push notifications use the operating system notification sound.
-          </p>
-        </div>
-      </section>
+          <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
+            <h2 className="font-display text-xl mb-4">Sounds</h2>
+            <div className="space-y-4">
+              <ToggleRow
+                label="Enable notification sounds"
+                checked={prefs.sounds_enabled}
+                onChange={(v) => updatePref("sounds_enabled", v)}
+              />
+              <div className="pt-2 flex gap-2">
+                <button
+                  onClick={() => playNotificationSound("message")}
+                  className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
+                >
+                  Test Message
+                </button>
+                <button
+                  onClick={() => playNotificationSound("urgent")}
+                  className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
+                >
+                  Test Urgent
+                </button>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </main>
   );
 }
 
 function ToggleRow({
   label,
-  description,
   checked,
   onChange,
 }: {
   label: string;
-  description: string;
   checked: boolean;
-  onChange: (checked: boolean) => void;
+  onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-4 border-b border-cream-200 last:border-b-0 pb-3 last:pb-0">
-      <span>
-        <span className="block font-medium text-ink-900">{label}</span>
-        <span className="block text-xs text-ink-500">{description}</span>
-      </span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-5 w-5 accent-forest-600 shrink-0"
-      />
-    </label>
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm font-medium text-ink-900">{label}</span>
+      <button
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+          checked ? "bg-forest-600" : "bg-cream-200"
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+            checked ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </div>
   );
 }

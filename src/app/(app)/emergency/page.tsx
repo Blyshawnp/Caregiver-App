@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import EmergencyPanel from "@/components/emergency-panel";
-import { StarOfLifeIcon } from "@/components/icons";
+import { StarOfLifeIcon, ArrowRightIcon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -67,17 +67,24 @@ export default async function EmergencyPage() {
     allAllergies = [];
   }
 
+  // Count open urgent incidents
+  const { count: urgentCount } = await supabase
+    .from("incidents")
+    .select("id", { count: "exact", head: true })
+    .eq("severity", "urgent")
+    .eq("status", "open");
+
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
       <header className="mb-5">
         <Link
-          href="/me"
+          href="/home"
           className="text-sm text-forest-600 hover:underline mb-2 inline-block"
         >
           ← Back
         </Link>
         <div className="flex items-center gap-3">
-          <span className="w-12 h-12 rounded-2xl bg-red-600 text-cream-50 grid place-items-center shrink-0">
+          <span className="w-12 h-12 rounded-2xl bg-red-600 text-cream-50 grid place-items-center shrink-0 shadow-lg">
             <StarOfLifeIcon size={24} />
           </span>
           <div>
@@ -85,11 +92,24 @@ export default async function EmergencyPage() {
               Emergency
             </h1>
             <p className="text-ink-500 text-sm">
-              Tap to expand. Tap any phone number to call directly.
+              Tap to expand. Tap any phone number to call.
             </p>
           </div>
         </div>
       </header>
+
+      {urgentCount ? (
+        <Link
+          href="/incidents"
+          className="flex items-center justify-between bg-terracotta-500 text-cream-50 p-4 rounded-3xl mb-4 shadow-soft animate-pulse"
+        >
+          <div className="flex items-center gap-3">
+             <StarOfLifeIcon size={20} className="text-cream-50" />
+             <p className="font-medium text-sm">{urgentCount} urgent incident{urgentCount === 1 ? '' : 's'} active</p>
+          </div>
+          <ArrowRightIcon size={16} />
+        </Link>
+      ) : null}
 
       <a
         href="tel:911"

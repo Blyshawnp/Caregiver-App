@@ -124,7 +124,7 @@ async function getContext() {
 
 function pickBooleanFields(payload: PreferencesPayload) {
   const update: PreferencesPayload = {};
-  for (const key of [
+  const fields = [
     "messages",
     "shift_assignments",
     "trades",
@@ -133,7 +133,8 @@ function pickBooleanFields(payload: PreferencesPayload) {
     "sounds_enabled",
     "message_sound_enabled",
     "urgent_incident_sound_enabled",
-  ] as const) {
+  ] as const;
+  for (const key of fields) {
     if (typeof payload[key] === "boolean") {
       update[key] = payload[key];
     }

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import IncidentForm from "./incident-form";
+import ResolveButton from "./resolve-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,6 +20,7 @@ type IncidentRow = {
   severity: string;
   status: string;
   created_at: string;
+  reported_by: string;
   profiles: { full_name: string | null } | null;
   clients: { full_name: string | null } | null;
 };
@@ -38,6 +40,8 @@ export default async function IncidentsPage() {
   if (!profile) redirect("/login");
 
   const canReport = profile.role === "caregiver" || profile.role === "admin";
+  const isAdmin = profile.role === "admin";
+
   const { data: shifts } = await supabase
     .from("shifts")
     .select("id, scheduled_start, caregiver_id, clients(full_name)")
@@ -48,7 +52,7 @@ export default async function IncidentsPage() {
 
   const { data: incidents } = await supabase
     .from("incidents")
-    .select("id, title, description, severity, status, created_at, profiles:reported_by(full_name), clients(full_name)")
+    .select("id, title, description, severity, status, created_at, reported_by, profiles:reported_by(full_name), clients(full_name)")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -73,16 +77,26 @@ export default async function IncidentsPage() {
 
       <ul className="space-y-2">
         {((incidents ?? []) as unknown as IncidentRow[]).map((incident) => (
-          <li key={incident.id} className="bg-white rounded-2xl shadow-soft p-4">
+          <li key={incident.id} className={`bg-white rounded-2xl shadow-soft p-4 ${incident.status === 'resolved' ? 'opacity-60' : ''}`}>
             <div className="flex items-baseline justify-between gap-3">
-              <p className="font-medium text-ink-900">{incident.title}</p>
-              <span className="text-[10px] uppercase tracking-wide text-terracotta-600">
-                {incident.severity}
-              </span>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-ink-900">{incident.title}</p>
+                {incident.status === 'resolved' && (
+                   <span className="text-[9px] bg-forest-100 text-forest-700 px-1.5 py-0.5 rounded-full font-bold uppercase">Resolved</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] uppercase tracking-wide text-terracotta-600">
+                  {incident.severity}
+                </span>
+                {incident.status === 'open' && (isAdmin || incident.reported_by === user.id) && (
+                  <ResolveButton incidentId={incident.id} />
+                )}
+              </div>
             </div>
             <p className="text-sm text-ink-500 mt-1 line-clamp-2">{incident.description}</p>
             <p className="text-xs text-ink-400 mt-2">
-              {incident.profiles?.full_name ?? "Reporter"} · {incident.clients?.full_name ?? "No client"} · {formatDate(incident.created_at)}
+              {incident.profiles?.full_name ?? "Reporter"} · {incident.clients?.full_name ?? "No client"} · {formatDate(incident.created_at)}
             </p>
           </li>
         ))}

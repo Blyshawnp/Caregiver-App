@@ -67,12 +67,12 @@ export default async function EmergencyPage() {
     allAllergies = [];
   }
 
-  // Count open urgent incidents
-  const { count: urgentCount } = await supabase
+  const { data: urgentIncidents } = await supabase
     .from("incidents")
-    .select("id", { count: "exact", head: true })
+    .select("id, title")
     .eq("severity", "urgent")
-    .eq("status", "open");
+    .eq("status", "open")
+    .order("created_at", { ascending: false });
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -92,33 +92,41 @@ export default async function EmergencyPage() {
               Emergency
             </h1>
             <p className="text-ink-500 text-sm">
-              Tap to expand. Tap any phone number to call.
+              Critical info and active alerts.
             </p>
           </div>
         </div>
       </header>
 
-      {urgentCount ? (
-        <Link
-          href="/incidents"
-          className="flex items-center justify-between bg-terracotta-500 text-cream-50 p-4 rounded-3xl mb-4 shadow-soft animate-pulse"
-        >
-          <div className="flex items-center gap-3">
-             <StarOfLifeIcon size={20} className="text-cream-50" />
-             <p className="font-medium text-sm">{urgentCount} urgent incident{urgentCount === 1 ? '' : 's'} active</p>
-          </div>
-          <ArrowRightIcon size={16} />
-        </Link>
-      ) : null}
+      {(urgentIncidents ?? []).length > 0 && (
+        <section className="mb-6 space-y-2">
+          {urgentIncidents?.map((inc) => (
+            <Link
+              key={inc.id}
+              href={`/incidents?incident=${inc.id}`}
+              className="flex items-center justify-between bg-terracotta-500 text-white p-5 rounded-[2rem] shadow-lg animate-pulse border-2 border-white/20"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                 <StarOfLifeIcon size={24} className="shrink-0" />
+                 <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-widest font-bold opacity-80 leading-none mb-1">Active Urgent Incident</p>
+                    <p className="font-display text-lg truncate leading-none">{inc.title}</p>
+                 </div>
+              </div>
+              <ArrowRightIcon size={20} className="shrink-0 ml-2" />
+            </Link>
+          ))}
+        </section>
+      )}
 
       <a
         href="tel:911"
-        className="block bg-red-600 hover:bg-red-700 text-cream-50 rounded-3xl p-5 mb-4 transition active:scale-[0.99] shadow-soft text-center"
+        className="block bg-red-600 hover:bg-red-700 text-cream-50 rounded-[2rem] p-6 mb-8 transition active:scale-[0.99] shadow-xl text-center border-4 border-white/10"
       >
-        <p className="text-xs uppercase tracking-[0.2em] text-cream-50/80 mb-1">
-          Life-threatening emergency
+        <p className="text-xs uppercase tracking-[0.3em] text-cream-50/70 mb-1 font-bold">
+          Emergency Services
         </p>
-        <p className="font-display text-3xl">Call 911</p>
+        <p className="font-display text-4xl">Call 911</p>
       </a>
 
       {clients.length === 0 ? (
@@ -126,7 +134,8 @@ export default async function EmergencyPage() {
           <p className="text-sm text-ink-500">No clients to show.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold px-1">Client Medical Info</h2>
           {clients.map((client) => {
             const clientAllergies = allAllergies.filter(
               (a) => a.client_id === client.id
@@ -142,9 +151,9 @@ export default async function EmergencyPage() {
                       href={`https://maps.google.com/?q=${encodeURIComponent(client.address)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-forest-600 hover:underline"
+                      className="text-xs text-forest-600 hover:underline font-medium"
                     >
-                      Map
+                      View Map
                     </a>
                   )}
                 </div>

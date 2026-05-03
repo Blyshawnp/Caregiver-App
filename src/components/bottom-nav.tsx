@@ -48,7 +48,7 @@ export default function BottomNav({
           {tabs.map(({ href, label, Icon, key }) => {
             const active =
               pathname === href || pathname?.startsWith(href + "/");
-            const showBadge = key === "messages" && unreadMessages > 0;
+            const showBadge = (key === "messages" || key === "notifications") && unreadMessages > 0;
 
             return (
               <Link
@@ -106,16 +106,10 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
       key: "messages",
     },
     {
-      href: "/notifications",
-      label: t("nav.notifications", lang),
-      Icon: BellIcon,
-      key: "notifications",
-    },
-    {
-      href: "/incidents",
-      label: "Incidents",
+      href: "/emergency",
+      label: "Emergency",
       Icon: StarOfLifeIcon,
-      key: "incidents",
+      key: "emergency",
     },
     {
       href: "/me",
@@ -126,11 +120,6 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
   ];
 
   switch (role) {
-    case "caregiver":
-      return commonCareTabs;
-    case "client":
-    case "family":
-      return commonCareTabs;
     case "admin":
       return [
         {
@@ -158,16 +147,10 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
           key: "schedule",
         },
         {
-          href: "/incidents",
-          label: "Incidents",
+          href: "/emergency",
+          label: "Emergency",
           Icon: StarOfLifeIcon,
-          key: "incidents",
-        },
-        {
-          href: "/notifications",
-          label: t("nav.notifications", lang),
-          Icon: BellIcon,
-          key: "notifications",
+          key: "emergency",
         },
         {
           href: "/me",
@@ -177,25 +160,6 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
         },
       ];
     default:
-      return [
-        {
-          href: "/home",
-          label: t("nav.home", lang),
-          Icon: HomeIcon,
-          key: "home",
-        },
-        {
-          href: "/messages",
-          label: t("nav.messages", lang),
-          Icon: MessageIcon,
-          key: "messages",
-        },
-        {
-          href: "/me",
-          label: t("nav.me", lang),
-          Icon: UserIcon,
-          key: "me",
-        },
-      ];
+      return commonCareTabs;
   }
 }

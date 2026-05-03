@@ -10,6 +10,37 @@ type PushSubscriptionPayload = {
   };
 };
 
+export async function GET(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const endpoint = new URL(request.url).searchParams.get("endpoint");
+  const admin = createAdminClient();
+  let query = admin
+    .from("push_subscriptions")
+    .select("endpoint")
+    .eq("user_id", user.id)
+    .eq("is_active", true);
+
+  if (endpoint) query = query.eq("endpoint", endpoint);
+
+  const { data, error } = await query.limit(1);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    enabled: (data ?? []).length > 0,
+    endpoint: data?.[0]?.endpoint ?? null,
+  });
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {

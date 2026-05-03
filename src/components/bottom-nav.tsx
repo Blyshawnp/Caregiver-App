@@ -9,6 +9,7 @@ import {
   GridIcon,
   ListIcon,
   MessageIcon,
+  StarOfLifeIcon,
   UserIcon,
 } from "./icons";
 import { t, type Lang } from "@/lib/i18n";
@@ -111,6 +112,12 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
       key: "notifications",
     },
     {
+      href: "/incidents",
+      label: "Incidents",
+      Icon: StarOfLifeIcon,
+      key: "incidents",
+    },
+    {
       href: "/me",
       label: t("nav.me", lang),
       Icon: UserIcon,
@@ -149,6 +156,18 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
           label: t("nav.schedule", lang),
           Icon: CalendarIcon,
           key: "schedule",
+        },
+        {
+          href: "/incidents",
+          label: "Incidents",
+          Icon: StarOfLifeIcon,
+          key: "incidents",
+        },
+        {
+          href: "/notifications",
+          label: t("nav.notifications", lang),
+          Icon: BellIcon,
+          key: "notifications",
         },
         {
           href: "/me",

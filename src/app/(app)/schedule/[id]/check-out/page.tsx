@@ -79,7 +79,9 @@ export default async function CheckOutPage({
     );
   }
 
-  const existing = shift.check_ins?.[0];
+  const existing = (shift.check_ins ?? []).find(
+    (row) => row.check_in_time && !row.check_out_time
+  );
   if (!existing?.check_in_time) {
     redirect(`/schedule/${id}/check-in`);
   }

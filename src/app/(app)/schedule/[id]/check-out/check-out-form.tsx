@@ -152,7 +152,8 @@ export default function CheckOutForm({
       return;
     }
 
-    window.location.href = `/schedule/${shift.id}?refreshed=${Date.now()}`;
+    router.refresh();
+    router.replace(`/schedule/${shift.id}?refreshed=${Date.now()}`);
   }
 
   const checkInDate = new Date(checkInTime);

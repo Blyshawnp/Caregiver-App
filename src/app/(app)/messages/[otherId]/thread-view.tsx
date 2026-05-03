@@ -154,7 +154,9 @@ export default function ThreadView({
           ← Back
         </Link>
         <div className="flex items-center gap-3">
-          <UserAvatar person={other} size="md" />
+          <Link href={`/profiles/${other.id}`} aria-label={`View ${other.full_name}'s profile`}>
+            <UserAvatar person={other} size="md" />
+          </Link>
           <div>
             <h1 className="font-display text-xl text-ink-900 leading-tight">
               {other.full_name}

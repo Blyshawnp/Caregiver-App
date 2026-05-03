@@ -30,12 +30,24 @@ export async function enablePushNotifications() {
     throw new Error("Push notifications are not configured.");
   }
 
-  const permission = await Notification.requestPermission();
+  const permission = await withTimeout(
+    Notification.requestPermission(),
+    30_000,
+    "Notification permission request timed out."
+  );
   if (permission !== "granted") {
-    throw new Error("Notification permission was not granted.");
+    throw new Error(
+      permission === "denied"
+        ? "Notifications are blocked for this browser. Enable them in browser settings and try again."
+        : "Notification permission was dismissed."
+    );
   }
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await withTimeout(
+    navigator.serviceWorker.ready,
+    15_000,
+    "Service worker was not ready. Refresh the app and try again."
+  );
   const existing = await registration.pushManager.getSubscription();
   const subscription =
     existing ??
@@ -44,28 +56,72 @@ export async function enablePushNotifications() {
       applicationServerKey: urlBase64ToUint8Array(publicKey),
     }));
 
-  await fetch("/api/push/subscriptions", {
+  const response = await withTimeout(
+    fetch("/api/push/subscriptions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(subscription.toJSON()),
+    }),
+    15_000,
+    "Saving push subscription timed out."
+  );
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? "Could not save push subscription.");
+  }
+
+  const status = await getPushDeviceStatus(subscription.endpoint);
+  if (!status.enabled) {
+    throw new Error("Push subscription was not saved for this device.");
+  }
+
+  return subscription;
+}
+
+export async function getPushDeviceStatus(endpoint?: string | null) {
+  const query = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : "";
+  const response = await fetch(`/api/push/subscriptions${query}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? "Could not verify push subscription.");
+  }
+  return (await response.json()) as { enabled: boolean; endpoint: string | null };
+}
+
+export async function saveCurrentPushSubscription(subscription: PushSubscription) {
+  const response = await fetch("/api/push/subscriptions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(subscription.toJSON()),
   });
-
-  return subscription;
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? "Could not save push subscription.");
+  }
 }
 
 export async function disablePushNotifications() {
   if (!isPushSupported()) return;
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
-  await fetch("/api/push/subscriptions", {
+  const response = await fetch("/api/push/subscriptions", {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ endpoint: subscription?.endpoint }),
   });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? "Could not disable push notifications.");
+  }
   await subscription?.unsubscribe();
 }
 
@@ -77,6 +133,22 @@ export async function getPushPreferences() {
     throw new Error("Could not load notification preferences.");
   }
   return (await response.json()) as PushPreferences;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 }
 
 export async function savePushPreferences(update: Partial<PushPreferences>) {

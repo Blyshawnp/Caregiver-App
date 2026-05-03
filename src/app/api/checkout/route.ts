@@ -116,12 +116,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not your shift" }, { status: 403 });
     }
 
-    const { data: checkIn } = await admin
+    const { data: requestedCheckIn } = await admin
       .from("check_ins")
       .select("id, shift_id, caregiver_id, check_in_time, check_out_time")
       .eq("id", payload.checkInId)
       .eq("shift_id", payload.shiftId)
       .maybeSingle<CheckInRecord>();
+
+    let checkIn = requestedCheckIn;
+    if (!checkIn?.check_in_time || checkIn.check_out_time) {
+      const { data: activeCheckIn } = await admin
+        .from("check_ins")
+        .select("id, shift_id, caregiver_id, check_in_time, check_out_time")
+        .eq("shift_id", payload.shiftId)
+        .eq("caregiver_id", caller.id)
+        .not("check_in_time", "is", null)
+        .is("check_out_time", null)
+        .order("check_in_time", { ascending: false })
+        .limit(1)
+        .maybeSingle<CheckInRecord>();
+      checkIn = activeCheckIn;
+    }
 
     if (!checkIn?.check_in_time) {
       return NextResponse.json({ error: "This shift is not checked in" }, { status: 409 });
@@ -183,14 +198,22 @@ export async function POST(request: Request) {
       update.flag_reason = flagReason;
     }
 
-    const { error: updateError } = await admin
+    const { data: checkedOut, error: updateError } = await admin
       .from("check_ins")
       .update(update)
       .eq("id", checkIn.id)
-      .is("check_out_time", null);
+      .is("check_out_time", null)
+      .select("id, check_out_time")
+      .maybeSingle<{ id: string; check_out_time: string | null }>();
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+    if (!checkedOut?.check_out_time) {
+      return NextResponse.json(
+        { error: "Checkout did not update an active check-in. Refresh and try again." },
+        { status: 409 }
+      );
     }
 
     const warnings: string[] = [];

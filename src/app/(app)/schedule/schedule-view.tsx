@@ -413,25 +413,17 @@ function CalendarView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
               >
                 <span className="text-xs leading-none">{date.getDate()}</span>
                 {dayShifts.length > 0 && (
-                  <span className="mt-1 flex w-full flex-col gap-0.5">
-                    {dayShifts.slice(0, 2).map((s) => (
-                      <span
-                        key={s.id}
-                        className="block h-1.5 rounded-full"
-                        style={{
-                          backgroundColor: isSelected
-                            ? "#FCFAF5"
-                            : shiftDisplayColor(s),
-                        }}
-                      />
+                  <span className="mt-1 flex w-full flex-wrap gap-0.5">
+                    {dayShifts.slice(0, 3).map((s) => (
+                      <MiniShiftAvatar key={s.id} shift={s} selected={isSelected} />
                     ))}
-                    {dayShifts.length > 2 && (
+                    {dayShifts.length > 3 && (
                       <span
                         className={`text-[9px] leading-none ${
                           isSelected ? "text-cream-50/80" : "text-ink-500"
                         }`}
                       >
-                        +{dayShifts.length - 2}
+                        +{dayShifts.length - 3}
                       </span>
                     )}
                   </span>
@@ -539,6 +531,66 @@ function formatLongDate(d: Date) {
     month: "long",
     day: "numeric",
   });
+}
+
+function MiniShiftAvatar({
+  shift,
+  selected,
+}: {
+  shift: ScheduleShift;
+  selected: boolean;
+}) {
+  if (!shift.caregiver_name) {
+    return (
+      <span
+        className={`h-4 w-4 rounded-full border border-dashed grid place-items-center text-[8px] leading-none ${
+          selected
+            ? "border-cream-50/70 text-cream-50"
+            : "border-ink-300 text-ink-400"
+        }`}
+        title="Open shift"
+      >
+        +
+      </span>
+    );
+  }
+
+  const initials = shift.caregiver_name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+
+  if (shift.caregiver_avatar_url) {
+    return (
+      <img
+        src={shift.caregiver_avatar_url}
+        alt=""
+        className={`h-4 w-4 rounded-full object-cover ring-1 ${
+          selected ? "ring-cream-50/70" : "ring-black/10"
+        }`}
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`h-4 w-4 rounded-full grid place-items-center text-[7px] font-display leading-none ${
+        selected ? "text-forest-700 bg-cream-50" : "text-cream-50"
+      }`}
+      style={{
+        backgroundColor: selected
+          ? undefined
+          : shift.caregiver_avatar_color ?? shiftDisplayColor(shift),
+      }}
+      title={shift.caregiver_name}
+    >
+      {initials || "?"}
+    </span>
+  );
 }
 
 function shiftDisplayColor(shift: ScheduleShift) {

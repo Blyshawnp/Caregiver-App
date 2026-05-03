@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   disablePushNotifications,
   enablePushNotifications,
+  getPushDeviceStatus,
   isPushSupported,
   savePushPreferences,
   type PushPreferences,
@@ -32,8 +33,18 @@ export default function NotificationSettings({
     setPermission(Notification.permission);
     void navigator.serviceWorker.ready
       .then((registration) => registration.pushManager.getSubscription())
-      .then((subscription) => setEnabled(!!subscription))
-      .catch(() => {});
+      .then(async (subscription) => {
+        if (!subscription) {
+          setEnabled(false);
+          return;
+        }
+        const status = await getPushDeviceStatus(subscription.endpoint);
+        setEnabled(status.enabled);
+      })
+      .catch((error) => {
+        setEnabled(false);
+        setMessage(error instanceof Error ? error.message : "Could not verify push status.");
+      });
   }, []);
 
   async function updatePreference(key: keyof PushPreferences, value: boolean) {
@@ -53,9 +64,10 @@ export default function NotificationSettings({
     setSaving(true);
     setMessage(null);
     try {
-      await enablePushNotifications();
+      const subscription = await enablePushNotifications();
       setPermission(Notification.permission);
-      setEnabled(true);
+      const status = await getPushDeviceStatus(subscription.endpoint);
+      setEnabled(status.enabled && !!subscription);
       setMessage("Push notifications are enabled on this device.");
     } catch (error) {
       setPermission(isPushSupported() ? Notification.permission : "unsupported");

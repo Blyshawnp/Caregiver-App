@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { categoryForNotificationKind, soundForNotificationKind } from "@/lib/push-categories";
 import { playNotificationSound } from "@/lib/notification-sounds";
@@ -17,6 +17,11 @@ export default function NotificationBell({
 }) {
   const [count, setCount] = useState(initialCount);
   const [preferences, setPreferences] = useState<PushPreferences | null>(null);
+  const preferencesRef = useRef<PushPreferences | null>(null);
+
+  useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -38,7 +43,7 @@ export default function NotificationBell({
           filter: `recipient_id=eq.${userId}`,
         },
         (payload) => {
-          setCount((c) => c + 1);
+          void refetchCount();
 
           const data = payload.new as {
             kind?: string;
@@ -47,14 +52,15 @@ export default function NotificationBell({
           };
           const kind = data.kind ?? "general";
           const category = categoryForNotificationKind(kind);
+          const prefs = preferencesRef.current;
 
-          if (preferences?.sounds_enabled && preferences[category]) {
+          if (prefs?.sounds_enabled && prefs[category]) {
             const sound = soundForNotificationKind(kind);
             const shouldPlay =
               sound === "message"
-                ? preferences.message_sound_enabled
+                ? prefs.message_sound_enabled
                 : sound === "urgent"
-                  ? preferences.urgent_incident_sound_enabled
+                  ? prefs.urgent_incident_sound_enabled
                   : true;
             if (shouldPlay) {
               void playNotificationSound(sound).catch(() => {});
@@ -106,7 +112,7 @@ export default function NotificationBell({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [userId, preferences]);
+  }, [userId]);
 
   // Sync if initialCount changes (page navigation re-renders parent)
   useEffect(() => {

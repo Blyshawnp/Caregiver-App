@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { MessageIcon, ArrowRightIcon, PlusIcon } from "@/components/icons";
 import UserAvatar from "@/components/user-avatar";
+import MessagesRefreshListener from "./messages-refresh-listener";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,6 +18,27 @@ type Thread = {
   last_at: string;
   unread_count: number;
   is_from_me: boolean;
+};
+
+type MessageRow = {
+  id: string;
+  sender_id: string;
+  recipient_id: string | null;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  sender: {
+    full_name: string;
+    role: "admin" | "client" | "caregiver" | "family";
+    avatar_url: string | null;
+    avatar_color: string | null;
+  } | null;
+  recipient: {
+    full_name: string;
+    role: "admin" | "client" | "caregiver" | "family";
+    avatar_url: string | null;
+    avatar_color: string | null;
+  } | null;
 };
 
 export default async function MessagesPage() {
@@ -38,49 +60,11 @@ export default async function MessagesPage() {
 
   if (!profile) redirect("/login");
 
-  // All messages I sent or received
-  const { data: messages } = await supabase
-    .from("messages")
-    .select(
-      `
-      id,
-      sender_id,
-      recipient_id,
-      content,
-      is_read,
-      created_at,
-      sender:sender_id ( full_name, role, avatar_url, avatar_color ),
-      recipient:recipient_id ( full_name, role, avatar_url, avatar_color )
-    `
-    )
-    .or(`sender_id.eq.${profile.id},recipient_id.eq.${profile.id}`)
-    .order("created_at", { ascending: false })
-    .limit(200);
-
-  type MessageRow = {
-    id: string;
-    sender_id: string;
-    recipient_id: string | null;
-    content: string;
-    is_read: boolean;
-    created_at: string;
-    sender: {
-      full_name: string;
-      role: "admin" | "client" | "caregiver" | "family";
-      avatar_url: string | null;
-      avatar_color: string | null;
-    } | null;
-    recipient: {
-      full_name: string;
-      role: "admin" | "client" | "caregiver" | "family";
-      avatar_url: string | null;
-      avatar_color: string | null;
-    } | null;
-  };
+  const messages = await fetchThreadMessages(supabase, profile.id);
 
   // Group by "other person" (whoever isn't me in the message)
   const threadMap = new Map<string, Thread>();
-  for (const m of (messages ?? []) as unknown as MessageRow[]) {
+  for (const m of messages) {
     const isFromMe = m.sender_id === profile.id;
     const otherId = isFromMe ? m.recipient_id : m.sender_id;
     if (!otherId) continue; // skip org-broadcasts (recipient null) for now
@@ -112,6 +96,7 @@ export default async function MessagesPage() {
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
+      <MessagesRefreshListener userId={profile.id} />
       <header className="flex items-end justify-between mb-6">
         <div>
           <h1 className="font-display text-3xl text-ink-900">Messages</h1>
@@ -198,6 +183,40 @@ export default async function MessagesPage() {
       )}
     </main>
   );
+}
+
+async function fetchThreadMessages(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+) {
+  const pageSize = 1000;
+  const rows: MessageRow[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("messages")
+      .select(
+        `
+        id,
+        sender_id,
+        recipient_id,
+        content,
+        is_read,
+        created_at,
+        sender:sender_id ( full_name, role, avatar_url, avatar_color ),
+        recipient:recipient_id ( full_name, role, avatar_url, avatar_color )
+      `
+      )
+      .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error || !data || data.length === 0) break;
+    rows.push(...((data ?? []) as unknown as MessageRow[]));
+    if (data.length < pageSize) break;
+  }
+
+  return rows;
 }
 
 function timeAgo(d: Date) {

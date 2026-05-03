@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { sendNotificationEvent } from "@/lib/notify-client";
 import UserAvatar from "@/components/user-avatar";
 
 type Person = {
@@ -112,38 +111,37 @@ export default function ThreadView({
     setMessages((prev) => [...prev, optimistic]);
     setText("");
 
-    const { data: insertedRows, error } = await supabase
-      .from("messages")
-      .insert({
-        organization_id: me.organization_id,
-        sender_id: me.id,
-        recipient_id: other.id,
+    const response = await fetch("/api/messages/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        recipientId: other.id,
         content,
-      })
-      .select("id, sender_id, recipient_id, content, is_read, created_at");
+      }),
+    });
 
-    if (error || !insertedRows || insertedRows.length === 0) {
+    const result = (await response.json().catch(() => null)) as
+      | { message?: Message; error?: string }
+      | null;
+
+    if (!response.ok || !result?.message) {
       // Roll back optimistic
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setError(error?.message ?? "Could not send message.");
+      setError(result?.error ?? "Could not send message.");
       setText(content);
       setSending(false);
       return;
     }
 
     // Replace optimistic with real
-    const real = insertedRows[0] as Message;
+    const real = result.message;
     setMessages((prev) =>
       prev.map((m) => (m.id === tempId ? real : m))
     );
 
     setSending(false);
-
-    void sendNotificationEvent({
-      type: "new_message",
-      recipientId: other.id,
-      preview: content,
-    });
   }
 
   return (

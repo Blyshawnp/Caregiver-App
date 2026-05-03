@@ -482,7 +482,7 @@ async function buildNewMessageRows(
     {
       organization_id: caller.organization_id,
       recipient_id: payload.recipientId,
-      kind: "new_message",
+      kind: "message",
       title: `Message from ${caller.full_name}`,
       body: payload.preview.slice(0, 120),
       link: `/messages/${caller.id}`,

@@ -6,7 +6,7 @@ export type NotificationCategory =
   | "general";
 
 export function categoryForNotificationKind(kind: string): NotificationCategory {
-  if (kind === "new_message") return "messages";
+  if (kind === "message" || kind === "new_message") return "messages";
   if (kind.startsWith("trade_") || kind.includes("trade")) return "trades";
   if (kind.includes("incident")) return "incidents";
   if (
@@ -23,7 +23,7 @@ export function categoryForNotificationKind(kind: string): NotificationCategory 
 }
 
 export function soundForNotificationKind(kind: string) {
-  if (kind === "new_message") return "message";
+  if (kind === "message" || kind === "new_message") return "message";
   if (kind.includes("incident") && kind.includes("urgent")) return "urgent";
   if (kind.includes("incident")) return "urgent";
   return "normal";

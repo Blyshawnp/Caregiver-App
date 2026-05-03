@@ -9,7 +9,9 @@ import {
   ArrowRightIcon,
   CalendarIcon,
   MessageIcon,
+  StarOfLifeIcon,
 } from "@/components/icons";
+import UrgentIncidentBanner from "@/components/urgent-incident-banner";
 import type { ShiftRow } from "./page";
 import type { ActiveShift } from "./page";
 import { getShiftStatus } from "@/lib/shift-status";
@@ -21,7 +23,6 @@ type State =
   | { kind: "no_shifts" };
 
 function pickState(shifts: ShiftRow[], now: Date): State {
-  // 1. Currently checked in?
   const active = shifts.find(
     (s) =>
       getShiftStatus(
@@ -32,7 +33,6 @@ function pickState(shifts: ShiftRow[], now: Date): State {
   );
   if (active) return { kind: "checked_in", shift: active };
 
-  // 2. Next shift not yet started/checked-in (skip pending/declined)
   const next = shifts.find((s) => {
     const status = getShiftStatus(
       s,
@@ -56,23 +56,25 @@ function pickState(shifts: ShiftRow[], now: Date): State {
 
 export default function HomeContent({
   role,
+  organizationId,
   shifts,
   activeShifts,
 }: {
   role: "admin" | "client" | "caregiver" | "family";
+  organizationId: string;
   userId: string;
   shifts: ShiftRow[];
   activeShifts: ActiveShift[];
 }) {
   const [now, setNow] = useState(() => new Date());
 
-  // tick every minute so countdowns stay fresh
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
   const state = useMemo(() => pickState(shifts, now), [shifts, now]);
+  
   const upcomingList = useMemo(
     () =>
       shifts
@@ -94,6 +96,7 @@ export default function HomeContent({
         .slice(0, 4),
     [shifts, now]
   );
+
   const pendingShifts = useMemo(
     () =>
       role === "caregiver"
@@ -104,6 +107,8 @@ export default function HomeContent({
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
+      <UrgentIncidentBanner organizationId={organizationId} />
+
       {/* Active right now (admin/client only) */}
       {role !== "caregiver" && activeShifts.length > 0 && (
         <ActivePanel activeShifts={activeShifts} now={now} />
@@ -145,7 +150,9 @@ export default function HomeContent({
         <QuickLink href="/schedule" label="Schedule" Icon={CalendarIcon} />
         <QuickLink href="/tasks" label="Tasks" Icon={CheckSquareIcon} />
         <QuickLink href="/messages" label="Messages" Icon={MessageIcon} />
-        <QuickLink href="/me" label="Pay & Profile" Icon={ClockIcon} />
+        <QuickLink href="/incidents" label="Incidents" Icon={StarOfLifeIcon} />
+        <QuickLink href="/emergency" label="Emergency" Icon={MapPinIcon} />
+        <QuickLink href="/me" label="Account" Icon={ClockIcon} />
       </section>
 
       {/* Upcoming list */}
@@ -191,7 +198,6 @@ function CheckedInCard({ shift, now }: { shift: ShiftRow; now: Date }) {
       href={`/schedule/${shift.id}`}
       className="block bg-terracotta-500 text-cream-50 rounded-3xl p-6 shadow-lifted relative overflow-hidden transition hover:bg-terracotta-600 active:scale-[0.99]"
     >
-      {/* decorative */}
       <div
         aria-hidden
         className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-cream-50/10 blur-2xl"
@@ -272,8 +278,8 @@ function StartingSoonCard({
               : `In ${Math.floor(minsUntil / 60)}h ${minsUntil % 60}m`}
         </h2>
         <p className="text-ink-500 text-sm mb-5">
-          {formatTime(startsAt)} · {shift.shift_type_name ?? "Shift"} for{" "}
-          {shift.client_name ?? "General availability"}
+          {formatTime(startsAt)} · {shift.shift_type_name ?? "Shift"}
+          for {shift.client_name ?? "General availability"}
         </p>
 
         {shift.client_address && (
@@ -353,8 +359,7 @@ function NoShiftsCard({
 }: {
   role: "admin" | "client" | "caregiver" | "family";
 }) {
-  return (
-    <article className="bg-white rounded-3xl p-8 shadow-soft text-center grain-overlay">
+  return (    <article className="bg-white rounded-3xl p-8 shadow-soft text-center grain-overlay">
       <div className="relative">
         <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-cream-200 grid place-items-center text-ink-500">
           <CalendarIcon size={26} />

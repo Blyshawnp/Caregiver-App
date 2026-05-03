@@ -97,6 +97,12 @@ type NotificationRequest =
       type: "shift_proposal_rejected";
       proposalId: string;
       reason?: string | null;
+    }
+  | {
+      type: "incident_reported" | "incident_urgent";
+      incidentId: string;
+      title: string;
+      severity: string;
     };
 
 export async function POST(request: Request) {
@@ -189,6 +195,9 @@ async function buildNotificationRows(
       return buildProposalApprovedRows(admin, caller, payload);
     case "shift_proposal_rejected":
       return buildProposalRejectedRows(admin, caller, payload);
+    case "incident_reported":
+    case "incident_urgent":
+      return buildIncidentRows(admin, caller, payload);
     default:
       return assertNever(payload);
   }
@@ -579,6 +588,25 @@ async function buildProposalRejectedRows(
       related_shift_id: proposal.shift_id ?? undefined,
     },
   ];
+}
+
+async function buildIncidentRows(
+  admin: ReturnType<typeof createAdminClient>,
+  caller: CallerProfile,
+  payload: Extract<NotificationRequest, { type: "incident_reported" | "incident_urgent" }>
+) {
+  const recipientIds = await getRoleRecipientIds(admin, caller.organization_id, ["admin", "client", "family"]);
+  const ids = recipientIds.filter(id => id !== caller.id);
+  if (ids.length === 0) return [];
+
+  return ids.map((recipientId) => ({
+    organization_id: caller.organization_id,
+    recipient_id: recipientId,
+    kind: payload.type,
+    title: payload.type === "incident_urgent" ? "Urgent incident reported" : "Incident reported",
+    body: `${caller.full_name}: ${payload.title}`,
+    link: `/incidents?incident=${payload.incidentId}`,
+  }));
 }
 
 async function getShift(

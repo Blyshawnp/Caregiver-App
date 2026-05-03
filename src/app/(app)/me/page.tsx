@@ -265,6 +265,7 @@ export default async function MePage() {
       )}
 
       {/* Help link, visible to all roles */}
+        <NavLink href="/emergency" label="Emergency Info" Icon={MapPinIcon} />
       <section className="space-y-2 mb-4">
         <NavLink
           href="/me/notifications"

@@ -30,9 +30,9 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, full_name")
+    .select("id, role, full_name, organization_id")
     .eq("id", user.id)
-    .single<{ id: string; role: "admin" | "client" | "caregiver" | "family"; full_name: string }>();
+    .single<{ id: string; role: "admin" | "client" | "caregiver" | "family"; full_name: string; organization_id: string }>();
 
   if (!profile) return null;
 
@@ -161,6 +161,7 @@ export default async function HomePage() {
     <HomeContent
       role={profile.role}
       userId={profile.id}
+      organizationId={profile.organization_id}
       shifts={shifts}
       activeShifts={activeShifts}
     />

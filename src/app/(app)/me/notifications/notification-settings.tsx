@@ -12,12 +12,16 @@ import {
 } from "@/lib/push-client";
 import { playNotificationSound } from "@/lib/notification-sounds";
 
-export default function NotificationSettings() {
+export default function NotificationSettings({ 
+  initialPreferences 
+}: { 
+  initialPreferences: PushPreferences 
+}) {
   const [supported, setPushSupported] = useState(false);
   const [deviceEnabled, setDeviceEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [prefs, setPrefs] = useState<PushPreferences | null>(null);
+  const [prefs, setPrefs] = useState<PushPreferences>(initialPreferences);
 
   useEffect(() => {
     setPushSupported(isPushSupported());
@@ -56,17 +60,14 @@ export default function NotificationSettings() {
   }
 
   async function updatePref(key: keyof PushPreferences, val: boolean) {
-    if (!prefs) return;
     const next = { ...prefs, [key]: val };
     setPrefs(next);
     try {
       await savePushPreferences({ [key]: val });
     } catch {
-      setPrefs(prefs); // rollback
+      setPrefs(prefs);
     }
   }
-
-  if (loading) return <div className="p-10 text-center text-ink-500">Loading settings...</div>;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto space-y-6">
@@ -100,60 +101,56 @@ export default function NotificationSettings() {
         )}
       </section>
 
-      {prefs && (
-        <>
-          <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
-            <h2 className="font-display text-xl mb-4">Alert Types</h2>
-            <div className="space-y-4">
-              <ToggleRow
-                label="Messages"
-                checked={prefs.messages}
-                onChange={(v) => updatePref("messages", v)}
-              />
-              <ToggleRow
-                label="Shift assignments"
-                checked={prefs.shift_assignments}
-                onChange={(v) => updatePref("shift_assignments", v)}
-              />
-              <ToggleRow
-                label="Incidents"
-                checked={prefs.incidents}
-                onChange={(v) => updatePref("incidents", v)}
-              />
-              <ToggleRow
-                label="Shift trades"
-                checked={prefs.trades}
-                onChange={(v) => updatePref("trades", v)}
-              />
-            </div>
-          </section>
+      <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
+        <h2 className="font-display text-xl mb-4">Alert Types</h2>
+        <div className="space-y-4">
+          <ToggleRow
+            label="Messages"
+            checked={prefs.messages}
+            onChange={(v) => updatePref("messages", v)}
+          />
+          <ToggleRow
+            label="Shift assignments"
+            checked={prefs.shift_assignments}
+            onChange={(v) => updatePref("shift_assignments", v)}
+          />
+          <ToggleRow
+            label="Incidents"
+            checked={prefs.incidents}
+            onChange={(v) => updatePref("incidents", v)}
+          />
+          <ToggleRow
+            label="Shift trades"
+            checked={prefs.trades}
+            onChange={(v) => updatePref("trades", v)}
+          />
+        </div>
+      </section>
 
-          <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
-            <h2 className="font-display text-xl mb-4">Sounds</h2>
-            <div className="space-y-4">
-              <ToggleRow
-                label="Enable notification sounds"
-                checked={prefs.sounds_enabled}
-                onChange={(v) => updatePref("sounds_enabled", v)}
-              />
-              <div className="pt-2 flex gap-2">
-                <button
-                  onClick={() => playNotificationSound("message")}
-                  className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
-                >
-                  Test Message
-                </button>
-                <button
-                  onClick={() => playNotificationSound("urgent")}
-                  className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
-                >
-                  Test Urgent
-                </button>
-              </div>
-            </div>
-          </section>
-        </>
-      )}
+      <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
+        <h2 className="font-display text-xl mb-4">Sounds</h2>
+        <div className="space-y-4">
+          <ToggleRow
+            label="Enable notification sounds"
+            checked={prefs.sounds_enabled}
+            onChange={(v) => updatePref("sounds_enabled", v)}
+          />
+          <div className="pt-2 flex gap-2">
+            <button
+              onClick={() => playNotificationSound("message")}
+              className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
+            >
+              Test Message
+            </button>
+            <button
+              onClick={() => playNotificationSound("urgent")}
+              className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
+            >
+              Test Urgent
+            </button>
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

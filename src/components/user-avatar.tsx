@@ -12,11 +12,13 @@ export type AvatarProfile = {
 export default function UserAvatar({
   person,
   size = "md",
-  linkToProfile = true
+  linkToProfile = true,
+  className = ""
 }: {
   person: AvatarProfile;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   linkToProfile?: boolean;
+  className?: string;
 }) {
   const initials = person.full_name
     ? person.full_name
@@ -37,7 +39,7 @@ export default function UserAvatar({
 
   const content = (
     <div
-      className={`${sizeCls} rounded-full flex items-center justify-center shrink-0 border-2 border-white shadow-sm overflow-hidden`}
+      className={`${sizeCls} ${className} rounded-full flex items-center justify-center shrink-0 border-2 border-white shadow-sm overflow-hidden`}
       style={{
         backgroundColor: person.avatar_color || "#3F6053",
         color: "#fff",

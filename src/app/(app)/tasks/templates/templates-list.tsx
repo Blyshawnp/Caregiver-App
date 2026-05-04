@@ -4,6 +4,11 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon } from "@/components/icons";
+import {
+  TASK_CATEGORY_LABELS as CATEGORY_LABELS,
+  TASK_CATEGORY_ORDER as CATEGORY_ORDER,
+  type TaskCategory,
+} from "@/lib/task-categories";
 
 type Template = {
   id: string;
@@ -13,26 +18,15 @@ type Template = {
   sort_order: number;
   is_active: boolean;
   caregiver_id: string | null;
-  category: TaskCategory | null;
+  category:
+    | TaskCategory
+    | "general"
+    | "morning"
+    | "afternoon"
+    | "evening"
+    | "bedtime"
+    | null;
 };
-
-type TaskCategory = "morning" | "afternoon" | "evening" | "bedtime" | "general";
-
-const CATEGORY_LABELS: Record<TaskCategory, string> = {
-  morning: "Morning",
-  afternoon: "Afternoon",
-  evening: "Evening",
-  bedtime: "Bedtime",
-  general: "General",
-};
-
-const CATEGORY_ORDER: TaskCategory[] = [
-  "morning",
-  "afternoon",
-  "evening",
-  "bedtime",
-  "general",
-];
 
 type Caregiver = { id: string; full_name: string };
 
@@ -51,7 +45,7 @@ export default function TemplatesList({
   const [newDescription, setNewDescription] = useState("");
   const [newIsDefault, setNewIsDefault] = useState(true);
   const [newCaregiverId, setNewCaregiverId] = useState<string>("");
-  const [newCategory, setNewCategory] = useState<TaskCategory>("general");
+  const [newCategory, setNewCategory] = useState<TaskCategory>("other");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all"); // "all", "shared", caregiverId
 
@@ -91,7 +85,7 @@ export default function TemplatesList({
     setNewDescription("");
     setNewIsDefault(true);
     setNewCaregiverId("");
-    setNewCategory("general");
+    setNewCategory("other");
     setAdding(false);
     router.refresh();
   }
@@ -173,7 +167,7 @@ export default function TemplatesList({
       {/* Group by category */}
       {CATEGORY_ORDER.map((cat) => {
         const tasksInCat = filtered.filter(
-          (t) => (t.category ?? "general") === cat
+          (t) => normalizeCategory(t.category) === cat
         );
         if (tasksInCat.length === 0) return null;
 
@@ -402,7 +396,7 @@ function TemplateRow({
             Time of day
           </span>
           <select
-            value={template.category ?? "general"}
+            value={normalizeCategory(template.category)}
             onChange={(e) => onChangeCategory(e.target.value as TaskCategory)}
             className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
           >
@@ -495,4 +489,10 @@ function TemplateRow({
       </div>
     </div>
   );
+}
+
+function normalizeCategory(category: Template["category"]): TaskCategory {
+  return category && CATEGORY_ORDER.includes(category as TaskCategory)
+    ? (category as TaskCategory)
+    : "other";
 }

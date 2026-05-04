@@ -84,6 +84,7 @@ type ShiftDetail = {
     completed_at: string | null;
     sort_order: number;
     notes: string | null;
+    category: import("@/lib/task-categories").TaskCategory | null;
   }> | null;
 };
 
@@ -145,7 +146,7 @@ export default async function ShiftDetailPage({
       clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
       check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, total_minutes, flagged_outside_geofence, flag_reason ),
-      shift_todos ( id, task_name, description, is_completed, completed_at, sort_order, notes )
+      shift_todos ( id, task_name, description, is_completed, completed_at, sort_order, notes, category )
     `
     )
     .eq("id", id)
@@ -595,7 +596,7 @@ export default async function ShiftDetailPage({
         <TasksView
           shiftId={id}
           todos={todos}
-          canEdit={canEdit}
+          canManageTasks={canEdit}
           canCompleteTasks={canCompleteTasks}
           currentUserId={profile?.id ?? user.id}
         />

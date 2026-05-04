@@ -19,18 +19,19 @@ type Todo = {
   completed_at: string | null;
   sort_order: number;
   notes: string | null;
+  category?: TaskCategory | null;
 };
 
 export default function TasksView({
   shiftId,
   todos,
-  canEdit,
+  canManageTasks,
   canCompleteTasks,
   currentUserId,
 }: {
   shiftId: string;
   todos: Todo[];
-  canEdit: boolean;
+  canManageTasks: boolean;
   canCompleteTasks: boolean;
   currentUserId: string;
 }) {
@@ -40,16 +41,19 @@ export default function TasksView({
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
+  const [newTaskCategory, setNewTaskCategory] = useState<TaskCategory>("other");
   const [activeCategory, setActiveCategory] = useState<TaskCategory | "all">("all");
 
   const categorizedTodos = [...todos]
     .map((todo) => ({
       ...todo,
-      category: deriveTaskCategory({
-        taskName: todo.task_name,
-        description: todo.description,
-        notes: todo.notes,
-      }),
+      category:
+        todo.category ??
+        deriveTaskCategory({
+          taskName: todo.task_name,
+          description: todo.description,
+          notes: todo.notes,
+        }),
     }))
     .sort((a, b) => {
       const aIndex = TASK_CATEGORY_ORDER.indexOf(a.category);
@@ -130,6 +134,7 @@ export default function TasksView({
       shift_id: shiftId,
       task_name: newTaskName.trim(),
       sort_order: maxSort + 10,
+      category: newTaskCategory,
     });
 
     if (error) {
@@ -138,14 +143,33 @@ export default function TasksView({
     }
 
     setNewTaskName("");
+    setNewTaskCategory("other");
     setAdding(false);
     router.refresh();
   }
 
   async function deleteTask(id: string) {
+    if (!canManageTasks) return;
     if (!confirm("Remove this task from this shift?")) return;
     const supabase = createClient();
     await supabase.from("shift_todos").delete().eq("id", id);
+    router.refresh();
+  }
+
+  async function changeTaskCategory(id: string, category: TaskCategory) {
+    if (!canManageTasks) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("shift_todos")
+      .update({ category })
+      .eq("id", id)
+      .eq("shift_id", shiftId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
     router.refresh();
   }
 
@@ -180,7 +204,7 @@ export default function TasksView({
           <div className="relative">
             <p className="font-display text-lg mb-1">No tasks yet</p>
             <p className="text-sm text-ink-500">
-              {canEdit
+              {canManageTasks
                 ? "Tap below to add the first one."
                 : "Nothing assigned for this shift."}
             </p>
@@ -231,9 +255,12 @@ export default function TasksView({
                         isComplete={optimistic[todo.id] ?? todo.is_completed}
                         isSaving={!!savingIds[todo.id]}
                         canCompleteTasks={canCompleteTasks}
-                        canEdit={canEdit}
+                        canManageTasks={canManageTasks}
                         onToggle={() => toggle(todo)}
                         onDelete={() => deleteTask(todo.id)}
+                        onChangeCategory={(category) =>
+                          changeTaskCategory(todo.id, category)
+                        }
                       />
                     </li>
                   ))}
@@ -244,7 +271,7 @@ export default function TasksView({
         </div>
       )}
 
-      {canEdit && (
+      {canManageTasks && (
         <>
           {adding ? (
             <form onSubmit={addTask} className="bg-white rounded-2xl shadow-soft p-3 flex gap-2 mb-2">
@@ -257,6 +284,20 @@ export default function TasksView({
                 className="flex-1 px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition text-sm"
                 maxLength={140}
               />
+              <select
+                value={newTaskCategory}
+                onChange={(e) =>
+                  setNewTaskCategory(e.target.value as TaskCategory)
+                }
+                className="px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+                aria-label="Task category"
+              >
+                {TASK_CATEGORY_ORDER.map((category) => (
+                  <option key={category} value={category}>
+                    {TASK_CATEGORY_LABELS[category]}
+                  </option>
+                ))}
+              </select>
               <button
                 type="submit"
                 disabled={!newTaskName.trim()}
@@ -269,6 +310,7 @@ export default function TasksView({
                 onClick={() => {
                   setAdding(false);
                   setNewTaskName("");
+                  setNewTaskCategory("other");
                 }}
                 className="bg-cream-200 hover:bg-cream-200/70 text-ink-700 px-3 rounded-xl text-sm font-medium transition"
               >
@@ -297,17 +339,19 @@ function TaskRow({
   isComplete,
   isSaving,
   canCompleteTasks,
-  canEdit,
+  canManageTasks,
   onToggle,
   onDelete,
+  onChangeCategory,
 }: {
   todo: Todo;
   isComplete: boolean;
   isSaving: boolean;
   canCompleteTasks: boolean;
-  canEdit: boolean;
+  canManageTasks: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onChangeCategory: (category: TaskCategory) => void;
 }) {
   return (
     <div
@@ -363,9 +407,32 @@ function TaskRow({
         {isSaving && (
           <p className="text-xs text-ink-500 mt-1">Saving...</p>
         )}
+        {canManageTasks && (
+          <label className="mt-2 inline-flex items-center gap-2 text-xs text-ink-500">
+            Category
+            <select
+              value={
+                todo.category ??
+                deriveTaskCategory({
+                  taskName: todo.task_name,
+                  description: todo.description,
+                  notes: todo.notes,
+                })
+              }
+              onChange={(e) => onChangeCategory(e.target.value as TaskCategory)}
+              className="bg-cream-50 border border-cream-200 rounded-lg px-2 py-1 text-xs text-ink-900 focus:outline-none focus:border-forest-500"
+            >
+              {TASK_CATEGORY_ORDER.map((category) => (
+                <option key={category} value={category}>
+                  {TASK_CATEGORY_LABELS[category]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
-      {canEdit && (
+      {canManageTasks && (
         <button
           onClick={onDelete}
           aria-label="Delete task"

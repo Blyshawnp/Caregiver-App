@@ -122,6 +122,7 @@ export default async function TasksPage({
       completed_at: string | null;
       sort_order: number;
       notes: string | null;
+      category: import("@/lib/task-categories").TaskCategory | null;
     }> | null;
   };
 
@@ -143,7 +144,8 @@ export default async function TasksPage({
         is_completed,
         completed_at,
         sort_order,
-        notes
+        notes,
+        category
       )
     `
     )
@@ -183,7 +185,7 @@ export default async function TasksPage({
       <TasksView
         shiftId={shift.id}
         todos={todos}
-        canEdit={isAssignedCaregiver || profile.role !== "caregiver"}
+        canManageTasks={profile.role === "admin" || profile.role === "client"}
         canCompleteTasks={isAssignedCaregiver && isOnShift}
         currentUserId={profile.id}
       />

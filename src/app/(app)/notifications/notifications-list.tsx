@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BellIcon, ArrowRightIcon, XIcon } from "@/components/icons";
@@ -27,14 +28,22 @@ export default function NotificationsList({
   currentUserId: string;
 }) {
   const router = useRouter();
-  const supabase = createClient();
+  const [items, setItems] = useState(notifications);
+  const [markingAll, setMarkingAll] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleClick(n: Notification) {
     if (!n.is_read) {
+      const supabase = createClient();
       await supabase
         .from("notifications")
         .update({ is_read: true, read_at: new Date().toISOString() })
-        .eq("id", n.id);
+        .eq("id", n.id)
+        .eq("recipient_id", currentUserId);
+      setItems((prev) =>
+        prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item))
+      );
+      window.dispatchEvent(new CustomEvent("notifications:changed"));
     }
     if (n.link) {
       router.push(n.link);
@@ -45,23 +54,46 @@ export default function NotificationsList({
 
   async function deleteNotification(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    await supabase
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
       .from("notifications")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("recipient_id", currentUserId);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    window.dispatchEvent(new CustomEvent("notifications:changed"));
     router.refresh();
   }
 
   async function markAllRead() {
-    await supabase
-      .from("notifications")
-      .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq("recipient_id", currentUserId)
-      .eq("is_read", false);
+    setMarkingAll(true);
+    setError(null);
+    const response = await fetch("/api/notifications/mark-all-read", {
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+
+    if (!response.ok) {
+      setError(result?.error ?? "Could not mark notifications read.");
+      setMarkingAll(false);
+      return;
+    }
+
+    setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    window.dispatchEvent(new CustomEvent("notifications:changed"));
+    setMarkingAll(false);
     router.refresh();
   }
 
-  if (notifications.length === 0) {
+  if (items.length === 0) {
     return (
       <div className="bg-white rounded-3xl p-10 shadow-soft text-center grain-overlay">
         <div className="relative">
@@ -77,20 +109,28 @@ export default function NotificationsList({
     );
   }
 
-  const hasUnread = notifications.some((n) => !n.is_read);
+  const hasUnread = items.some((n) => !n.is_read);
 
   return (
     <div>
-      {hasUnread && (
-        <button
-          onClick={markAllRead}
-          className="text-sm text-forest-600 font-medium hover:underline mb-3"
-        >
-          Mark all read
-        </button>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        {hasUnread ? (
+          <button
+            onClick={markAllRead}
+            disabled={markingAll}
+            className="text-sm text-forest-600 font-medium hover:underline disabled:opacity-60"
+          >
+            {markingAll ? "Marking read..." : "Mark all read"}
+          </button>
+        ) : (
+          <span className="text-sm text-ink-500">All notifications are read.</span>
+        )}
+      </div>
+      {error && (
+        <p className="text-sm text-terracotta-600 mb-3">{error}</p>
       )}
       <ul className="space-y-2">
-        {notifications.map((n) => (
+        {items.map((n) => (
           <li key={n.id} className="relative group">
             <button
               onClick={() => handleClick(n)}
@@ -128,16 +168,17 @@ export default function NotificationsList({
               </div>
               {n.link && (
                 <ArrowRightIcon
-                  size={14}            className="text-ink-300 mt-1 shrink-0"
+                  size={14}
+                  className="text-ink-300 mt-1 shrink-0"
                 />
               )}
             </button>
             <button
-               onClick={(e) => deleteNotification(e, n.id)}
-               className="absolute right-3 top-3 w-8 h-8 rounded-full bg-cream-100 text-ink-300 grid place-items-center opacity-0 group-hover:opacity-100 hover:bg-terracotta-50 hover:text-terracotta-600 transition"
-               aria-label="Clear notification"
+              onClick={(e) => deleteNotification(e, n.id)}
+              className="absolute right-3 top-3 w-8 h-8 rounded-full bg-cream-100 text-ink-300 grid place-items-center opacity-0 group-hover:opacity-100 hover:bg-terracotta-50 hover:text-terracotta-600 transition"
+              aria-label="Clear notification"
             >
-               <XIcon size={14} />
+              <XIcon size={14} />
             </button>
           </li>
         ))}

@@ -40,7 +40,8 @@ export async function sendPushForNotifications(
   admin: SupabaseAdmin,
   notifications: NotificationRow[]
 ) {
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const publicKey =
+    process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT;
 
@@ -123,7 +124,8 @@ async function sendWebPush(
   payload: Record<string, unknown>
 ) {
   const endpoint = new URL(subscription.endpoint);
-  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
+  const vapidPublicKey =
+    process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY!;
   const subject = process.env.VAPID_SUBJECT!;
   const body = encryptPayload(

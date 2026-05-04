@@ -9,7 +9,6 @@ import {
   GridIcon,
   ListIcon,
   MessageIcon,
-  StarOfLifeIcon,
   UserIcon,
 } from "./icons";
 import { t, type Lang } from "@/lib/i18n";
@@ -32,7 +31,6 @@ export default function BottomNav({
   lang?: Lang;
 }) {
   const pathname = usePathname();
-
   const tabs = getTabs(role, lang);
 
   return (
@@ -48,7 +46,7 @@ export default function BottomNav({
           {tabs.map(({ href, label, Icon, key }) => {
             const active =
               pathname === href || pathname?.startsWith(href + "/");
-            const showBadge = (key === "messages" || key === "notifications") && unreadMessages > 0;
+            const showBadge = key === "messages" && unreadMessages > 0;
 
             return (
               <Link
@@ -106,10 +104,10 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
       key: "messages",
     },
     {
-      href: "/emergency",
-      label: "Emergency",
-      Icon: StarOfLifeIcon,
-      key: "emergency",
+      href: "/notifications",
+      label: t("nav.notifications", lang),
+      Icon: BellIcon,
+      key: "notifications",
     },
     {
       href: "/me",
@@ -147,10 +145,10 @@ function getTabs(role: Role, lang: Lang): NavItem[] {
           key: "schedule",
         },
         {
-          href: "/emergency",
-          label: "Emergency",
-          Icon: StarOfLifeIcon,
-          key: "emergency",
+          href: "/notifications",
+          label: t("nav.notifications", lang),
+          Icon: BellIcon,
+          key: "notifications",
         },
         {
           href: "/me",

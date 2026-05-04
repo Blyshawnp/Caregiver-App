@@ -135,6 +135,7 @@ export default async function AppLayout({
         avatarColor={profile?.avatar_color ?? null}
         userId={profile?.id}
         notificationCount={notificationCount}
+        role={profile?.role ?? "caregiver"}
       />
 
       <div className="flex-1 pb-24">

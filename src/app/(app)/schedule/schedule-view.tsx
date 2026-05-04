@@ -59,16 +59,6 @@ export default function ScheduleView({
               </Link>
             </div>
           )}
-          {role === "caregiver" && !canCreate && (
-            <div className="flex gap-2 mt-2">
-              <Link
-                href="/schedule/proposals"
-                className="text-xs text-forest-600 hover:underline"
-              >
-                Propose shift
-              </Link>
-            </div>
-          )}
         </div>
 
         {/* View toggle */}
@@ -87,6 +77,21 @@ export default function ScheduleView({
           />
         </div>
       </header>
+
+      {role === "caregiver" && (
+        <Link
+          href="/schedule/proposals"
+          className="mb-5 flex items-center justify-between bg-forest-600 hover:bg-forest-700 text-cream-50 rounded-2xl px-5 py-4 shadow-soft transition active:scale-[0.99]"
+        >
+          <span>
+            <span className="block font-medium">Propose shift</span>
+            <span className="block text-xs text-cream-50/80">
+              Send availability or a client-specific request for admin approval
+            </span>
+          </span>
+          <PlusIcon size={20} className="shrink-0" />
+        </Link>
+      )}
 
       {view === "list" ? (
         <ListView shifts={shifts} now={now} />

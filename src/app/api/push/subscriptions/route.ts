@@ -42,12 +42,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  console.info("[push-subscriptions] save requested");
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
+    console.error("[push-subscriptions] unauthorized save");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -58,11 +60,18 @@ export async function POST(request: Request) {
     .maybeSingle<{ organization_id: string }>();
 
   if (!profile) {
+    console.error("[push-subscriptions] profile not found", { userId: user.id });
     return NextResponse.json({ error: "Profile not found" }, { status: 403 });
   }
 
   const payload = (await request.json()) as PushSubscriptionPayload;
   if (!payload.endpoint || !payload.keys?.p256dh || !payload.keys?.auth) {
+    console.error("[push-subscriptions] invalid subscription payload", {
+      userId: user.id,
+      hasEndpoint: !!payload.endpoint,
+      hasP256dh: !!payload.keys?.p256dh,
+      hasAuth: !!payload.keys?.auth,
+    });
     return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
   }
 
@@ -84,9 +93,15 @@ export async function POST(request: Request) {
   );
 
   if (error) {
+    console.error("[push-subscriptions] save failed", {
+      userId: user.id,
+      code: error.code,
+      message: error.message,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  console.info("[push-subscriptions] save succeeded", { userId: user.id });
   return NextResponse.json({ ok: true });
 }
 

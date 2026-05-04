@@ -11,6 +11,7 @@ type PromptState = "hidden" | "ready" | "saving" | "denied" | "unsupported";
 
 export default function PushPermissionPrompt() {
   const [state, setState] = useState<PromptState>("hidden");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPushSupported()) {
@@ -29,10 +30,14 @@ export default function PushPermissionPrompt() {
   async function enable() {
     markPrompted();
     setState("saving");
+    setError(null);
     try {
       await enablePushNotifications();
       setState("hidden");
-    } catch {
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not enable notifications.";
+      setError(message);
       setState(Notification.permission === "denied" ? "denied" : "ready");
     }
   }
@@ -54,6 +59,9 @@ export default function PushPermissionPrompt() {
           Caregiver can send native notifications for messages, shift updates,
           trades, and urgent incidents.
         </p>
+        {error && (
+          <p className="text-xs text-terracotta-600 mb-3">{error}</p>
+        )}
         {state === "denied" ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-terracotta-600">

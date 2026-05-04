@@ -59,6 +59,10 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+    console.info("[messages-send] send requested", {
+      senderId: user.id,
+      recipientId,
+    });
     const { data: rpcData, error: rpcError } = await admin
       .rpc("send_direct_message_with_notification", {
         p_sender_id: user.id,
@@ -66,6 +70,15 @@ export async function POST(request: Request) {
         p_content: content,
       })
       .single<SendMessageResult>();
+
+    if (rpcError) {
+      console.error("[messages-send] rpc failed, using fallback", {
+        senderId: user.id,
+        recipientId,
+        code: rpcError.code,
+        message: rpcError.message,
+      });
+    }
 
     const data = rpcData ?? (rpcError ? await sendDirectMessageFallback(admin, {
       senderId: user.id,
@@ -88,7 +101,12 @@ export async function POST(request: Request) {
         body: data.notification_body,
         link: data.notification_link,
       },
-    ]).catch(() => {});
+    ]).catch((error) => {
+      console.error("[messages-send] push failed after in-app notification", {
+        recipientId: data.recipient_id,
+        error,
+      });
+    });
 
     return NextResponse.json({
       message: {

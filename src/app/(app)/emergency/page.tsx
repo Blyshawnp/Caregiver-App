@@ -48,6 +48,12 @@ export default async function EmergencyPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single<{ role: "admin" | "client" | "caregiver" | "family" }>();
+
   const { data: clientsRaw } = await supabase
     .from("clients")
     .select(
@@ -129,12 +135,38 @@ export default async function EmergencyPage() {
         <p className="font-display text-4xl">Call 911</p>
       </a>
 
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-5">
+        <a
+          href="#emergency-info"
+          className="bg-white hover:bg-cream-50 rounded-2xl shadow-soft px-4 py-3 transition active:scale-[0.99]"
+        >
+          <span className="block font-medium text-ink-900">Emergency information</span>
+          <span className="block text-xs text-ink-500">Contacts, hospital, safety equipment</span>
+        </a>
+        <Link
+          href="/incidents"
+          className="bg-red-600 hover:bg-red-700 text-cream-50 rounded-2xl shadow-soft px-4 py-3 transition active:scale-[0.99]"
+        >
+          <span className="block font-medium">Report incident</span>
+          <span className="block text-xs text-cream-50/80">Create a care or safety report</span>
+        </Link>
+        {profile?.role !== "caregiver" && (
+          <Link
+            href="/incidents"
+            className="bg-white hover:bg-cream-50 rounded-2xl shadow-soft px-4 py-3 transition active:scale-[0.99]"
+          >
+            <span className="block font-medium text-ink-900">Incident history</span>
+            <span className="block text-xs text-ink-500">Review submitted reports</span>
+          </Link>
+        )}
+      </section>
+
       {clients.length === 0 ? (
         <div className="bg-white rounded-3xl p-8 shadow-soft text-center grain-overlay">
           <p className="text-sm text-ink-500">No clients to show.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div id="emergency-info" className="space-y-4">
           <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold px-1">Client Medical Info</h2>
           {clients.map((client) => {
             const clientAllergies = allAllergies.filter(

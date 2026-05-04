@@ -17,7 +17,10 @@ export default function NotificationBell({
   const [count, setCount] = useState(initialCount);
 
   useEffect(() => {
+    if (!userId) return;
+
     const supabase = createClient();
+    void refetchCount();
 
     const channel = supabase
       .channel(`realtime-notifications-${userId}`)
@@ -33,16 +36,20 @@ export default function NotificationBell({
           void refetchCount();
 
           if (payload.eventType === "INSERT") {
-             const data = payload.new as { kind?: string; title?: string; body?: string };
-             const sound = soundForNotificationKind(data.kind || "general");
-             void playNotificationSound(sound).catch(() => {});
+            const data = payload.new as {
+              kind?: string;
+              title?: string;
+              body?: string;
+            };
+            const sound = soundForNotificationKind(data.kind || "general");
+            void playNotificationSound(sound).catch(() => {});
 
-             if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(data.title || "Caregiver", {
-                  body: data.body || "",
-                  icon: "/icon-192.png",
-                });
-             }
+            if ("Notification" in window && Notification.permission === "granted") {
+              new Notification(data.title || "Caregiver", {
+                body: data.body || "",
+                icon: "/icon-192.png",
+              });
+            }
           }
         }
       )
@@ -57,14 +64,32 @@ export default function NotificationBell({
       setCount(c ?? 0);
     }
 
+    window.addEventListener("notifications:changed", refetchCount);
+    window.addEventListener("focus", refetchCount);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const poll = window.setInterval(refetchCount, 30_000);
+
     return () => {
+      window.clearInterval(poll);
+      window.removeEventListener("notifications:changed", refetchCount);
+      window.removeEventListener("focus", refetchCount);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
     };
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") void refetchCount();
+    }
   }, [userId]);
+
+  useEffect(() => {
+    setCount(initialCount);
+  }, [initialCount]);
 
   return (
     <Link
       href="/notifications"
+      aria-label="Notifications"
       className="relative w-10 h-10 rounded-full grid place-items-center text-ink-700 hover:bg-cream-200 transition active:scale-95"
     >
       <BellIcon size={20} />

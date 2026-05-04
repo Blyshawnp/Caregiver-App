@@ -21,64 +21,103 @@ export function isPushSupported() {
 }
 
 export async function enablePushNotifications() {
+  const logStep = (step: string, detail?: unknown) => {
+    if (detail) {
+      console.info(`[push-enable] ${step}`, detail);
+    } else {
+      console.info(`[push-enable] ${step}`);
+    }
+  };
+
   if (!isPushSupported()) {
+    console.error("[push-enable] unsupported browser APIs");
     throw new Error("Push notifications are not supported in this browser.");
   }
 
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!publicKey) {
-    throw new Error("Push notifications are not configured.");
+    console.error("[push-enable] missing NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+    throw new Error("Push notifications are not configured. Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY.");
   }
 
-  const permission = await withTimeout(
-    Notification.requestPermission(),
-    30_000,
-    "Notification permission request timed out."
-  );
-  if (permission !== "granted") {
-    throw new Error(
-      permission === "denied"
-        ? "Notifications are blocked for this browser. Enable them in browser settings and try again."
-        : "Notification permission was dismissed."
+  let applicationServerKey: ArrayBuffer;
+  try {
+    applicationServerKey = urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer;
+  } catch (error) {
+    console.error("[push-enable] invalid NEXT_PUBLIC_VAPID_PUBLIC_KEY", error);
+    throw new Error("Push notifications are misconfigured. NEXT_PUBLIC_VAPID_PUBLIC_KEY is invalid.");
+  }
+
+  try {
+    logStep("requesting permission");
+    const permission = await withTimeout(
+      Notification.requestPermission(),
+      30_000,
+      "Notification permission request timed out."
     );
+    if (permission !== "granted") {
+      console.error("[push-enable] permission not granted", permission);
+      throw new Error(
+        permission === "denied"
+          ? "Notifications are blocked for this browser. Enable them in browser settings and try again."
+          : "Notification permission was dismissed."
+      );
+    }
+
+    logStep("registering service worker");
+    const registration = await ensureServiceWorkerRegistration();
+
+    logStep("checking existing subscription");
+    const existing = await withTimeout(
+      registration.pushManager.getSubscription(),
+      10_000,
+      "Checking existing push subscription timed out."
+    );
+
+    logStep(existing ? "using existing subscription" : "creating subscription");
+    const subscription =
+      existing ??
+      (await withTimeout(
+        registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        }),
+        20_000,
+        "Browser push subscription timed out."
+      ));
+
+    logStep("saving subscription");
+    const response = await withTimeout(
+      fetch("/api/push/subscriptions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(subscription.toJSON()),
+      }),
+      15_000,
+      "Saving push subscription timed out."
+    );
+
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      console.error("[push-enable] database save failed", data);
+      throw new Error(data?.error ?? "Could not save push subscription.");
+    }
+
+    logStep("verifying saved subscription");
+    const status = await getPushDeviceStatus(subscription.endpoint);
+    if (!status.enabled) {
+      console.error("[push-enable] saved subscription was not found in database");
+      throw new Error("Push subscription was not saved for this device.");
+    }
+
+    logStep("enabled");
+    return subscription;
+  } catch (error) {
+    console.error("[push-enable] failed", error);
+    throw error;
   }
-
-  const registration = await withTimeout(
-    navigator.serviceWorker.ready,
-    15_000,
-    "Service worker was not ready. Refresh the app and try again."
-  );
-  const existing = await registration.pushManager.getSubscription();
-  const subscription =
-    existing ??
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
-    }));
-
-  const response = await withTimeout(
-    fetch("/api/push/subscriptions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(subscription.toJSON()),
-    }),
-    15_000,
-    "Saving push subscription timed out."
-  );
-
-  if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error ?? "Could not save push subscription.");
-  }
-
-  const status = await getPushDeviceStatus(subscription.endpoint);
-  if (!status.enabled) {
-    throw new Error("Push subscription was not saved for this device.");
-  }
-
-  return subscription;
 }
 
 export async function getPushDeviceStatus(endpoint?: string | null) {
@@ -109,7 +148,7 @@ export async function saveCurrentPushSubscription(subscription: PushSubscription
 
 export async function disablePushNotifications() {
   if (!isPushSupported()) return;
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await ensureServiceWorkerRegistration();
   const subscription = await registration.pushManager.getSubscription();
   const response = await fetch("/api/push/subscriptions", {
     method: "DELETE",
@@ -123,6 +162,25 @@ export async function disablePushNotifications() {
     throw new Error(data?.error ?? "Could not disable push notifications.");
   }
   await subscription?.unsubscribe();
+}
+
+async function ensureServiceWorkerRegistration() {
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Service workers are not supported in this browser.");
+  }
+
+  try {
+    const existing = await navigator.serviceWorker.getRegistration("/");
+    if (existing) return existing;
+    return await withTimeout(
+      navigator.serviceWorker.register("/sw.js"),
+      15_000,
+      "Service worker registration timed out."
+    );
+  } catch (error) {
+    console.error("[push-enable] service worker registration failed", error);
+    throw new Error("Service worker registration failed. Refresh the app and try again.");
+  }
 }
 
 export async function getPushPreferences() {

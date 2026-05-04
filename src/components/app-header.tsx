@@ -1,7 +1,10 @@
 "use client";
 
-import UserAvatar from "./user-avatar";
+import Link from "next/link";
 import NotificationBell from "./notification-bell";
+import { StarOfLifeIcon } from "./icons";
+import UserAvatar from "./user-avatar";
+import type { Role } from "@/lib/db-types";
 
 export default function AppHeader({
   fullName,
@@ -9,7 +12,8 @@ export default function AppHeader({
   avatarUrl,
   avatarColor,
   userId,
-  notificationCount = 0
+  notificationCount = 0,
+  role,
 }: {
   fullName: string;
   orgName: string;
@@ -17,6 +21,7 @@ export default function AppHeader({
   avatarColor: string | null;
   userId?: string;
   notificationCount?: number;
+  role: Role;
 }) {
   return (
     <header className="px-5 pt-6 pb-2 flex items-center justify-between sticky top-0 bg-cream-100/80 backdrop-blur-md z-20">
@@ -30,17 +35,33 @@ export default function AppHeader({
       </div>
 
       <div className="flex items-center gap-2">
-        <NotificationBell initialCount={notificationCount} userId={userId || ""} />
+        <Link
+          href="/emergency"
+          aria-label="Emergency options"
+          title="Emergency options"
+          data-role={role}
+          className="relative w-11 h-11 rounded-full bg-red-600 text-cream-50 grid place-items-center hover:bg-red-700 transition active:scale-95 shadow-soft ring-2 ring-red-600/20"
+        >
+          <StarOfLifeIcon size={20} />
+        </Link>
         {userId && (
-          <UserAvatar
-            person={{
-              full_name: fullName,
-              avatar_url: avatarUrl,
-              avatar_color: avatarColor,
-              id: userId
-            }}
-            size="sm"
-          />
+          <NotificationBell initialCount={notificationCount} userId={userId} />
+        )}
+        {userId && (
+          <Link
+            href="/me"
+            aria-label="Profile"
+            className="rounded-full hover:opacity-90 transition active:scale-95"
+          >
+            <UserAvatar
+              person={{
+                full_name: fullName,
+                avatar_url: avatarUrl,
+                avatar_color: avatarColor,
+              }}
+              size="sm"
+            />
+          </Link>
         )}
       </div>
     </header>

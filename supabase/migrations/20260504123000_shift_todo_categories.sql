@@ -3,6 +3,9 @@ begin;
 alter table public.shift_todos
   add column if not exists category text;
 
+alter table public.todo_templates
+  add column if not exists category text;
+
 alter table public.shift_todos
   drop constraint if exists shift_todos_category_check;
 

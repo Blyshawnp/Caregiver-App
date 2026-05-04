@@ -5,6 +5,7 @@ import { ArrowRightIcon, UserIcon, MapPinIcon } from "@/components/icons";
 import SignOutButton from "./sign-out-button";
 import EditablePhone from "./editable-phone";
 import AvatarUploader from "./avatar-uploader";
+import EditProfileForm from "./edit-profile-form";
 import LanguageSwitcher from "@/components/language-switcher";
 import {
   getCurrentPayPeriod,
@@ -140,6 +141,15 @@ export default async function MePage() {
             <p className="text-sm text-forest-600">
               {roleCopy[profile?.role ?? ""] ?? profile?.role}
             </p>
+            {profile && (
+              <div className="mt-2">
+                <EditProfileForm
+                  userId={profile.id}
+                  initialName={profile.full_name}
+                  initialPhone={profile.phone}
+                />
+              </div>
+            )}
           </div>
         </div>
 

@@ -12,9 +12,11 @@ type View = "list" | "calendar";
 export default function ScheduleView({
   shifts,
   role,
+  archiveMode,
 }: {
   shifts: ScheduleShift[];
   role: "admin" | "client" | "caregiver" | "family";
+  archiveMode?: boolean;
 }) {
   const [view, setView] = useState<View>("list");
   const [now, setNow] = useState(() => new Date());
@@ -33,8 +35,22 @@ export default function ScheduleView({
             Schedule
           </h1>
           <p className="text-ink-500 text-sm">
-            {shifts.length} shift{shifts.length === 1 ? "" : "s"} · next 60 days
+            {shifts.length} shift{shifts.length === 1 ? "" : "s"} · {archiveMode ? "archive" : "active schedule"}
           </p>
+          <div className="flex gap-2 mt-2 flex-wrap">
+            <Link
+              href="/schedule"
+              className={`text-xs hover:underline ${!archiveMode ? "text-forest-700 font-medium" : "text-forest-600"}`}
+            >
+              Active
+            </Link>
+            <Link
+              href="/schedule?view=archive"
+              className={`text-xs hover:underline ${archiveMode ? "text-forest-700 font-medium" : "text-forest-600"}`}
+            >
+              Archive
+            </Link>
+          </div>
           {canCreate && (
             <div className="flex gap-2 mt-2">
               <Link
@@ -56,6 +72,12 @@ export default function ScheduleView({
                 className="text-xs text-forest-600 hover:underline"
               >
                 Shift proposals
+              </Link>
+              <Link
+                href="/schedule/shift-types"
+                className="text-xs text-forest-600 hover:underline"
+              >
+                Shift types
               </Link>
               {role === "admin" && (
                 <Link

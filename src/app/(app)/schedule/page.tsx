@@ -22,7 +22,13 @@ export type ScheduleShift = {
   assignment_status: "pending" | "accepted" | "declined" | null;
 };
 
-export default async function SchedulePage() {
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ view?: string }>;
+}) {
+  const { view } = (await searchParams) ?? {};
+  const archiveMode = view === "archive";
   const supabase = await createClient();
   const {
     data: { user },
@@ -44,10 +50,10 @@ export default async function SchedulePage() {
   }
 
   const start = new Date();
-  start.setDate(start.getDate() - 14);
+  start.setDate(start.getDate() + (archiveMode ? -180 : -1));
   start.setHours(0, 0, 0, 0);
   const end = new Date();
-  end.setDate(end.getDate() + 60);
+  end.setDate(end.getDate() + (archiveMode ? 0 : 60));
   end.setHours(23, 59, 59, 999);
 
   const { data: rows } = await supabase
@@ -128,9 +134,12 @@ export default async function SchedulePage() {
       is_open: !r.caregiver_id && !r.is_released && !activeCheckIn?.check_in_time,
       assignment_status: r.assignment_status ?? null,
     };
+  }).filter((shift) => {
+    if (!archiveMode) return new Date(shift.scheduled_end) >= new Date() || (!!shift.check_in_time && !shift.check_out_time);
+    return new Date(shift.scheduled_end) < new Date() || !!shift.check_out_time;
   });
 
-  return <ScheduleView shifts={shifts} role={viewerRole} />;
+  return <ScheduleView shifts={shifts} role={viewerRole} archiveMode={archiveMode} />;
 }
 
 function normalizeRows<T>(value: T[] | T | null | undefined): T[] {

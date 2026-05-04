@@ -38,7 +38,7 @@ export default function CancelReleaseButton({
       return;
     }
     if (!data || data.length === 0) {
-      setError("Someone may have already claimed this. Refreshing...");
+      setError("Someone may have already picked this up. Refreshing...");
       setTimeout(() => window.location.reload(), 1500);
       return;
     }
@@ -53,7 +53,7 @@ export default function CancelReleaseButton({
         disabled={submitting}
         className="block w-full bg-white hover:bg-cream-50 text-forest-600 border border-forest-500/30 py-3 rounded-2xl font-medium text-center transition shadow-soft text-sm disabled:opacity-50"
       >
-        {submitting ? "Taking back..." : "Take this shift back"}
+        {submitting ? "Taking back..." : "Cancel trade offer"}
       </button>
       {error && (
         <p className="text-terracotta-600 text-xs text-center">{error}</p>

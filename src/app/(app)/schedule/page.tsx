@@ -6,6 +6,7 @@ export type ScheduleShift = {
   scheduled_start: string;
   scheduled_end: string;
   caregiver_id: string | null;
+  caregiver_profile_id: string | null;
   caregiver_name: string | null;
   caregiver_avatar_url: string | null;
   caregiver_avatar_color: string | null;
@@ -112,6 +113,7 @@ export default async function SchedulePage() {
       scheduled_start: r.scheduled_start,
       scheduled_end: r.scheduled_end,
       caregiver_id: r.caregiver_id,
+      caregiver_profile_id: r.caregiver_id,
       caregiver_name: r.profiles?.full_name ?? null,
       caregiver_avatar_url: r.profiles?.avatar_url ?? null,
       caregiver_avatar_color: r.profiles?.avatar_color ?? null,

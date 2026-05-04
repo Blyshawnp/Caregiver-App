@@ -222,10 +222,7 @@ export default async function TeamPage() {
 
 function PersonRow({ person }: { person: TeamMember }) {
   return (
-    <Link
-      href={`/team/${person.id}`}
-      className="flex items-center gap-3 bg-white rounded-2xl p-4 shadow-soft hover:bg-cream-50 transition active:scale-[0.99]"
-    >
+    <div className="flex items-center gap-3 bg-white rounded-2xl p-4 shadow-soft">
       <UserAvatar person={person} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -246,8 +243,14 @@ function PersonRow({ person }: { person: TeamMember }) {
             : person.email}
         </p>
       </div>
+      <Link
+        href={`/team/${person.id}`}
+        className="text-xs font-medium text-forest-600 hover:underline shrink-0"
+      >
+        Manage
+      </Link>
       <ArrowRightIcon size={16} className="text-ink-300" />
-    </Link>
+    </div>
   );
 }
 

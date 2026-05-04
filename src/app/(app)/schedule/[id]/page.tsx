@@ -61,6 +61,7 @@ type ShiftDetail = {
   client_id: string | null;
   shift_type_id: string | null;
   profiles: {
+    id: string;
     full_name: string;
     avatar_url: string | null;
     avatar_color: string | null;
@@ -140,7 +141,7 @@ export default async function ShiftDetailPage({
       first_viewed_at,
       client_id,
       shift_type_id,
-      profiles:caregiver_id ( full_name, avatar_url, avatar_color ),
+      profiles:caregiver_id ( id, full_name, avatar_url, avatar_color ),
       clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
       check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, total_minutes, flagged_outside_geofence, flag_reason ),

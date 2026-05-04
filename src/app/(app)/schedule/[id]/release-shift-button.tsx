@@ -49,7 +49,7 @@ export default function ReleaseShiftButton({
       return;
     }
     if (!data || data.length === 0) {
-      setError("Could not release the shift. Try refreshing.");
+      setError("Could not offer this shift for trade. Try refreshing.");
       setSubmitting(false);
       return;
     }
@@ -69,7 +69,7 @@ export default function ReleaseShiftButton({
         onClick={() => setOpen(true)}
         className="block w-full bg-white hover:bg-cream-50 text-terracotta-600 border border-terracotta-400/30 py-3 rounded-2xl font-medium text-center transition shadow-soft text-sm"
       >
-        Release this shift
+        Offer this shift for trade
       </button>
     );
   }
@@ -77,10 +77,10 @@ export default function ReleaseShiftButton({
   return (
     <div className="bg-terracotta-400/10 border border-terracotta-400/30 rounded-2xl p-4">
       <p className="text-sm font-medium text-ink-900 mb-1">
-        Release this shift?
+        Offer this shift for trade?
       </p>
       <p className="text-xs text-ink-700 mb-3">
-        It'll be available for any teammate to claim. Everyone gets notified.
+        It will appear on the shift trade board for teammates to pick up. Everyone gets notified.
         You can take it back if no one claims it yet.
       </p>
 
@@ -116,7 +116,7 @@ export default function ReleaseShiftButton({
           disabled={submitting}
           className="flex-1 bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition disabled:opacity-50"
         >
-          {submitting ? "Releasing..." : "Release shift"}
+          {submitting ? "Offering..." : "Offer trade"}
         </button>
       </div>
     </div>

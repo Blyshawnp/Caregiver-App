@@ -29,7 +29,7 @@ export default function ClaimShiftButton({
       return;
     }
     if (!data) {
-      setError("Someone else may have already claimed this shift. Refreshing...");
+      setError("Someone else may have already picked up this trade. Refreshing...");
       setTimeout(() => window.location.reload(), 1500);
       return;
     }
@@ -49,7 +49,7 @@ export default function ClaimShiftButton({
         disabled={submitting}
         className="block w-full bg-forest-600 hover:bg-forest-700 disabled:opacity-60 text-cream-50 py-3.5 rounded-2xl font-medium text-center transition active:scale-[0.99]"
       >
-        {submitting ? "Claiming..." : "Claim this shift"}
+        {submitting ? "Picking up..." : "Pick up this trade"}
       </button>
       {error && (
         <p className="text-terracotta-600 text-xs text-center">{error}</p>

@@ -11,12 +11,28 @@ type ProfileData = {
   phone: string | null;
   avatar_url: string | null;
   avatar_color: string | null;
+  organization_id: string;
+  is_active: boolean;
 };
 
-export default function ProfileLayout({ profile }: { profile: ProfileData }) {
+export default function ProfileLayout({
+  profile,
+  viewerRole,
+  caregiverStats,
+}: {
+  profile: ProfileData;
+  viewerRole: string;
+  caregiverStats: { upcomingShifts: number; activeNow: boolean } | null;
+}) {
+  const canShowContact =
+    viewerRole === "admin" ||
+    viewerRole === "client" ||
+    profile.role === "admin" ||
+    profile.role === "caregiver";
+
   return (
     <main className="px-5 py-8 max-w-2xl mx-auto">
-      <div className="bg-white rounded-[2.5rem] shadow-lifted overflow-hidden grain-overlay border border-cream-200">
+      <div className="bg-white rounded-3xl shadow-lifted overflow-hidden grain-overlay border border-cream-200">
         {/* Header/Cover Area */}
         <div className="h-32 bg-forest-600 relative">
           <div className="absolute -bottom-12 left-8 p-1 bg-white rounded-full shadow-soft">
@@ -39,10 +55,16 @@ export default function ProfileLayout({ profile }: { profile: ProfileData }) {
             <p className="text-forest-600 font-medium uppercase tracking-widest text-xs flex items-center gap-2">
               <ShieldIcon size={12} /> {profile.role}
             </p>
+            {!profile.is_active && (
+              <p className="inline-flex mt-2 text-[10px] uppercase tracking-wider bg-cream-200 text-ink-600 px-2 py-1 rounded-full">
+                Inactive
+              </p>
+            )}
           </div>
 
           <div className="grid gap-6">
             {/* Basic Info */}
+            {canShowContact && (
             <section className="space-y-4">
               <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">Contact Details</h2>
               <div className="grid gap-3">
@@ -50,6 +72,7 @@ export default function ProfileLayout({ profile }: { profile: ProfileData }) {
                 {profile.phone && <InfoRow icon={PhoneIcon} label="Phone" value={profile.phone} />}
               </div>
             </section>
+            )}
 
             {/* Role Specifics */}
             {profile.role === 'caregiver' && (
@@ -57,14 +80,36 @@ export default function ProfileLayout({ profile }: { profile: ProfileData }) {
                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">Professional Profile</h2>
                  <div className="bg-cream-50 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center gap-3 text-sm text-ink-700">
+                       <UserIcon size={16} className="text-forest-500" />
+                       <span>{caregiverStats?.activeNow ? "ON SHIFT NOW" : "Care team member"}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-ink-700">
                        <CalendarIcon size={16} className="text-forest-500" />
-                       <span>Available for regular shifts</span>
+                       <span>{caregiverStats?.upcomingShifts ?? 0} upcoming shifts</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm text-ink-700">
                        <HeartIcon size={16} className="text-terracotta-500" />
-                       <span>Experienced Caregiver</span>
+                       <span>Caregiver profile for team context</span>
                     </div>
                  </div>
+              </section>
+            )}
+
+            {(profile.role === "client" || profile.role === "family") && (
+              <section className="space-y-4">
+                <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">Client / Family Context</h2>
+                <div className="bg-cream-50 rounded-2xl p-4 text-sm text-ink-700">
+                  This profile is used for care-team communication and family/client visibility.
+                </div>
+              </section>
+            )}
+
+            {profile.role === "admin" && (
+              <section className="space-y-4">
+                <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">Admin Context</h2>
+                <div className="bg-cream-50 rounded-2xl p-4 text-sm text-ink-700">
+                  Organization administrator for scheduling, team, notifications, incidents, and care operations.
+                </div>
               </section>
             )}
 

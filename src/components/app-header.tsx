@@ -40,9 +40,9 @@ export default function AppHeader({
           aria-label="Emergency options"
           title="Emergency options"
           data-role={role}
-          className="relative w-11 h-11 rounded-full bg-red-600 text-cream-50 grid place-items-center hover:bg-red-700 transition active:scale-95 shadow-soft ring-2 ring-red-600/20"
+          className="relative w-11 h-11 rounded-full bg-white text-red-600 grid place-items-center hover:bg-red-50 transition active:scale-95 shadow-soft ring-2 ring-red-600/35 border border-red-200"
         >
-          <StarOfLifeIcon size={20} />
+          <StarOfLifeIcon size={28} />
         </Link>
         {userId && (
           <NotificationBell initialCount={notificationCount} userId={userId} />

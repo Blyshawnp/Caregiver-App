@@ -57,6 +57,14 @@ export default function ScheduleView({
               >
                 Shift proposals
               </Link>
+              {role === "admin" && (
+                <Link
+                  href="/schedule/trades"
+                  className="text-xs text-forest-600 hover:underline"
+                >
+                  Shift trades
+                </Link>
+              )}
             </div>
           )}
         </div>
@@ -79,18 +87,32 @@ export default function ScheduleView({
       </header>
 
       {role === "caregiver" && (
-        <Link
-          href="/schedule/proposals"
-          className="mb-5 flex items-center justify-between bg-forest-600 hover:bg-forest-700 text-cream-50 rounded-2xl px-5 py-4 shadow-soft transition active:scale-[0.99]"
-        >
-          <span>
-            <span className="block font-medium">Propose shift</span>
-            <span className="block text-xs text-cream-50/80">
-              Send availability or a client-specific request for admin approval
+        <div className="mb-5 grid gap-2">
+          <Link
+            href="/schedule/proposals"
+            className="flex items-center justify-between bg-forest-600 hover:bg-forest-700 text-cream-50 rounded-2xl px-5 py-4 shadow-soft transition active:scale-[0.99]"
+          >
+            <span>
+              <span className="block font-medium">Propose shift</span>
+              <span className="block text-xs text-cream-50/80">
+                Send availability or a client-specific request for admin approval
+              </span>
             </span>
-          </span>
-          <PlusIcon size={20} className="shrink-0" />
-        </Link>
+            <PlusIcon size={20} className="shrink-0" />
+          </Link>
+          <Link
+            href="/schedule/trades"
+            className="flex items-center justify-between bg-white hover:bg-cream-50 text-ink-900 rounded-2xl px-5 py-4 shadow-soft transition active:scale-[0.99]"
+          >
+            <span>
+              <span className="block font-medium">Shift trades</span>
+              <span className="block text-xs text-ink-500">
+                Pick up available shifts or track shifts you offered
+              </span>
+            </span>
+            <ArrowRightIcon size={18} className="text-ink-300 shrink-0" />
+          </Link>
+        </div>
       )}
 
       {view === "list" ? (
@@ -214,8 +236,7 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
       : `${elapsedMin}m`;
 
   return (
-    <Link
-      href={`/schedule/${shift.id}`}
+    <article
       className={`flex items-stretch gap-4 rounded-2xl p-4 shadow-soft transition active:scale-[0.99] ${
         status.kind === "active_checked_in"
           ? "bg-terracotta-500 text-cream-50 hover:bg-terracotta-600"
@@ -224,6 +245,10 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
             : "bg-white hover:bg-cream-50"
       }`}
     >
+      <Link
+        href={`/schedule/${shift.id}`}
+        className="flex items-stretch gap-4 flex-1 min-w-0"
+      >
       <div
         className={`w-1 rounded-full shrink-0 ${
           status.kind === "active_checked_in" ? "bg-cream-50" : ""
@@ -306,9 +331,17 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
           )}
         </p>
       </div>
+      <ArrowRightIcon
+        size={16}
+        className={`self-center shrink-0 ${
+          status.kind === "active_checked_in" ? "text-cream-50/70" : "text-ink-300"
+        }`}
+      />
+      </Link>
       {shift.caregiver_name ? (
         <UserAvatar
           person={{
+            id: shift.caregiver_profile_id ?? undefined,
             full_name: shift.caregiver_name,
             avatar_url: shift.caregiver_avatar_url,
             avatar_color: shift.caregiver_avatar_color,
@@ -321,13 +354,7 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
           ?
         </span>
       )}
-      <ArrowRightIcon
-        size={16}
-        className={`self-center ${
-          status.kind === "active_checked_in" ? "text-cream-50/70" : "text-ink-300"
-        }`}
-      />
-    </Link>
+    </article>
   );
 }
 

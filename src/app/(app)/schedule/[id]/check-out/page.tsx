@@ -19,11 +19,18 @@ type ShiftForCheckOut = {
     longitude: number | null;
     geofence_radius_meters: number;
   } | null;
-  check_ins: Array<{
-    id: string;
-    check_in_time: string | null;
-    check_out_time: string | null;
-  }> | null;
+  check_ins:
+    | Array<{
+        id: string;
+        check_in_time: string | null;
+        check_out_time: string | null;
+      }>
+    | {
+        id: string;
+        check_in_time: string | null;
+        check_out_time: string | null;
+      }
+    | null;
   shift_todos: Array<{
     id: string;
     task_name: string;
@@ -79,7 +86,7 @@ export default async function CheckOutPage({
     );
   }
 
-  const existing = (shift.check_ins ?? []).find(
+  const existing = normalizeRows(shift.check_ins).find(
     (row) => row.check_in_time && !row.check_out_time
   );
   if (!existing?.check_in_time) {
@@ -109,4 +116,9 @@ export default async function CheckOutPage({
       todos={shift.shift_todos ?? []}
     />
   );
+}
+
+function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
 }

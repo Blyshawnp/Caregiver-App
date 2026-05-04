@@ -31,11 +31,18 @@ type ActiveShiftRow = {
     longitude: number | null;
     geofence_radius_meters: number;
   } | null;
-  check_ins: Array<{
-    id: string;
-    check_in_time: string | null;
-    check_out_time: string | null;
-  }>;
+  check_ins:
+    | Array<{
+        id: string;
+        check_in_time: string | null;
+        check_out_time: string | null;
+      }>
+    | {
+        id: string;
+        check_in_time: string | null;
+        check_out_time: string | null;
+      }
+    | null;
 };
 
 export default async function AppLayout({
@@ -81,6 +88,10 @@ export default async function AppLayout({
 
       if (activeRaw) {
         const active = activeRaw as unknown as ActiveShiftRow;
+        const activeCheckIn =
+          normalizeRows(active.check_ins).find(
+            (row) => row.check_in_time && !row.check_out_time
+          ) ?? null;
         activeWatch = {
           shift_id: active.id,
           caregiver_id: profile.id,
@@ -90,7 +101,7 @@ export default async function AppLayout({
           client_lng: active.clients?.longitude ?? null,
           geofence_radius: active.clients?.geofence_radius_meters ?? 150,
           client_name: active.clients?.full_name ?? "Client",
-          check_in_id: active.check_ins?.[0]?.id ?? null,
+          check_in_id: activeCheckIn?.id ?? null,
         };
       }
     } catch {
@@ -119,7 +130,8 @@ export default async function AppLayout({
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("recipient_id", profile.id)
-        .eq("is_read", false);
+        .eq("is_read", false)
+        .is("dismissed_at", null);
       notificationCount = count ?? 0;
     } catch {
       /* ignore */
@@ -156,4 +168,9 @@ export default async function AppLayout({
       <PushPermissionPrompt />
     </div>
   );
+}
+
+function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
 }

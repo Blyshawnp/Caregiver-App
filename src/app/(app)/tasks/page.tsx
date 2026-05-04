@@ -104,10 +104,16 @@ export default async function TasksPage({
     scheduled_end: string;
     organization_id: string;
     clients: { full_name: string } | null;
-    check_ins: Array<{
-      check_in_time: string | null;
-      check_out_time: string | null;
-    }> | null;
+    check_ins:
+      | Array<{
+          check_in_time: string | null;
+          check_out_time: string | null;
+        }>
+      | {
+          check_in_time: string | null;
+          check_out_time: string | null;
+        }
+      | null;
     shift_todos: Array<{
       id: string;
       task_name: string;
@@ -154,7 +160,9 @@ export default async function TasksPage({
 
   const isAssignedCaregiver =
     profile.role === "caregiver" && profile.id === shift.caregiver_id;
-  const checkIn = shift.check_ins?.[0];
+  const checkIn =
+    normalizeRows(shift.check_ins).find((row) => row.check_in_time && !row.check_out_time) ??
+    normalizeRows(shift.check_ins)[0];
   const isOnShift = !!checkIn?.check_in_time && !checkIn?.check_out_time;
 
   return (
@@ -187,6 +195,11 @@ export default async function TasksPage({
       )}
     </main>
   );
+}
+
+function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
 }
 
 function ManageTemplatesLink() {

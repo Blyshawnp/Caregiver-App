@@ -39,6 +39,8 @@ export default function PushPermissionPrompt() {
         error instanceof Error ? error.message : "Could not enable notifications.";
       setError(message);
       setState(Notification.permission === "denied" ? "denied" : "ready");
+    } finally {
+      setState((current) => (current === "saving" ? "ready" : current));
     }
   }
 

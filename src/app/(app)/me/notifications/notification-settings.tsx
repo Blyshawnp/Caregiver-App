@@ -21,6 +21,7 @@ export default function NotificationSettings({
   const [deviceEnabled, setDeviceEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<PushPreferences>(initialPreferences);
 
   useEffect(() => {
@@ -44,16 +45,21 @@ export default function NotificationSettings({
 
   async function toggleDevice() {
     setSaving(true);
+    setError(null);
     try {
       if (deviceEnabled) {
         await disablePushNotifications();
         setDeviceEnabled(false);
       } else {
         await enablePushNotifications();
-        setDeviceEnabled(true);
+        const status = await getPushDeviceStatus();
+        setDeviceEnabled(status.enabled);
+        if (!status.enabled) {
+          setError("Notifications were permitted, but this device subscription was not saved.");
+        }
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Could not update device");
+      setError(err instanceof Error ? err.message : "Could not update device.");
     } finally {
       setSaving(false);
     }
@@ -81,6 +87,8 @@ export default function NotificationSettings({
         <p className="text-xs text-ink-500 mb-4">
           Enable native notifications on this device to stay updated instantly.
         </p>
+        {loading && <p className="text-xs text-ink-500 mb-3">Checking this device...</p>}
+        {error && <p className="text-xs text-terracotta-600 mb-3">{error}</p>}
 
         {!supported ? (
           <div className="bg-cream-50 p-4 rounded-2xl text-sm text-ink-700">

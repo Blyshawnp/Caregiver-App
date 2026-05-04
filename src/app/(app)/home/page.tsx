@@ -88,7 +88,10 @@ export default async function HomePage() {
       geofence_radius_meters: number;
     } | null;
     shift_types: { name: string; color: string } | null;
-    check_ins: Array<{ check_in_time: string | null; check_out_time: string | null }>;
+    check_ins:
+      | Array<{ check_in_time: string | null; check_out_time: string | null }>
+      | { check_in_time: string | null; check_out_time: string | null }
+      | null;
     shift_todos: Array<{ id: string; is_completed: boolean }>;
   };
 
@@ -160,8 +163,6 @@ export default async function HomePage() {
   return (
     <HomeContent
       role={profile.role}
-      userId={profile.id}
-      organizationId={profile.organization_id}
       shifts={shifts}
       activeShifts={activeShifts}
     />
@@ -194,10 +195,18 @@ function mapShiftRow(r: {
     geofence_radius_meters: number;
   } | null;
   shift_types: { name: string; color: string } | null;
-  check_ins: Array<{ check_in_time: string | null; check_out_time: string | null }>;
+  check_ins:
+    | Array<{ check_in_time: string | null; check_out_time: string | null }>
+    | { check_in_time: string | null; check_out_time: string | null }
+    | null;
   shift_todos: Array<{ id: string; is_completed: boolean }>;
 }): ShiftRow {
   const todos = r.shift_todos ?? [];
+  const checkIns = normalizeRows(r.check_ins);
+  const activeCheckIn =
+    checkIns.find((row) => row.check_in_time && !row.check_out_time) ??
+    checkIns[0] ??
+    null;
   return {
     id: r.id,
     scheduled_start: r.scheduled_start,
@@ -211,10 +220,15 @@ function mapShiftRow(r: {
     geofence_radius_meters: r.clients?.geofence_radius_meters ?? 150,
     shift_type_name: r.shift_types?.name ?? null,
     shift_type_color: r.shift_types?.color ?? null,
-    check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
-    check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
+    check_in_time: activeCheckIn?.check_in_time ?? null,
+    check_out_time: activeCheckIn?.check_out_time ?? null,
     todo_total: todos.length,
     todo_done: todos.filter((t) => t.is_completed).length,
     assignment_status: r.assignment_status ?? null,
   };
+}
+
+function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
 }

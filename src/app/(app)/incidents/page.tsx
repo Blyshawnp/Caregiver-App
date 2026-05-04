@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import IncidentForm from "./incident-form";
-import ResolveButton from "./resolve-button";
+import IncidentActionButton from "./incident-action-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,11 +21,18 @@ type IncidentRow = {
   status: string;
   created_at: string;
   reported_by: string;
+  archived_at: string | null;
   profiles: { full_name: string | null } | null;
   clients: { full_name: string | null } | null;
 };
 
-export default async function IncidentsPage() {
+export default async function IncidentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ view?: string }>;
+}) {
+  const { view } = (await searchParams) ?? {};
+  const showingArchive = view === "archive";
   const supabase = await createClient();
   const {
     data: { user },
@@ -50,11 +57,17 @@ export default async function IncidentsPage() {
     .or(profile.role === "caregiver" ? `caregiver_id.eq.${profile.id}` : `organization_id.eq.${profile.organization_id}`)
     .order("scheduled_start", { ascending: false });
 
-  const { data: incidents } = await supabase
+  let incidentsQuery = supabase
     .from("incidents")
-    .select("id, title, description, severity, status, created_at, reported_by, profiles:reported_by(full_name), clients(full_name)")
+    .select("id, title, description, severity, status, created_at, reported_by, archived_at, profiles:reported_by(full_name), clients(full_name)")
     .order("created_at", { ascending: false })
     .limit(50);
+
+  incidentsQuery = showingArchive
+    ? incidentsQuery.not("archived_at", "is", null)
+    : incidentsQuery.is("archived_at", null);
+
+  const { data: incidents } = await incidentsQuery;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -64,9 +77,25 @@ export default async function IncidentsPage() {
         </Link>
         <h1 className="font-display text-3xl text-ink-900">Incidents</h1>
         <p className="text-ink-500 text-sm">Report and review care incidents.</p>
+        {isAdmin && (
+          <div className="flex gap-3 mt-2">
+            <Link
+              href="/incidents"
+              className={`text-xs hover:underline ${!showingArchive ? "text-forest-700 font-medium" : "text-forest-600"}`}
+            >
+              Active
+            </Link>
+            <Link
+              href="/incidents?view=archive"
+              className={`text-xs hover:underline ${showingArchive ? "text-forest-700 font-medium" : "text-forest-600"}`}
+            >
+              Archive
+            </Link>
+          </div>
+        )}
       </header>
 
-      {canReport && (
+      {canReport && !showingArchive && (
         <IncidentForm
           shifts={((shifts ?? []) as unknown as IncidentShift[]).map((shift) => ({
             id: shift.id,
@@ -77,20 +106,26 @@ export default async function IncidentsPage() {
 
       <ul className="space-y-2">
         {((incidents ?? []) as unknown as IncidentRow[]).map((incident) => (
-          <li key={incident.id} className={`bg-white rounded-2xl shadow-soft p-4 ${incident.status === 'resolved' ? 'opacity-60' : ''}`}>
+          <li key={incident.id} className={`bg-white rounded-2xl shadow-soft p-4 ${incident.status === "resolved" ? "opacity-70" : ""}`}>
             <div className="flex items-baseline justify-between gap-3">
               <div className="flex items-center gap-2">
                 <p className="font-medium text-ink-900">{incident.title}</p>
-                {incident.status === 'resolved' && (
+                {incident.status === "resolved" && (
                    <span className="text-[9px] bg-forest-100 text-forest-700 px-1.5 py-0.5 rounded-full font-bold uppercase">Resolved</span>
+                )}
+                {incident.archived_at && (
+                   <span className="text-[9px] bg-cream-200 text-ink-600 px-1.5 py-0.5 rounded-full font-bold uppercase">Archived</span>
                 )}
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-[10px] uppercase tracking-wide text-terracotta-600">
                   {incident.severity}
                 </span>
-                {incident.status === 'open' && (isAdmin || incident.reported_by === user.id) && (
-                  <ResolveButton incidentId={incident.id} />
+                {incident.status === "open" && (isAdmin || incident.reported_by === user.id) && !incident.archived_at && (
+                  <IncidentActionButton incidentId={incident.id} action="resolve" />
+                )}
+                {isAdmin && !incident.archived_at && (
+                  <IncidentActionButton incidentId={incident.id} action="archive" />
                 )}
               </div>
             </div>
@@ -102,7 +137,7 @@ export default async function IncidentsPage() {
         ))}
         {(incidents ?? []).length === 0 && (
           <li className="bg-white rounded-2xl shadow-soft p-6 text-center text-sm text-ink-500">
-            No incidents reported.
+            {showingArchive ? "No archived incidents." : "No incidents reported."}
           </li>
         )}
       </ul>

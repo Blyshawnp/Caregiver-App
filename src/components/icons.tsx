@@ -42,10 +42,9 @@ export const UserIcon = (p: IconProps) => (
 );
 
 export const StarOfLifeIcon = (p: IconProps) => (
-  <svg width={p.size || 24} height={p.size || 24} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={p.className} viewBox="0 0 24 24">
-    <path d="M12 3v18" />
-    <path d="m4.95 7.05 14.1 9.9" />
-    <path d="m19.05 7.05-14.1 9.9" />
+  <svg width={p.size || 24} height={p.size || 24} fill="currentColor" className={p.className} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M10 2h4l1.25 6.05 5.5-2.86 2 3.46-5.15 3.36 5.15 3.36-2 3.46-5.5-2.86L14 22h-4l-1.25-6.03-5.5 2.86-2-3.46 5.15-3.36-5.15-3.36 2-3.46 5.5 2.86L10 2Z" />
+    <path d="M12 7.75v8.5M7.75 12h8.5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
   </svg>
 );
 

@@ -83,16 +83,27 @@ export default async function SchedulePage() {
     } | null;
     clients: { full_name: string } | null;
     shift_types: { name: string; color: string } | null;
-    check_ins: Array<{
-      check_in_time: string | null;
-      check_out_time: string | null;
-    }>;
+    check_ins:
+      | Array<{
+          check_in_time: string | null;
+          check_out_time: string | null;
+        }>
+      | {
+          check_in_time: string | null;
+          check_out_time: string | null;
+        }
+      | null;
   };
 
   const viewerRole = profile?.role ?? "caregiver";
   const shifts: ScheduleShift[] = (
     (rows ?? []) as unknown as ScheduleQueryRow[]
   ).map((r) => {
+    const checkIns = normalizeRows(r.check_ins);
+    const activeCheckIn =
+      checkIns.find((row) => row.check_in_time && !row.check_out_time) ??
+      checkIns[0] ??
+      null;
     const canShowClientDetails =
       viewerRole !== "caregiver" || r.caregiver_id === profile?.id;
 
@@ -107,15 +118,20 @@ export default async function SchedulePage() {
       client_name: canShowClientDetails ? r.clients?.full_name ?? null : null,
       shift_type_name: r.shift_types?.name ?? null,
       shift_type_color: r.shift_types?.color ?? null,
-      check_in_time: r.check_ins?.[0]?.check_in_time ?? null,
-      check_out_time: r.check_ins?.[0]?.check_out_time ?? null,
-      has_check_in: !!r.check_ins?.[0]?.check_in_time,
-      is_complete: !!r.check_ins?.[0]?.check_out_time,
+      check_in_time: activeCheckIn?.check_in_time ?? null,
+      check_out_time: activeCheckIn?.check_out_time ?? null,
+      has_check_in: !!activeCheckIn?.check_in_time,
+      is_complete: !!activeCheckIn?.check_out_time,
       is_released: !!r.is_released,
-      is_open: !r.caregiver_id && !r.is_released && !r.check_ins?.[0]?.check_in_time,
+      is_open: !r.caregiver_id && !r.is_released && !activeCheckIn?.check_in_time,
       assignment_status: r.assignment_status ?? null,
     };
   });
 
   return <ScheduleView shifts={shifts} role={viewerRole} />;
+}
+
+function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
 }

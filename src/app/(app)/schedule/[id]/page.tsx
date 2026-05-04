@@ -71,16 +71,10 @@ type ShiftDetail = {
     home_notes: string | null;
   } | null;
   shift_types: { name: string; color: string } | null;
-  check_ins: Array<{
-    id: string;
-    check_in_time: string | null;
-    check_out_time: string | null;
-    check_out_method: string | null;
-    check_out_by: string | null;
-    total_minutes: number | null;
-    flagged_outside_geofence: boolean | null;
-    flag_reason: string | null;
-  }> | null;
+  check_ins:
+    | Array<CheckInRow>
+    | CheckInRow
+    | null;
   shift_todos: Array<{
     id: string;
     task_name: string;
@@ -90,6 +84,17 @@ type ShiftDetail = {
     sort_order: number;
     notes: string | null;
   }> | null;
+};
+
+type CheckInRow = {
+  id: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  check_out_method: string | null;
+  check_out_by: string | null;
+  total_minutes: number | null;
+  flagged_outside_geofence: boolean | null;
+  flag_reason: string | null;
 };
 
 export default async function ShiftDetailPage({
@@ -206,7 +211,11 @@ export default async function ShiftDetailPage({
     .maybeSingle<{ pay_multiplier: number }>();
 
   // Compute current pay for this shift
-  const checkIn0 = (shift.check_ins ?? [])[0];
+  const normalizedCheckIns = normalizeRows(shift.check_ins);
+  const checkIn0 =
+    normalizedCheckIns.find((row) => row.check_in_time && !row.check_out_time) ??
+    normalizedCheckIns[0] ??
+    null;
   const totalMinutes =
     checkIn0?.check_in_time && checkIn0?.check_out_time
       ? Math.round(
@@ -250,8 +259,10 @@ export default async function ShiftDetailPage({
 
   const start = new Date(shift.scheduled_start);
   const end = new Date(shift.scheduled_end);
-  const checkIns = shift.check_ins ?? [];
-  let checkIn = checkIns[0];
+  const checkIns = normalizedCheckIns;
+  let checkIn =
+    checkIns.find((row) => row.check_in_time && !row.check_out_time) ??
+    checkIns[0];
 
   if (!checkIn) {
     const { data: directCheckIn } = await supabase
@@ -796,4 +807,9 @@ function formatHours(minutes: number | null) {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
+}
+
+function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
 }

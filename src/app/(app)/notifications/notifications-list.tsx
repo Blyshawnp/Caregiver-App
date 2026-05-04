@@ -30,6 +30,7 @@ export default function NotificationsList({
   const router = useRouter();
   const [items, setItems] = useState(notifications);
   const [markingAll, setMarkingAll] = useState(false);
+  const [clearingRead, setClearingRead] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleClick(n: Notification) {
@@ -54,20 +55,47 @@ export default function NotificationsList({
 
   async function deleteNotification(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    const supabase = createClient();
-    const { error: deleteError } = await supabase
-      .from("notifications")
-      .delete()
-      .eq("id", id)
-      .eq("recipient_id", currentUserId);
+    setError(null);
+    const response = await fetch("/api/notifications/dismiss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const result = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
 
-    if (deleteError) {
-      setError(deleteError.message);
+    if (!response.ok) {
+      setError(result?.error ?? "Could not clear notification.");
       return;
     }
 
     setItems((prev) => prev.filter((n) => n.id !== id));
     window.dispatchEvent(new CustomEvent("notifications:changed"));
+    router.refresh();
+  }
+
+  async function clearRead() {
+    setClearingRead(true);
+    setError(null);
+    const response = await fetch("/api/notifications/dismiss", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ readOnly: true }),
+    });
+    const result = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+
+    if (!response.ok) {
+      setError(result?.error ?? "Could not clear read notifications.");
+      setClearingRead(false);
+      return;
+    }
+
+    setItems((prev) => prev.filter((n) => !n.is_read));
+    window.dispatchEvent(new CustomEvent("notifications:changed"));
+    setClearingRead(false);
     router.refresh();
   }
 
@@ -110,21 +138,33 @@ export default function NotificationsList({
   }
 
   const hasUnread = items.some((n) => !n.is_read);
+  const hasRead = items.some((n) => n.is_read);
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        {hasUnread ? (
-          <button
-            onClick={markAllRead}
-            disabled={markingAll}
-            className="text-sm text-forest-600 font-medium hover:underline disabled:opacity-60"
-          >
-            {markingAll ? "Marking read..." : "Mark all read"}
-          </button>
-        ) : (
-          <span className="text-sm text-ink-500">All notifications are read.</span>
-        )}
+        <div className="flex items-center gap-3">
+          {hasUnread ? (
+            <button
+              onClick={markAllRead}
+              disabled={markingAll}
+              className="text-sm text-forest-600 font-medium hover:underline disabled:opacity-60"
+            >
+              {markingAll ? "Marking read..." : "Mark all read"}
+            </button>
+          ) : (
+            <span className="text-sm text-ink-500">All notifications are read.</span>
+          )}
+          {hasRead && (
+            <button
+              onClick={clearRead}
+              disabled={clearingRead}
+              className="text-sm text-terracotta-600 font-medium hover:underline disabled:opacity-60"
+            >
+              {clearingRead ? "Clearing..." : "Clear read"}
+            </button>
+          )}
+        </div>
       </div>
       {error && (
         <p className="text-sm text-terracotta-600 mb-3">{error}</p>

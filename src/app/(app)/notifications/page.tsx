@@ -13,6 +13,7 @@ export default async function NotificationsPage() {
     .from("notifications")
     .select("id, kind, title, body, link, is_read, created_at, related_shift_id")
     .eq("recipient_id", user.id)
+    .is("dismissed_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
 

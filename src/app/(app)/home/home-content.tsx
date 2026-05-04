@@ -9,9 +9,7 @@ import {
   ArrowRightIcon,
   CalendarIcon,
   MessageIcon,
-  StarOfLifeIcon,
 } from "@/components/icons";
-import UrgentIncidentBanner from "@/components/urgent-incident-banner";
 import type { ShiftRow } from "./page";
 import type { ActiveShift } from "./page";
 import { getShiftStatus } from "@/lib/shift-status";
@@ -56,13 +54,10 @@ function pickState(shifts: ShiftRow[], now: Date): State {
 
 export default function HomeContent({
   role,
-  organizationId,
   shifts,
   activeShifts,
 }: {
   role: "admin" | "client" | "caregiver" | "family";
-  organizationId: string;
-  userId: string;
   shifts: ShiftRow[];
   activeShifts: ActiveShift[];
 }) {
@@ -107,8 +102,6 @@ export default function HomeContent({
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
-      <UrgentIncidentBanner organizationId={organizationId} />
-
       {/* Active right now (admin/client only) */}
       {role !== "caregiver" && activeShifts.length > 0 && (
         <ActivePanel activeShifts={activeShifts} now={now} />
@@ -150,8 +143,6 @@ export default function HomeContent({
         <QuickLink href="/schedule" label="Schedule" Icon={CalendarIcon} />
         <QuickLink href="/tasks" label="Tasks" Icon={CheckSquareIcon} />
         <QuickLink href="/messages" label="Messages" Icon={MessageIcon} />
-        <QuickLink href="/incidents" label="Incidents" Icon={StarOfLifeIcon} />
-        <QuickLink href="/emergency" label="Emergency" Icon={MapPinIcon} />
         <QuickLink href="/me" label="Account" Icon={ClockIcon} />
       </section>
 

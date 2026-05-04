@@ -60,7 +60,8 @@ export default function NotificationBell({
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("recipient_id", userId)
-        .eq("is_read", false);
+        .eq("is_read", false)
+        .is("dismissed_at", null);
       setCount(c ?? 0);
     }
 

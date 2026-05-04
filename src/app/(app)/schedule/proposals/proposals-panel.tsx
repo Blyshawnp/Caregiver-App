@@ -47,6 +47,10 @@ export default function ProposalsPanel({
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [handledProposalIds, setHandledProposalIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const myProposals = useMemo(
     () => proposals.filter((proposal) => proposal.caregiver_id === currentUserId),
@@ -56,6 +60,7 @@ export default function ProposalsPanel({
   async function createProposal(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setMessage(null);
 
     const startISO = combineDateTime(date, startTime);
     const endISO = combineDateTime(date, endTime);
@@ -104,22 +109,29 @@ export default function ProposalsPanel({
 
   async function approveProposal(proposalId: string) {
     setError(null);
-    const { data: shiftId, error: rpcError } = await supabase.rpc(
-      "approve_shift_proposal",
-      { p_proposal_id: proposalId }
-    );
+    setMessage(null);
+    const response = await fetch("/api/shift-proposals/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proposalId }),
+    });
+    const result = (await response.json().catch(() => null)) as
+      | { error?: string; shiftId?: string | null }
+      | null;
 
-    if (rpcError) {
-      setError(rpcError.message);
+    if (!response.ok) {
+      setError(result?.error ?? "Could not approve proposal.");
       return;
     }
 
     void sendNotificationEvent({
       type: "shift_proposal_approved",
       proposalId,
-      shiftId: shiftId ?? null,
+      shiftId: result?.shiftId ?? null,
     });
 
+    setHandledProposalIds((prev) => new Set(prev).add(proposalId));
+    setMessage("Proposal approved and shift created.");
     router.refresh();
   }
 
@@ -141,6 +153,8 @@ export default function ProposalsPanel({
       reason: reason.trim() || null,
     });
 
+    setHandledProposalIds((prev) => new Set(prev).add(proposalId));
+    setMessage("Proposal rejected.");
     router.refresh();
   }
 
@@ -188,6 +202,12 @@ export default function ProposalsPanel({
           </div>
         </div>
       </header>
+
+      {(error || message) && (
+        <p className={`mb-4 text-sm ${error ? "text-terracotta-600" : "text-forest-700"}`}>
+          {error ?? message}
+        </p>
+      )}
 
       {canCreate && (
         <form onSubmit={createProposal} className="space-y-5 mb-6">
@@ -268,11 +288,13 @@ export default function ProposalsPanel({
               title="Pending proposals"
               description="Approve to create a shift or reject with a reason."
             />
-            {proposals.length === 0 ? (
+            {proposals.filter((proposal) => !handledProposalIds.has(proposal.id)).length === 0 ? (
               <EmptyState text="No pending proposals right now." />
             ) : (
               <div className="space-y-3">
-                {proposals.map((proposal) => (
+                {proposals
+                  .filter((proposal) => !handledProposalIds.has(proposal.id))
+                  .map((proposal) => (
                   <ProposalCard
                     key={proposal.id}
                     proposal={proposal}

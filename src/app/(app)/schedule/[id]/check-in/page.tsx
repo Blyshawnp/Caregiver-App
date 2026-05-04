@@ -21,11 +21,18 @@ type ShiftForCheckIn = {
     longitude: number | null;
     geofence_radius_meters: number;
   } | null;
-  check_ins: Array<{
-    id: string;
-    check_in_time: string | null;
-    check_out_time: string | null;
-  }> | null;
+  check_ins:
+    | Array<{
+        id: string;
+        check_in_time: string | null;
+        check_out_time: string | null;
+      }>
+    | {
+        id: string;
+        check_in_time: string | null;
+        check_out_time: string | null;
+      }
+    | null;
 };
 
 export default async function CheckInPage({
@@ -101,7 +108,9 @@ export default async function CheckInPage({
   }
 
   // Already checked in?
-  const existing = shift.check_ins?.[0];
+  const existing =
+    normalizeRows(shift.check_ins).find((row) => row.check_in_time && !row.check_out_time) ??
+    normalizeRows(shift.check_ins)[0];
   if (existing?.check_in_time) {
     redirect(`/schedule/${id}`);
   }
@@ -123,4 +132,9 @@ export default async function CheckInPage({
       }}
     />
   );
+}
+
+function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
 }

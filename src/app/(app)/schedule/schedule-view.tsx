@@ -254,7 +254,7 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
           )}
           {status.kind === "active_checked_in" && (
             <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-cream-50 px-1.5 py-0.5 rounded">
-              On shift now
+              ON SHIFT NOW
             </span>
           )}
           {shift.is_released && status.kind !== "open_expired" && (

@@ -279,7 +279,7 @@ export default function TemplatesList({
           />
           <label className="block">
             <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
-              Time of day
+              Task category
             </span>
             <select
               value={newCategory}
@@ -441,7 +441,7 @@ function TemplateRow({
         />
         <label className="block">
           <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
-            Time of day
+            Task category
           </span>
           <select
             value={normalizeCategory(template.category)}

@@ -25,7 +25,7 @@ export default async function MePage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, email, phone, language, avatar_url, avatar_color, organizations(name)"
+      "id, full_name, role, email, phone, language, avatar_url, avatar_color, bio, vehicle_1_make_model, vehicle_1_color, vehicle_2_make_model, vehicle_2_color, organizations(name)"
     )
     .eq("id", user.id)
     .single<{
@@ -37,6 +37,11 @@ export default async function MePage() {
       language: Lang | null;
       avatar_url: string | null;
       avatar_color: string | null;
+      bio: string | null;
+      vehicle_1_make_model: string | null;
+      vehicle_1_color: string | null;
+      vehicle_2_make_model: string | null;
+      vehicle_2_color: string | null;
       organizations: { name: string } | null;
     }>();
 
@@ -147,6 +152,12 @@ export default async function MePage() {
                   userId={profile.id}
                   initialName={profile.full_name}
                   initialPhone={profile.phone}
+                  initialBio={profile.bio}
+                  initialVehicle1MakeModel={profile.vehicle_1_make_model}
+                  initialVehicle1Color={profile.vehicle_1_color}
+                  initialVehicle2MakeModel={profile.vehicle_2_make_model}
+                  initialVehicle2Color={profile.vehicle_2_color}
+                  role={profile.role}
                 />
               </div>
             )}
@@ -165,6 +176,25 @@ export default async function MePage() {
             label={t("me.organization", lang)}
             value={profile?.organizations?.name ?? "—"}
           />
+          <Row label="About" value={profile?.bio} />
+          {profile?.role === "caregiver" && (
+            <>
+              <Row
+                label="Vehicle 1"
+                value={formatVehicle(
+                  profile.vehicle_1_color,
+                  profile.vehicle_1_make_model
+                )}
+              />
+              <Row
+                label="Vehicle 2"
+                value={formatVehicle(
+                  profile.vehicle_2_color,
+                  profile.vehicle_2_make_model
+                )}
+              />
+            </>
+          )}
         </dl>
       </section>
 
@@ -315,6 +345,11 @@ function Row({ label, value }: { label: string; value?: string | null }) {
       <dd className="text-ink-900 font-medium text-right">{value ?? "—"}</dd>
     </div>
   );
+}
+
+function formatVehicle(color?: string | null, makeModel?: string | null) {
+  const parts = [color, makeModel].map((part) => part?.trim()).filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 function NavLink({

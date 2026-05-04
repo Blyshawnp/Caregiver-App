@@ -22,6 +22,11 @@ export type ProfileRow = {
   organization_id: string;
   avatar_url: string | null;
   avatar_color: string | null;
+  bio: string | null;
+  vehicle_1_make_model: string | null;
+  vehicle_1_color: string | null;
+  vehicle_2_make_model: string | null;
+  vehicle_2_color: string | null;
 };
 
 export type ClientRow = {

@@ -9,6 +9,15 @@ import { sendNotificationEvent } from "@/lib/notify-client";
 type Caregiver = { id: string; full_name: string };
 type ShiftType = { id: string; name: string; color: string };
 type Client = { id: string; full_name: string };
+type TaskTemplate = {
+  id: string;
+  task_name: string;
+  description: string | null;
+  default_for_new_shifts: boolean;
+  sort_order: number | null;
+  caregiver_id: string | null;
+  category: string | null;
+};
 
 type Mode = "single" | "bulk";
 
@@ -16,12 +25,14 @@ export default function NewShiftForm({
   caregivers,
   shiftTypes,
   clients,
+  taskTemplates,
   organizationId,
   currentUserId,
 }: {
   caregivers: Caregiver[];
   shiftTypes: ShiftType[];
   clients: Client[];
+  taskTemplates: TaskTemplate[];
   organizationId: string;
   currentUserId: string;
 }) {
@@ -49,6 +60,11 @@ export default function NewShiftForm({
   const [bonusAmount, setBonusAmount] = useState("");
   const [bonusReason, setBonusReason] = useState("");
   const [notes, setNotes] = useState("");
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>(() =>
+    taskTemplates
+      .filter((template) => template.default_for_new_shifts)
+      .map((template) => template.id)
+  );
 
   // Single-mode date
   const tomorrowStr = useMemo(() => {
@@ -82,6 +98,17 @@ export default function NewShiftForm({
 
   const noClients = clients.length === 0;
   const noShiftTypes = shiftTypes.length === 0;
+  const applicableTemplates = useMemo(
+    () =>
+      taskTemplates.filter(
+        (template) =>
+          !template.caregiver_id || template.caregiver_id === caregiverId
+      ),
+    [taskTemplates, caregiverId]
+  );
+  const selectedApplicableTemplates = applicableTemplates.filter((template) =>
+    selectedTemplateIds.includes(template.id)
+  );
 
   // Preview: how many shifts will be created in bulk mode
   const bulkPreview = useMemo(() => {
@@ -187,6 +214,29 @@ export default function NewShiftForm({
       return;
     }
 
+    if (createdShifts && selectedApplicableTemplates.length > 0) {
+      const taskRows = createdShifts.flatMap((shift) =>
+        selectedApplicableTemplates.map((template, index) => ({
+          shift_id: shift.id,
+          template_id: template.id,
+          task_name: template.task_name,
+          description: template.description,
+          sort_order: template.sort_order ?? (index + 1) * 10,
+          category: template.category,
+        }))
+      );
+
+      const { error: taskError } = await supabase
+        .from("shift_todos")
+        .insert(taskRows);
+
+      if (taskError) {
+        setError(`Shift was created, but tasks could not be added: ${taskError.message}`);
+        setSubmitting(false);
+        return;
+      }
+    }
+
     const assignedShiftIds =
       createdShifts
         ?.filter((shift) => shift.caregiver_id)
@@ -200,6 +250,14 @@ export default function NewShiftForm({
 
     router.push("/schedule");
     router.refresh();
+  }
+
+  function toggleTaskTemplate(templateId: string) {
+    setSelectedTemplateIds((current) =>
+      current.includes(templateId)
+        ? current.filter((id) => id !== templateId)
+        : [...current, templateId]
+    );
   }
 
   return (
@@ -412,6 +470,59 @@ export default function NewShiftForm({
               ))}
             </select>
           </Field>
+        </Card>
+
+        <Card title="Tasks for this shift">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-ink-600">
+              Choose reusable tasks to add when this shift is created.
+            </p>
+            <Link
+              href="/tasks/templates"
+              className="text-xs text-forest-600 hover:underline font-medium"
+            >
+              Edit library
+            </Link>
+          </div>
+          {applicableTemplates.length === 0 ? (
+            <p className="text-sm text-ink-500 bg-cream-50 border border-cream-200 rounded-xl px-4 py-3">
+              No reusable tasks yet.
+            </p>
+          ) : (
+            <div className="grid gap-2 max-h-72 overflow-y-auto pr-1">
+              {applicableTemplates.map((template) => {
+                const checked = selectedTemplateIds.includes(template.id);
+                const assignedName = template.caregiver_id
+                  ? caregivers.find(
+                      (caregiver) => caregiver.id === template.caregiver_id
+                    )?.full_name
+                  : null;
+
+                return (
+                  <label
+                    key={template.id}
+                    className="flex items-start gap-3 bg-cream-50 border border-cream-200 rounded-xl px-4 py-3 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleTaskTemplate(template.id)}
+                      className="mt-0.5 w-4 h-4 accent-forest-600"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-ink-900">
+                        {template.task_name}
+                      </span>
+                      <span className="block text-xs text-ink-500">
+                        {assignedName ? `Only ${assignedName}` : "Everyone"}
+                        {template.default_for_new_shifts ? " · default" : ""}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </Card>
 
         <Card title="Bonus & notes (optional)">

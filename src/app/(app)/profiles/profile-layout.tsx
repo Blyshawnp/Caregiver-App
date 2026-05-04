@@ -1,6 +1,14 @@
 "use client";
 
-import { UserIcon, MailIcon, PhoneIcon, ShieldIcon, CalendarIcon, HeartIcon } from "@/components/icons";
+import {
+  UserIcon,
+  MailIcon,
+  PhoneIcon,
+  ShieldIcon,
+  CalendarIcon,
+  HeartIcon,
+  MapPinIcon,
+} from "@/components/icons";
 import UserAvatar from "@/components/user-avatar";
 
 type ProfileData = {
@@ -11,6 +19,11 @@ type ProfileData = {
   phone: string | null;
   avatar_url: string | null;
   avatar_color: string | null;
+  bio: string | null;
+  vehicle_1_make_model: string | null;
+  vehicle_1_color: string | null;
+  vehicle_2_make_model: string | null;
+  vehicle_2_color: string | null;
   organization_id: string;
   is_active: boolean;
 };
@@ -35,7 +48,7 @@ export default function ProfileLayout({
       <div className="bg-white rounded-3xl shadow-lifted overflow-hidden grain-overlay border border-cream-200">
         {/* Header/Cover Area */}
         <div className="h-32 bg-forest-600 relative">
-          <div className="absolute -bottom-12 left-8 p-1 bg-white rounded-full shadow-soft">
+          <div className="absolute -bottom-16 left-8 p-1 bg-white rounded-full shadow-soft">
             <UserAvatar 
               person={{
                 full_name: profile.full_name,
@@ -43,13 +56,13 @@ export default function ProfileLayout({
                 avatar_color: profile.avatar_color ?? null,
                 id: profile.id
               }} 
-              size="xl" 
+              size="xxl"
               linkToProfile={false}
             />
           </div>
         </div>
 
-        <div className="pt-16 px-8 pb-10">
+        <div className="pt-20 px-8 pb-10">
           <div className="mb-8">
             <h1 className="font-display text-3xl text-ink-900 mb-1">{profile.full_name}</h1>
             <p className="text-forest-600 font-medium uppercase tracking-widest text-xs flex items-center gap-2">
@@ -75,6 +88,15 @@ export default function ProfileLayout({
             )}
 
             {/* Role Specifics */}
+            {profile.bio && (
+              <section className="space-y-4">
+                <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">About</h2>
+                <div className="bg-cream-50 rounded-2xl p-4 text-sm text-ink-700 whitespace-pre-wrap">
+                  {profile.bio}
+                </div>
+              </section>
+            )}
+
             {profile.role === 'caregiver' && (
               <section className="space-y-4">
                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold">Professional Profile</h2>
@@ -91,6 +113,22 @@ export default function ProfileLayout({
                        <HeartIcon size={16} className="text-terracotta-500" />
                        <span>Caregiver profile for team context</span>
                     </div>
+                    {formatVehicle(profile.vehicle_1_color, profile.vehicle_1_make_model) && (
+                      <div className="flex items-center gap-3 text-sm text-ink-700">
+                         <MapPinIcon size={16} className="text-forest-500" />
+                         <span>
+                           Vehicle 1: {formatVehicle(profile.vehicle_1_color, profile.vehicle_1_make_model)}
+                         </span>
+                      </div>
+                    )}
+                    {formatVehicle(profile.vehicle_2_color, profile.vehicle_2_make_model) && (
+                      <div className="flex items-center gap-3 text-sm text-ink-700">
+                         <MapPinIcon size={16} className="text-forest-500" />
+                         <span>
+                           Vehicle 2: {formatVehicle(profile.vehicle_2_color, profile.vehicle_2_make_model)}
+                         </span>
+                      </div>
+                    )}
                  </div>
               </section>
             )}
@@ -133,4 +171,9 @@ function InfoRow({ icon: Icon, label, value }: { icon: any, label: string, value
       </div>
     </div>
   );
+}
+
+function formatVehicle(color?: string | null, makeModel?: string | null) {
+  const parts = [color, makeModel].map((part) => part?.trim()).filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : null;
 }

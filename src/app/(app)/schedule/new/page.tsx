@@ -42,7 +42,7 @@ export default async function NewShiftPage() {
     );
   }
 
-  const [caregiversRes, shiftTypesRes, clientsRes] = await Promise.all([
+  const [caregiversRes, shiftTypesRes, clientsRes, templatesRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, full_name")
@@ -54,6 +54,13 @@ export default async function NewShiftPage() {
       .select("id, name, color")
       .order("name"),
     supabase.from("clients").select("id, full_name").order("full_name"),
+    supabase
+      .from("todo_templates")
+      .select("id, task_name, description, default_for_new_shifts, sort_order, caregiver_id, category")
+      .eq("organization_id", profile.organization_id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("task_name", { ascending: true }),
   ]);
 
   return (
@@ -80,6 +87,7 @@ export default async function NewShiftPage() {
         caregivers={caregiversRes.data ?? []}
         shiftTypes={shiftTypesRes.data ?? []}
         clients={clientsRes.data ?? []}
+        taskTemplates={templatesRes.data ?? []}
         organizationId={profile.organization_id}
         currentUserId={user.id}
       />

@@ -53,11 +53,10 @@ export default async function TemplatesPage() {
         >
           ← Back to tasks
         </Link>
-        <h1 className="font-display text-3xl text-ink-900">Master tasks</h1>
+        <h1 className="font-display text-3xl text-ink-900">Task library</h1>
         <p className="text-ink-500 text-sm">
-          Build a master list. Defaults are added to every new shift. Tasks
-          assigned to a specific caregiver only get added to that person's
-          shifts.
+          Manage reusable tasks and task categories. Select these tasks when
+          creating shifts, or mark defaults to preselect them.
         </p>
       </header>
 

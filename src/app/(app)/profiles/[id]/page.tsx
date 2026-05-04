@@ -18,7 +18,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, role, email, phone, avatar_url, avatar_color, organization_id, is_active")
+    .select("id, full_name, role, email, phone, avatar_url, avatar_color, bio, vehicle_1_make_model, vehicle_1_color, vehicle_2_make_model, vehicle_2_color, organization_id, is_active")
     .eq("id", id)
     .single();
 

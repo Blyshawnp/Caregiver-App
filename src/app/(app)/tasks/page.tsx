@@ -224,9 +224,9 @@ function ManageTemplatesLink() {
         <CheckSquareIcon size={18} />
       </span>
       <div className="flex-1">
-        <p className="font-medium text-ink-900">Master task templates</p>
+        <p className="font-medium text-ink-900">Task library & categories</p>
         <p className="text-xs text-ink-500">
-          Manage the master list of tasks
+          Add reusable tasks, assign them to caregivers, and rename categories
         </p>
       </div>
     </Link>

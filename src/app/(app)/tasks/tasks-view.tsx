@@ -6,9 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { PlusIcon } from "@/components/icons";
 import {
   deriveTaskCategory,
-  TASK_CATEGORY_LABELS,
-  TASK_CATEGORY_ORDER,
+  normalizeTaskCategories,
   type TaskCategory,
+  type TaskCategoryOption,
 } from "@/lib/task-categories";
 
 type Todo = {
@@ -28,12 +28,14 @@ export default function TasksView({
   canManageTasks,
   canCompleteTasks,
   currentUserId,
+  categories: categoryRows,
 }: {
   shiftId: string;
   todos: Todo[];
   canManageTasks: boolean;
   canCompleteTasks: boolean;
   currentUserId: string;
+  categories: TaskCategoryOption[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -43,6 +45,8 @@ export default function TasksView({
   const [newTaskName, setNewTaskName] = useState("");
   const [newTaskCategory, setNewTaskCategory] = useState<TaskCategory>("other");
   const [activeCategory, setActiveCategory] = useState<TaskCategory | "all">("all");
+  const categories = normalizeTaskCategories(categoryRows);
+  const categoryKeys = categories.map((category) => category.key);
 
   const categorizedTodos = [...todos]
     .map((todo) => ({
@@ -56,14 +60,14 @@ export default function TasksView({
         }),
     }))
     .sort((a, b) => {
-      const aIndex = TASK_CATEGORY_ORDER.indexOf(a.category);
-      const bIndex = TASK_CATEGORY_ORDER.indexOf(b.category);
+      const aIndex = categoryKeys.indexOf(a.category);
+      const bIndex = categoryKeys.indexOf(b.category);
       if (aIndex !== bIndex) return aIndex - bIndex;
       if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     });
 
-  const visibleCategories = TASK_CATEGORY_ORDER.filter((category) =>
+  const visibleCategories = categoryKeys.filter((category) =>
     categorizedTodos.some((todo) => todo.category === category)
   );
 
@@ -226,7 +230,7 @@ export default function TasksView({
               active={activeCategory === category}
               onClick={() => setActiveCategory(category)}
             >
-              {TASK_CATEGORY_LABELS[category]}
+              {categoryLabel(categories, category)}
             </FilterPill>
           ))}
         </div>
@@ -244,7 +248,7 @@ export default function TasksView({
               <section key={category}>
                 <div className="flex items-baseline justify-between mb-2 px-1">
                   <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
-                    {TASK_CATEGORY_LABELS[category]} ({tasksInCategory.length})
+                    {categoryLabel(categories, category)} ({tasksInCategory.length})
                   </h2>
                 </div>
                 <ul className="space-y-2">
@@ -261,6 +265,7 @@ export default function TasksView({
                         onChangeCategory={(category) =>
                           changeTaskCategory(todo.id, category)
                         }
+                        categories={categories}
                       />
                     </li>
                   ))}
@@ -292,9 +297,9 @@ export default function TasksView({
                 className="px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
                 aria-label="Task category"
               >
-                {TASK_CATEGORY_ORDER.map((category) => (
-                  <option key={category} value={category}>
-                    {TASK_CATEGORY_LABELS[category]}
+                {categories.map((category) => (
+                  <option key={category.key} value={category.key}>
+                    {category.label}
                   </option>
                 ))}
               </select>
@@ -343,6 +348,7 @@ function TaskRow({
   onToggle,
   onDelete,
   onChangeCategory,
+  categories,
 }: {
   todo: Todo;
   isComplete: boolean;
@@ -352,6 +358,7 @@ function TaskRow({
   onToggle: () => void;
   onDelete: () => void;
   onChangeCategory: (category: TaskCategory) => void;
+  categories: TaskCategoryOption[];
 }) {
   return (
     <div
@@ -422,9 +429,9 @@ function TaskRow({
               onChange={(e) => onChangeCategory(e.target.value as TaskCategory)}
               className="bg-cream-50 border border-cream-200 rounded-lg px-2 py-1 text-xs text-ink-900 focus:outline-none focus:border-forest-500"
             >
-              {TASK_CATEGORY_ORDER.map((category) => (
-                <option key={category} value={category}>
-                  {TASK_CATEGORY_LABELS[category]}
+              {categories.map((category) => (
+                <option key={category.key} value={category.key}>
+                  {category.label}
                 </option>
               ))}
             </select>
@@ -483,4 +490,8 @@ function formatTime(d: Date) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function categoryLabel(categories: TaskCategoryOption[], key: string) {
+  return categories.find((category) => category.key === key)?.label ?? key;
 }

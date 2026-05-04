@@ -32,6 +32,7 @@ import {
 import { getShiftStatus } from "@/lib/shift-status";
 import type { AssignmentStatus, Role } from "@/lib/db-types";
 import UserAvatar from "@/components/user-avatar";
+import { normalizeTaskCategories, type TaskCategoryOption } from "@/lib/task-categories";
 
 // Force dynamic rendering: this page must always show fresh data
 // (check-in status changes mid-session and should reflect immediately)
@@ -281,6 +282,14 @@ export default async function ShiftDetailPage({
     }
   }
   const todos = shift.shift_todos ?? [];
+  const { data: categoryRows } = await supabase
+    .from("task_categories")
+    .select("id, key, label, sort_order")
+    .eq("organization_id", shift.organization_id)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("label", { ascending: true });
+
   const todosDone = todos.filter((t) => t.is_completed).length;
   const shiftStatus = getShiftStatus(
     {
@@ -599,6 +608,7 @@ export default async function ShiftDetailPage({
           canManageTasks={canEdit}
           canCompleteTasks={canCompleteTasks}
           currentUserId={profile?.id ?? user.id}
+          categories={normalizeTaskCategories(categoryRows as TaskCategoryOption[] | null)}
         />
       </section>
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import TemplatesList from "./templates-list";
+import { normalizeTaskCategories, type TaskCategoryOption } from "@/lib/task-categories";
 
 export default async function TemplatesPage() {
   const supabase = await createClient();
@@ -18,7 +19,7 @@ export default async function TemplatesPage() {
 
   if (!profile || (profile.role === "caregiver" || profile.role === "family")) redirect("/tasks");
 
-  const [templatesRes, caregiversRes] = await Promise.all([
+  const [templatesRes, caregiversRes, categoriesRes] = await Promise.all([
     supabase
       .from("todo_templates")
       .select(
@@ -34,6 +35,13 @@ export default async function TemplatesPage() {
       .eq("role", "caregiver")
       .eq("is_active", true)
       .order("full_name"),
+    supabase
+      .from("task_categories")
+      .select("id, key, label, sort_order")
+      .eq("organization_id", profile.organization_id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("label", { ascending: true }),
   ]);
 
   return (
@@ -57,6 +65,9 @@ export default async function TemplatesPage() {
         templates={templatesRes.data ?? []}
         caregivers={caregiversRes.data ?? []}
         organizationId={profile.organization_id}
+        categories={normalizeTaskCategories(
+          (categoriesRes.data ?? []) as TaskCategoryOption[]
+        )}
       />
     </main>
   );

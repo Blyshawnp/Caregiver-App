@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import TasksView from "./tasks-view";
 import { CheckSquareIcon } from "@/components/icons";
+import { normalizeTaskCategories, type TaskCategoryOption } from "@/lib/task-categories";
 
 export default async function TasksPage({
   searchParams,
@@ -155,6 +156,14 @@ export default async function TasksPage({
   if (!shiftRaw) redirect("/schedule");
 
   const shift = shiftRaw as unknown as TasksShift;
+  const { data: categoryRows } = await supabase
+    .from("task_categories")
+    .select("id, key, label, sort_order")
+    .eq("organization_id", shift.organization_id)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("label", { ascending: true });
+
   const todos = [...(shift.shift_todos ?? [])].sort((a, b) => {
     if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
@@ -188,6 +197,7 @@ export default async function TasksPage({
         canManageTasks={profile.role === "admin" || profile.role === "client"}
         canCompleteTasks={isAssignedCaregiver && isOnShift}
         currentUserId={profile.id}
+        categories={normalizeTaskCategories(categoryRows as TaskCategoryOption[] | null)}
       />
 
       {canManageTemplates && (

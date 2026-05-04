@@ -1,12 +1,11 @@
-export type TaskCategory =
-  | "adls"
-  | "medication"
-  | "meals"
-  | "mobility"
-  | "housekeeping"
-  | "companionship"
-  | "safety"
-  | "other";
+export type TaskCategory = string;
+
+export type TaskCategoryOption = {
+  id?: string;
+  key: string;
+  label: string;
+  sort_order: number;
+};
 
 export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
   adls: "ADLs",
@@ -29,6 +28,21 @@ export const TASK_CATEGORY_ORDER: TaskCategory[] = [
   "safety",
   "other",
 ];
+
+export const DEFAULT_TASK_CATEGORIES: TaskCategoryOption[] =
+  TASK_CATEGORY_ORDER.map((key, index) => ({
+    key,
+    label: TASK_CATEGORY_LABELS[key],
+    sort_order: (index + 1) * 10,
+  }));
+
+export function normalizeTaskCategories(
+  categories: TaskCategoryOption[] | null | undefined
+) {
+  return categories && categories.length > 0
+    ? categories
+    : DEFAULT_TASK_CATEGORIES;
+}
 
 export function deriveTaskCategory(input: {
   taskName: string;

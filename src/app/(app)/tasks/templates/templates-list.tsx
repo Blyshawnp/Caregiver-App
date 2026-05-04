@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon } from "@/components/icons";
 import {
-  TASK_CATEGORY_LABELS as CATEGORY_LABELS,
-  TASK_CATEGORY_ORDER as CATEGORY_ORDER,
   type TaskCategory,
+  type TaskCategoryOption,
 } from "@/lib/task-categories";
 
 type Template = {
@@ -34,10 +33,12 @@ export default function TemplatesList({
   templates,
   caregivers,
   organizationId,
+  categories,
 }: {
   templates: Template[];
   caregivers: Caregiver[];
   organizationId: string;
+  categories: TaskCategoryOption[];
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -48,6 +49,7 @@ export default function TemplatesList({
   const [newCategory, setNewCategory] = useState<TaskCategory>("other");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all"); // "all", "shared", caregiverId
+  const [newCategoryLabel, setNewCategoryLabel] = useState("");
 
   const caregiverNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -117,6 +119,23 @@ export default function TemplatesList({
     router.refresh();
   }
 
+  async function addCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCategoryLabel.trim()) return;
+    const response = await fetch("/api/task-categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: newCategoryLabel }),
+    });
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
+    if (!response.ok) {
+      alert(result?.error ?? "Could not add category.");
+      return;
+    }
+    setNewCategoryLabel("");
+    router.refresh();
+  }
+
   async function deleteTemplate(id: string) {
     if (
       !confirm(
@@ -164,8 +183,34 @@ export default function TemplatesList({
         </div>
       )}
 
+      <form onSubmit={addCategory} className="mb-5 bg-white rounded-2xl shadow-soft p-4 grid gap-2">
+        <p className="text-xs uppercase tracking-[0.18em] text-ink-500">
+          Task categories
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={newCategoryLabel}
+            onChange={(e) => setNewCategoryLabel(e.target.value)}
+            placeholder="Add category"
+            className="flex-1 px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-sm focus:outline-none focus:border-forest-500"
+          />
+          <button
+            type="submit"
+            className="bg-forest-600 text-cream-50 px-3 py-2 rounded-xl text-sm font-medium"
+          >
+            Add
+          </button>
+        </div>
+        <div className="grid gap-2">
+          {categories.map((category) => (
+            <CategoryEditor key={category.key} category={category} />
+          ))}
+        </div>
+      </form>
+
       {/* Group by category */}
-      {CATEGORY_ORDER.map((cat) => {
+      {categories.map((category) => {
+        const cat = category.key;
         const tasksInCat = filtered.filter(
           (t) => normalizeCategory(t.category) === cat
         );
@@ -175,7 +220,7 @@ export default function TemplatesList({
           <section key={cat} className="mb-5">
             <div className="flex items-baseline justify-between mb-2 px-1">
               <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
-                {CATEGORY_LABELS[cat]} ({tasksInCat.length})
+                {category.label} ({tasksInCat.length})
               </h2>
             </div>
             <ul className="space-y-2">
@@ -200,6 +245,7 @@ export default function TemplatesList({
                     onDelete={() => deleteTemplate(t.id)}
                     onReassign={(cid) => reassignTemplate(t.id, cid)}
                     onChangeCategory={(c) => changeCategory(t.id, c)}
+                    categories={categories}
                   />
                 </li>
               ))}
@@ -240,9 +286,9 @@ export default function TemplatesList({
               onChange={(e) => setNewCategory(e.target.value as TaskCategory)}
               className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
             >
-              {CATEGORY_ORDER.map((cat) => (
-                <option key={cat} value={cat}>
-                  {CATEGORY_LABELS[cat]}
+              {categories.map((cat) => (
+                <option key={cat.key} value={cat.key}>
+                  {cat.label}
                 </option>
               ))}
             </select>
@@ -343,6 +389,7 @@ function TemplateRow({
   onDelete,
   onReassign,
   onChangeCategory,
+  categories,
 }: {
   template: Template;
   caregivers: Caregiver[];
@@ -355,6 +402,7 @@ function TemplateRow({
   onDelete: () => void;
   onReassign: (caregiverId: string | null) => void;
   onChangeCategory: (category: TaskCategory) => void;
+  categories: TaskCategoryOption[];
 }) {
   const [name, setName] = useState(template.task_name);
   const [description, setDescription] = useState(template.description ?? "");
@@ -400,9 +448,9 @@ function TemplateRow({
             onChange={(e) => onChangeCategory(e.target.value as TaskCategory)}
             className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
           >
-            {CATEGORY_ORDER.map((cat) => (
-              <option key={cat} value={cat}>
-                {CATEGORY_LABELS[cat]}
+            {categories.map((cat) => (
+              <option key={cat.key} value={cat.key}>
+                {cat.label}
               </option>
             ))}
           </select>
@@ -492,7 +540,49 @@ function TemplateRow({
 }
 
 function normalizeCategory(category: Template["category"]): TaskCategory {
-  return category && CATEGORY_ORDER.includes(category as TaskCategory)
-    ? (category as TaskCategory)
-    : "other";
+  return category ?? "other";
+}
+
+function categoryLabel(categories: TaskCategoryOption[], key: string) {
+  return categories.find((category) => category.key === key)?.label ?? key;
+}
+
+function CategoryEditor({ category }: { category: TaskCategoryOption }) {
+  const router = useRouter();
+  const [label, setLabel] = useState(category.label);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const response = await fetch("/api/task-categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: (category as TaskCategoryOption & { id?: string }).id, label }),
+    });
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
+    setSaving(false);
+    if (!response.ok) {
+      alert(result?.error ?? "Could not rename category.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <div className="flex gap-2">
+      <input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        className="flex-1 px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-sm focus:outline-none focus:border-forest-500"
+      />
+      <button
+        type="button"
+        onClick={save}
+        disabled={saving || !label.trim() || label === category.label}
+        className="bg-cream-200 text-ink-700 px-3 py-2 rounded-xl text-xs font-medium disabled:opacity-50"
+      >
+        {saving ? "Saving" : "Rename"}
+      </button>
+    </div>
+  );
 }

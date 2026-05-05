@@ -40,6 +40,7 @@ export default function TeamMemberDetail({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Password reset state for no-email accounts
   const [showResetCreds, setShowResetCreds] = useState(false);
@@ -123,6 +124,36 @@ export default function TeamMemberDetail({
 
     setPasswordUpdated(true);
     setResettingPassword(false);
+  }
+
+  async function deleteUser() {
+    setError(null);
+
+    const confirmed = window.confirm(
+      `Permanently delete ${person.full_name}? This removes their login account and cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+
+    const response = await fetch("/api/team/delete-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId: person.id }),
+    });
+
+    const result = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not delete user.");
+      setDeleting(false);
+      return;
+    }
+
+    router.push("/team");
+    router.refresh();
   }
 
   const roleCopy: Record<string, string> = {
@@ -368,6 +399,26 @@ export default function TeamMemberDetail({
           Deactivating prevents new shifts from being assigned to this person.
         </p>
       )}
+
+      <section className="mt-6 bg-white rounded-3xl shadow-soft p-5 border border-terracotta-400/30">
+        <h2 className="font-display text-base text-ink-900 mb-1">
+          Delete user
+        </h2>
+        <p className="text-xs text-ink-500 mb-3">
+          Permanently removes this person&apos;s app profile and login account.
+          Their assigned shifts become unassigned.
+        </p>
+        {error && (
+          <p className="text-terracotta-600 text-xs mb-3">{error}</p>
+        )}
+        <button
+          onClick={deleteUser}
+          disabled={deleting}
+          className="w-full bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-3 rounded-2xl text-sm font-medium transition disabled:opacity-50"
+        >
+          {deleting ? "Deleting..." : "Delete permanently"}
+        </button>
+      </section>
     </main>
   );
 }

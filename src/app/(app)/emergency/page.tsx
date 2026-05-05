@@ -90,8 +90,9 @@ export default async function EmergencyPage() {
           ← Back
         </Link>
         <div className="flex items-center gap-3">
-          <span className="w-12 h-12 rounded-2xl bg-red-600 text-cream-50 grid place-items-center shrink-0 shadow-lg">
-            <StarOfLifeIcon size={24} />
+          <span className="relative w-14 h-14 rounded-2xl bg-red-600 text-cream-50 grid place-items-center shrink-0 shadow-xl ring-4 ring-red-200/80">
+            <span className="absolute inset-0 rounded-2xl bg-red-500/30 animate-ping" />
+            <StarOfLifeIcon size={30} className="relative" />
           </span>
           <div>
             <h1 className="font-display text-3xl text-ink-900 leading-tight">
@@ -135,19 +136,12 @@ export default async function EmergencyPage() {
         <p className="font-display text-4xl">Call 911</p>
       </a>
 
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-5">
-        <a
-          href="#emergency-info"
-          className="bg-white hover:bg-cream-50 rounded-2xl shadow-soft px-4 py-3 transition active:scale-[0.99]"
-        >
-          <span className="block font-medium text-ink-900">Emergency information</span>
-          <span className="block text-xs text-ink-500">Contacts, hospital, safety equipment</span>
-        </a>
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
         <Link
           href="/incidents"
-          className="bg-red-600 hover:bg-red-700 text-cream-50 rounded-2xl shadow-soft px-4 py-3 transition active:scale-[0.99]"
+          className="bg-terracotta-600 hover:bg-terracotta-500 text-cream-50 rounded-2xl shadow-soft px-4 py-3 transition active:scale-[0.99] border border-terracotta-400/30"
         >
-          <span className="block font-medium">Report incident</span>
+          <span className="block font-medium">Report an incident</span>
           <span className="block text-xs text-cream-50/80">Create a care or safety report</span>
         </Link>
         {profile?.role !== "caregiver" && (

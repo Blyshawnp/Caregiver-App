@@ -42,7 +42,7 @@ export default function UserAvatar({
     <div
       className={`${sizeCls} ${className} rounded-full flex items-center justify-center shrink-0 border-2 border-white shadow-sm overflow-hidden`}
       style={{
-        backgroundColor: person.avatar_color || "#3F6053",
+        backgroundColor: person.avatar_color || "#0D6587",
         color: "#fff",
       }}
     >

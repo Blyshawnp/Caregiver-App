@@ -42,7 +42,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(rgba(45, 50, 40, 0.025) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(0, 64, 112, 0.025) 1px, transparent 1px);
   background-size: 3px 3px;
   border-radius: inherit;
   opacity: 0.5;

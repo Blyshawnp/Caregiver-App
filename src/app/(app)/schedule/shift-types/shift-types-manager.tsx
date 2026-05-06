@@ -8,7 +8,7 @@ type ShiftType = { id: string; name: string; color: string };
 export default function ShiftTypesManager({ shiftTypes }: { shiftTypes: ShiftType[] }) {
   const router = useRouter();
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState("#3F6053");
+  const [newColor, setNewColor] = useState("#0D6587");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -28,7 +28,7 @@ export default function ShiftTypesManager({ shiftTypes }: { shiftTypes: ShiftTyp
       return;
     }
     setNewName("");
-    setNewColor("#3F6053");
+    setNewColor("#0D6587");
     router.refresh();
   }
 

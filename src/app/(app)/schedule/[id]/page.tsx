@@ -347,7 +347,7 @@ export default async function ShiftDetailPage({
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{
-              backgroundColor: shift.shift_types?.color ?? "#3F6053",
+              backgroundColor: shift.shift_types?.color ?? "#0D6587",
             }}
           />
           <p className="text-xs uppercase tracking-[0.18em] text-ink-500">

@@ -224,7 +224,7 @@ function ListView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
 function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
   const start = new Date(shift.scheduled_start);
   const end = new Date(shift.scheduled_end);
-  const accent = shift.shift_type_color ?? "#3F6053";
+  const accent = shift.shift_type_color ?? "#0D6587";
   const status = getShiftStatus(
     shift,
     {
@@ -660,5 +660,5 @@ function shiftDisplayColor(shift: ScheduleShift) {
   if (status.kind === "past_unchecked" || status.kind === "open_expired") {
     return "#9CA3AF";
   }
-  return shift.shift_type_color ?? "#3F6053";
+  return shift.shift_type_color ?? "#0D6587";
 }

@@ -419,7 +419,7 @@ function UpcomingRow({ shift, now }: { shift: ShiftRow; now: Date }) {
       </div>
       <div
         className="w-1 self-stretch rounded-full"
-        style={{ backgroundColor: shift.shift_type_color ?? "#3F6053" }}
+        style={{ backgroundColor: shift.shift_type_color ?? "#0D6587" }}
       />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-ink-900 truncate">

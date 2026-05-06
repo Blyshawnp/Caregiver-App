@@ -13,13 +13,13 @@ export async function POST(request: Request) {
     color?: string;
   } | null;
   const name = body?.name?.trim();
-  const color = body?.color?.trim() || "#3F6053";
+  const color = body?.color?.trim() || "#0D6587";
 
   if (!name) {
     return NextResponse.json({ error: "Shift type name is required." }, { status: 400 });
   }
   if (!HEX_RE.test(color)) {
-    return NextResponse.json({ error: "Color must be a hex value like #3F6053." }, { status: 400 });
+    return NextResponse.json({ error: "Color must be a hex value like #0D6587." }, { status: 400 });
   }
 
   const admin = createAdminClient();
@@ -49,7 +49,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Shift type id and name are required." }, { status: 400 });
   }
   if (color && !HEX_RE.test(color)) {
-    return NextResponse.json({ error: "Color must be a hex value like #3F6053." }, { status: 400 });
+    return NextResponse.json({ error: "Color must be a hex value like #0D6587." }, { status: 400 });
   }
 
   const admin = createAdminClient();

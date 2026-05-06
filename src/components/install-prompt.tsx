@@ -113,21 +113,13 @@ export default function InstallPrompt() {
       {show && !showIosSheet && (
         <div className="fixed bottom-24 left-3 right-3 z-40 max-w-md mx-auto pb-[env(safe-area-inset-bottom)] animate-slide-up">
           <div className="bg-forest-600 text-cream-50 rounded-2xl shadow-lifted p-4 flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-cream-50/15 grid place-items-center shrink-0">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-5 h-5"
-              >
-                <path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
-              </svg>
-            </span>
+            <img
+              src="/icon-192.png"
+              alt=""
+              className="w-10 h-10 rounded-xl object-cover shrink-0 bg-cream-50/15"
+            />
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm">Install Caregiver</p>
+              <p className="font-medium text-sm">Install Carer Vista Pro</p>
               <p className="text-xs text-cream-50/80">
                 Add it to your home screen
               </p>
@@ -174,7 +166,7 @@ export default function InstallPrompt() {
                 Add to Home Screen
               </h2>
               <p className="text-sm text-ink-500 mb-5">
-                Two taps to make Caregiver feel like a real app on your iPhone.
+                Two taps to make Carer Vista Pro feel like a real app on your iPhone.
               </p>
               <ol className="space-y-3 mb-6">
                 <Step n={1}>
@@ -191,7 +183,7 @@ export default function InstallPrompt() {
                 <Step n={3}>
                   Tap{" "}
                   <strong className="font-semibold">Add</strong>. The
-                  Caregiver icon will appear with your other apps.
+                  Carer Vista Pro icon will appear with your other apps.
                 </Step>
               </ol>
               <button

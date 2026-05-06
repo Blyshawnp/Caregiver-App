@@ -19,16 +19,16 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   title: {
-    default: "Caregiver",
-    template: "%s · Caregiver",
+    default: "Carer Vista Pro",
+    template: "%s · Carer Vista Pro",
   },
   description:
     "Schedule, check in, and track tasks for in-home caregiving.",
   manifest: "/manifest.json",
-  applicationName: "Caregiver",
+  applicationName: "Carer Vista Pro",
   appleWebApp: {
     capable: true,
-    title: "Caregiver",
+    title: "Carer Vista Pro",
     statusBarStyle: "default",
   },
   formatDetection: {
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "default",
-    "apple-mobile-web-app-title": "Caregiver",
+    "apple-mobile-web-app-title": "Carer Vista Pro",
   },
 };
 

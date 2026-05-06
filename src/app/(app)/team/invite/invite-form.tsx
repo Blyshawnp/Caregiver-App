@@ -167,7 +167,7 @@ export default function InviteForm({
   }
 
   if (createdNoEmailCreds) {
-    const smsBody = `Caregiver app login\nUsername: ${createdNoEmailCreds.email}\nPassword: ${createdNoEmailCreds.password}\nApp: ${window.location.origin}`;
+    const smsBody = `Carer Vista Pro login\nUsername: ${createdNoEmailCreds.email}\nPassword: ${createdNoEmailCreds.password}\nApp: ${window.location.origin}`;
     return (
       <main className="px-5 py-6 max-w-2xl mx-auto">
         <header className="mb-6">

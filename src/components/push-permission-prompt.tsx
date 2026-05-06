@@ -58,8 +58,8 @@ export default function PushPermissionPrompt() {
           Get important alerts
         </p>
         <p className="text-sm text-ink-500 mb-4">
-          Caregiver can send native notifications for messages, shift updates,
-          trades, and urgent incidents.
+          Carer Vista Pro can send native notifications for messages, shift
+          updates, trades, and urgent incidents.
         </p>
         {error && (
           <p className="text-xs text-terracotta-600 mb-3">{error}</p>

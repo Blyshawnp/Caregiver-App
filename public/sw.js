@@ -1,4 +1,4 @@
-// Caregiver app service worker
+// Carer Vista Pro service worker
 // Handles offline shell + caches static assets so the app launches when offline.
 
 const CACHE_VERSION = "v1";
@@ -13,6 +13,7 @@ const STATIC_ASSETS = [
   "/icon-maskable-512.png",
   "/apple-touch-icon.png",
   "/favicon.ico",
+  "/favicon-32.png",
 ];
 
 // Install: pre-cache static assets
@@ -90,7 +91,8 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/icon-") ||
     url.pathname === "/manifest.json" ||
     url.pathname === "/apple-touch-icon.png" ||
-    url.pathname === "/favicon.ico"
+    url.pathname === "/favicon.ico" ||
+    url.pathname === "/favicon-32.png"
   ) {
     event.respondWith(
       caches.match(request).then(
@@ -110,7 +112,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   let payload = {
-    title: "Caregiver",
+    title: "Carer Vista Pro",
     body: "You have a new notification.",
     url: "/notifications",
     tag: "caregiver-notification",
@@ -126,7 +128,7 @@ self.addEventListener("push", (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || "Caregiver", {
+    self.registration.showNotification(payload.title || "Carer Vista Pro", {
       body: payload.body || "",
       icon: "/icon-192.png",
       badge: "/icon-192.png",

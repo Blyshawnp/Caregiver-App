@@ -45,7 +45,7 @@ export default function NotificationBell({
             void playNotificationSound(sound).catch(() => {});
 
             if ("Notification" in window && Notification.permission === "granted") {
-              new Notification(data.title || "Caregiver", {
+              new Notification(data.title || "Carer Vista Pro", {
                 body: data.body || "",
                 icon: "/icon-192.png",
               });

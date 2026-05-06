@@ -370,7 +370,7 @@ export default function TeamMemberDetail({
                   </button>
                   <a
                     href={`sms:?&body=${encodeURIComponent(
-                      `Caregiver app new password\nUsername: ${person.email}\nPassword: ${newPassword}`
+                      `Carer Vista Pro new password\nUsername: ${person.email}\nPassword: ${newPassword}`
                     )}`}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition text-center ${
                       passwordUpdated

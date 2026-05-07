@@ -35,10 +35,14 @@
 
 @layer components {
   :where(a, button)[class*="hover:underline"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
     border-radius: 999px;
     background: color-mix(in srgb, currentColor 8%, transparent);
     padding: 0.38rem 0.7rem;
+    text-align: center;
     text-decoration: none;
     transition:
       background-color 160ms ease,

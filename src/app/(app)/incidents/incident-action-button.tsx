@@ -44,10 +44,10 @@ export default function IncidentActionButton({
     <button
       onClick={runAction}
       disabled={busy}
-      className={`text-xs font-medium px-2 py-1 rounded-md transition disabled:opacity-60 ${
+      className={`text-xs font-semibold px-2.5 py-1.5 rounded-full border shadow-soft transition active:scale-[0.98] disabled:opacity-60 ${
         action === "resolve"
-          ? "text-forest-600 hover:text-forest-700 bg-forest-50"
-          : "text-terracotta-600 hover:text-terracotta-700 bg-terracotta-50"
+          ? "text-forest-700 hover:text-forest-700 bg-forest-50 border-forest-600/20 hover:bg-forest-100"
+          : "text-terracotta-600 hover:text-terracotta-600 bg-terracotta-400/10 border-terracotta-600/25 hover:bg-terracotta-400/15"
       }`}
     >
       {busy ? "Working..." : label}

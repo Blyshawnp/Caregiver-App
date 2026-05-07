@@ -33,6 +33,37 @@
   }
 }
 
+@layer components {
+  :where(a, button)[class*="hover:underline"] {
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 0.38rem 0.7rem;
+    text-decoration: none;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+
+  :where(a, button)[class*="hover:underline"]:hover {
+    border-color: color-mix(in srgb, currentColor 34%, transparent);
+    background: color-mix(in srgb, currentColor 13%, transparent);
+    box-shadow: 0 1px 2px rgba(0, 64, 112, 0.05);
+    text-decoration: none;
+  }
+
+  :where(a, button)[class*="hover:underline"]:active {
+    transform: scale(0.98);
+  }
+
+  :where(a, button)[class*="hover:underline"]:focus-visible {
+    outline: 2px solid color-mix(in srgb, currentColor 45%, transparent);
+    outline-offset: 2px;
+  }
+}
+
 /* Subtle paper-like grain texture for warmth without noise */
 .grain-overlay {
   position: relative;

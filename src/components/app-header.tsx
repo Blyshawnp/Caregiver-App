@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import NotificationBell from "./notification-bell";
 import { StarOfLifeIcon } from "./icons";
@@ -23,18 +24,42 @@ export default function AppHeader({
   notificationCount?: number;
   role: Role;
 }) {
+  const firstName = fullName.split(" ")[0] || "there";
+
   return (
-    <header className="px-5 pt-6 pb-2 flex items-center justify-between sticky top-0 bg-cream-100/80 backdrop-blur-md z-20">
-      <div>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-ink-400 font-bold leading-none mb-1">
-          {orgName || "Carer Vista Pro"}
-        </p>
-        <h1 className="font-display text-2xl text-ink-900 leading-none">
-          Welcome, <i className="text-forest-600">{fullName.split(" ")[0]}</i>
-        </h1>
+    <header className="px-5 pt-5 pb-3 flex items-center justify-between gap-3 sticky top-0 bg-cream-100/85 backdrop-blur-md z-20">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="relative shrink-0 w-12 h-12 rounded-[1.1rem] bg-white shadow-soft ring-1 ring-forest-600/10 grid place-items-center overflow-hidden">
+          <Image
+            src="/icon-192.png"
+            alt=""
+            width={40}
+            height={40}
+            priority
+            className="rounded-xl"
+          />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-forest-600 font-extrabold leading-none truncate">
+              Carer Vista Pro
+            </p>
+            {orgName && (
+              <span className="hidden min-[390px]:inline-block w-1 h-1 rounded-full bg-ink-300 shrink-0" />
+            )}
+            {orgName && (
+              <p className="hidden min-[390px]:block text-[10px] uppercase tracking-[0.16em] text-ink-400 font-bold leading-none truncate">
+                {orgName}
+              </p>
+            )}
+          </div>
+          <h1 className="mt-1 font-display text-2xl text-ink-900 leading-none truncate">
+            Welcome, <i className="text-forest-600">{firstName}</i>
+          </h1>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <Link
           href="/emergency"
           aria-label="Emergency options"

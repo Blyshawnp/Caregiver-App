@@ -42,7 +42,11 @@ export async function middleware(request: NextRequest) {
   const isPublic =
     path.startsWith("/login") ||
     path.startsWith("/auth") ||
-    path.startsWith("/accept-invite");
+    path.startsWith("/accept-invite") ||
+    path === "/manifest.json" ||
+    path === "/sw.js" ||
+    path === "/home/manifest.json" ||
+    path.startsWith("/.well-known/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

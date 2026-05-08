@@ -95,9 +95,19 @@ type CheckInRow = {
   check_out_time: string | null;
   check_out_method: string | null;
   check_out_by: string | null;
+  check_out_reason: string | null;
   total_minutes: number | null;
   flagged_outside_geofence: boolean | null;
   flag_reason: string | null;
+};
+
+type ShiftEventRow = {
+  id: string;
+  event_type: string;
+  event_time: string;
+  caregiver_id: string | null;
+  client_id: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 export default async function ShiftDetailPage({
@@ -146,7 +156,7 @@ export default async function ShiftDetailPage({
       profiles:caregiver_id ( id, full_name, avatar_url, avatar_color ),
       clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
-      check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, total_minutes, flagged_outside_geofence, flag_reason ),
+      check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, check_out_reason, total_minutes, flagged_outside_geofence, flag_reason ),
       shift_todos ( id, task_name, description, is_completed, completed_at, sort_order, notes, category )
     `
     )
@@ -271,7 +281,7 @@ export default async function ShiftDetailPage({
     const { data: directCheckIn } = await supabase
       .from("check_ins")
       .select(
-        "id, check_in_time, check_out_time, check_out_method, check_out_by, total_minutes, flagged_outside_geofence, flag_reason"
+        "id, check_in_time, check_out_time, check_out_method, check_out_by, check_out_reason, total_minutes, flagged_outside_geofence, flag_reason"
       )
       .eq("shift_id", id)
       .order("check_in_time", { ascending: false, nullsFirst: false })
@@ -281,6 +291,22 @@ export default async function ShiftDetailPage({
       checkIn = directCheckIn;
     }
   }
+
+  let shiftEvents: ShiftEventRow[] = [];
+  if (profile?.role === "admin") {
+    try {
+      const { data: eventRows } = await supabase
+        .from("shift_events")
+        .select("id, event_type, event_time, caregiver_id, client_id, metadata")
+        .eq("shift_id", id)
+        .order("event_time", { ascending: false })
+        .limit(20);
+      shiftEvents = (eventRows ?? []) as ShiftEventRow[];
+    } catch {
+      shiftEvents = [];
+    }
+  }
+
   const todos = shift.shift_todos ?? [];
   const { data: categoryRows } = await supabase
     .from("task_categories")
@@ -446,15 +472,17 @@ export default async function ShiftDetailPage({
         </div>
       )}
 
-      {checkIn?.check_out_method === "auto_geofence_after_8pm" && (
+      {checkIn?.check_out_method === "auto_geofence_after_checkout_reminder" && (
         <div className="bg-forest-100 border border-forest-200 rounded-2xl px-4 py-3 mt-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-forest-700 font-medium mb-0.5">
             Auto checkout
           </p>
           <p className="text-sm text-ink-900">
-            This shift was auto-checked out after 8 PM because the last known caregiver
-            location was outside the client geofence.
+            Automatically checked out after geofence reminder.
           </p>
+          {checkIn.check_out_reason && (
+            <p className="text-xs text-ink-500 mt-1">{checkIn.check_out_reason}</p>
+          )}
         </div>
       )}
 
@@ -599,6 +627,35 @@ export default async function ShiftDetailPage({
               : tr("shift.notYetViewed", lang)}
           </span>
         </div>
+      )}
+
+      {profile?.role === "admin" && shiftEvents.length > 0 && (
+        <section className="bg-white rounded-3xl shadow-soft p-5 mt-4">
+          <h2 className="font-display text-xl text-ink-900 mb-3">Event history</h2>
+          <div className="space-y-3">
+            {shiftEvents.map((event) => (
+              <div key={event.id} className="border-l-2 border-forest-200 pl-3">
+                <p className="text-sm font-medium text-ink-900">
+                  {formatEventType(event.event_type)}
+                </p>
+                <p className="text-xs text-ink-500">
+                  {new Date(event.event_time).toLocaleString("en-US", {
+                    timeZone: "America/New_York",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </p>
+                {formatEventMetadata(event.metadata) && (
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    {formatEventMetadata(event.metadata)}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="mt-4">
@@ -819,6 +876,53 @@ function formatHours(minutes: number | null) {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
+}
+
+function formatEventType(eventType: string) {
+  switch (eventType) {
+    case "check_in_reminder_sent":
+      return "Check-in reminder sent";
+    case "checkout_reminder_sent":
+      return "Checkout reminder sent";
+    case "auto_checkout_completed":
+      return "Auto checkout completed";
+    case "auto_checkout_skipped_location_unknown":
+      return "Auto checkout skipped: location unknown";
+    case "auto_checkout_skipped_inside_geofence":
+      return "Auto checkout skipped: inside geofence";
+    case "auto_checkout_skipped_stale_location":
+      return "Auto checkout skipped: stale location";
+    default:
+      return eventType.replaceAll("_", " ");
+  }
+}
+
+function formatEventMetadata(metadata: Record<string, unknown> | null) {
+  if (!metadata) return null;
+
+  const details: string[] = [];
+  const distance = metadata.distance_meters;
+  if (typeof distance === "number") {
+    details.push(`${Math.round(distance)}m from geofence center`);
+  }
+
+  const radius = metadata.geofence_radius_meters;
+  if (typeof radius === "number") {
+    details.push(`radius ${Math.round(radius)}m`);
+  }
+
+  const locationAt = metadata.location_recorded_at;
+  if (typeof locationAt === "string") {
+    details.push(
+      `location ${new Date(locationAt).toLocaleTimeString("en-US", {
+        timeZone: "America/New_York",
+        hour: "numeric",
+        minute: "2-digit",
+      })}`
+    );
+  }
+
+  return details.length > 0 ? details.join(" · ") : null;
 }
 
 function normalizeRows<T>(value: T[] | T | null | undefined): T[] {

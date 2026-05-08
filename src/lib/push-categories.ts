@@ -14,6 +14,8 @@ export function categoryForNotificationKind(kind: string): NotificationCategory 
     kind === "force_check_out" ||
     kind === "time_adjusted" ||
     kind === "auto_check_out" ||
+    kind === "check_in_reminder" ||
+    kind === "checkout_reminder" ||
     kind === "check_in_flagged" ||
     kind === "check_out_flagged"
   ) {

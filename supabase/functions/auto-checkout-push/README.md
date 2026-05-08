@@ -1,8 +1,12 @@
 # auto-checkout-push
 
 Scheduled Supabase Edge Function fallback for projects where `pg_cron` is not
-available or where native push delivery is needed after the database-side
-auto-checkout job inserts notifications.
+available or where native push delivery is needed after database-side shift
+automation inserts notifications.
+
+This scheduled function also sends caregiver check-in reminders near shift start
+time. It records `shift_events.event_type = 'check_in_reminder_sent'` before
+creating the in-app notification so each shift is reminded only once.
 
 Required Edge Function secrets:
 
@@ -32,5 +36,7 @@ If you schedule from the Supabase Dashboard instead, use:
 - Method: `POST`
 - Header: `x-auto-checkout-secret: THE_SAME_LONG_RANDOM_STRING`
 
-The function calls `public.auto_checkout_after_8pm_geofence()` first, then sends
-native web push for `auto_check_out` notifications created during that run.
+The function calls `public.process_shift_end_geofence_checkout()` first, records
+check-in reminder events/notifications for newly started shifts, then sends
+native web push for `auto_check_out`, `checkout_reminder`, and
+`check_in_reminder` notifications created during that run.

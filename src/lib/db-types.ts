@@ -74,6 +74,7 @@ export type CheckInRow = {
   check_out_within_geofence: boolean | null;
   check_out_method: string | null;
   check_out_by: string | null;
+  check_out_reason: string | null;
   total_minutes: number | null;
   flagged_outside_geofence: boolean | null;
   flag_reason: string | null;

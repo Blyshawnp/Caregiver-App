@@ -17,6 +17,13 @@ type TaskTemplate = {
   sort_order: number | null;
   caregiver_id: string | null;
   category: string | null;
+  is_optional: boolean;
+  is_prn: boolean;
+  importance: "low" | "medium" | "high" | "critical";
+  time_mode: "unscheduled" | "time_of_day" | "exact_time";
+  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  scheduled_time: string | null;
+  allow_repeat: boolean;
 };
 
 type Mode = "single" | "bulk";
@@ -221,7 +228,14 @@ export default function NewShiftForm({
           template_id: template.id,
           task_name: template.task_name,
           description: template.description,
+          is_optional: template.is_optional,
+          is_prn: template.is_prn,
+          importance: template.importance,
+          time_mode: template.time_mode,
+          time_of_day: template.time_of_day,
+          scheduled_time: template.scheduled_time,
           sort_order: template.sort_order ?? (index + 1) * 10,
+          allow_repeat: template.allow_repeat,
           category: template.category,
         }))
       );
@@ -513,13 +527,19 @@ export default function NewShiftForm({
                       <span className="block text-sm font-medium text-ink-900">
                         {template.task_name}
                       </span>
-                      <span className="block text-xs text-ink-500">
-                        {assignedName ? `Only ${assignedName}` : "Everyone"}
-                        {template.default_for_new_shifts ? " · default" : ""}
-                      </span>
+                    <span className="block text-xs text-ink-500">
+                      {assignedName ? `Only ${assignedName}` : "Everyone"}
+                      {template.default_for_new_shifts ? " · default" : ""}
                     </span>
-                  </label>
-                );
+                    <span className="mt-1 flex flex-wrap gap-1.5">
+                      <TemplateBadge label={template.is_prn ? "PRN" : template.is_optional ? "Optional" : "Required"} />
+                      <TemplateBadge label={template.importance} />
+                      <TemplateBadge label={template.time_mode === "exact_time" && template.scheduled_time ? template.scheduled_time : template.time_mode === "time_of_day" && template.time_of_day ? template.time_of_day.replaceAll("_", " ") : "Unscheduled"} />
+                      <TemplateBadge label={template.allow_repeat ? "Repeatable" : "Single"} />
+                    </span>
+                  </span>
+                </label>
+              );
               })}
             </div>
           )}
@@ -673,4 +693,12 @@ function expandDates(
     cur.setDate(cur.getDate() + 1);
   }
   return out;
+}
+
+function TemplateBadge({ label }: { label: string }) {
+  return (
+    <span className="text-[10px] uppercase tracking-[0.18em] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
+      {label}
+    </span>
+  );
 }

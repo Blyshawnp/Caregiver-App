@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon } from "@/components/icons";
@@ -10,6 +10,14 @@ import {
   type TaskCategory,
   type TaskCategoryOption,
 } from "@/lib/task-categories";
+import {
+  formatTaskClock,
+  getTaskTimeGroupKey,
+  getTaskTimeGroupLabel,
+  getTaskTimeGroupSort,
+  sortTasks,
+} from "@/lib/task-scheduling";
+import { t as tr } from "@/lib/i18n";
 
 type Todo = {
   id: string;
@@ -17,10 +25,19 @@ type Todo = {
   description: string | null;
   is_completed: boolean;
   completed_at: string | null;
+  is_optional: boolean;
+  is_prn: boolean;
+  importance: "low" | "medium" | "high" | "critical";
+  time_mode: "unscheduled" | "time_of_day" | "exact_time";
+  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  scheduled_time: string | null;
   sort_order: number;
   notes: string | null;
+  allow_repeat: boolean;
   category?: TaskCategory | null;
 };
+
+type TaskType = "required" | "optional" | "prn";
 
 export default function TasksView({
   shiftId,
@@ -29,6 +46,7 @@ export default function TasksView({
   canCompleteTasks,
   currentUserId,
   categories: categoryRows,
+  lang,
 }: {
   shiftId: string;
   todos: Todo[];
@@ -36,6 +54,7 @@ export default function TasksView({
   canCompleteTasks: boolean;
   currentUserId: string;
   categories: TaskCategoryOption[];
+  lang: "en" | "es";
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -43,45 +62,60 @@ export default function TasksView({
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskCategory, setNewTaskCategory] = useState<TaskCategory>("other");
-  const [activeCategory, setActiveCategory] = useState<TaskCategory | "all">("all");
+  const [newTaskType, setNewTaskType] = useState<TaskType>("required");
+  const [newImportance, setNewImportance] = useState<"low" | "medium" | "high" | "critical">("medium");
+  const [newTimeMode, setNewTimeMode] = useState<"unscheduled" | "time_of_day" | "exact_time">("unscheduled");
+  const [newTimeOfDay, setNewTimeOfDay] = useState<"morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime">("morning");
+  const [newScheduledTime, setNewScheduledTime] = useState("12:00");
+  const [newSortOrder, setNewSortOrder] = useState(0);
+  const [newAllowRepeat, setNewAllowRepeat] = useState(true);
   const categories = normalizeTaskCategories(categoryRows);
-  const categoryKeys = categories.map((category) => category.key);
 
-  const categorizedTodos = [...todos]
-    .map((todo) => ({
-      ...todo,
-      category:
-        todo.category ??
-        deriveTaskCategory({
-          taskName: todo.task_name,
-          description: todo.description,
-          notes: todo.notes,
-        }),
-    }))
-    .sort((a, b) => {
-      const aIndex = categoryKeys.indexOf(a.category);
-      const bIndex = categoryKeys.indexOf(b.category);
-      if (aIndex !== bIndex) return aIndex - bIndex;
-      if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
-      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  const completedCount = todos.filter((t) =>
+    optimistic[t.id] !== undefined ? optimistic[t.id] : t.is_completed
+  ).length;
+  const progressPct = todos.length === 0 ? 0 : Math.round((completedCount / todos.length) * 100);
+
+  const groupedTodos = useMemo(() => {
+    const ordered = sortTasks(todos);
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        sort: number;
+        label: string;
+        tasks: Todo[];
+      }
+    >();
+
+    ordered.forEach((todo) => {
+      const key = getTaskTimeGroupKey({
+        timeMode: todo.time_mode,
+        timeOfDay: todo.time_of_day,
+        scheduledTime: todo.scheduled_time,
+      });
+      const sort = getTaskTimeGroupSort({
+        timeMode: todo.time_mode,
+        timeOfDay: todo.time_of_day,
+        scheduledTime: todo.scheduled_time,
+      });
+      const label = getTaskTimeGroupLabel(
+        {
+          timeMode: todo.time_mode,
+          timeOfDay: todo.time_of_day,
+          scheduledTime: todo.scheduled_time,
+        },
+        lang
+      );
+      const group = groups.get(key) ?? { key, sort, label, tasks: [] };
+      group.tasks.push(todo);
+      groups.set(key, group);
     });
 
-  const visibleCategories = categoryKeys.filter((category) =>
-    categorizedTodos.some((todo) => todo.category === category)
-  );
-
-  const visibleTodos =
-    activeCategory === "all"
-      ? categorizedTodos
-      : categorizedTodos.filter((todo) => todo.category === activeCategory);
-
-  const completedCount =
-    todos.filter((t) =>
-      optimistic[t.id] !== undefined ? optimistic[t.id] : t.is_completed
-    ).length;
-  const progressPct =
-    todos.length === 0 ? 0 : Math.round((completedCount / todos.length) * 100);
+    return [...groups.values()].sort((a, b) => a.sort - b.sort);
+  }, [lang, todos]);
 
   async function toggle(todo: Todo) {
     if (!canCompleteTasks || savingIds[todo.id]) return;
@@ -137,7 +171,15 @@ export default function TasksView({
     const { error } = await supabase.from("shift_todos").insert({
       shift_id: shiftId,
       task_name: newTaskName.trim(),
-      sort_order: maxSort + 10,
+      description: newTaskDescription.trim() || null,
+      is_optional: newTaskType === "optional",
+      is_prn: newTaskType === "prn",
+      importance: newImportance,
+      time_mode: newTimeMode,
+      time_of_day: newTimeMode === "time_of_day" ? newTimeOfDay : null,
+      scheduled_time: newTimeMode === "exact_time" ? newScheduledTime : null,
+      sort_order: Number.isFinite(newSortOrder) ? newSortOrder : maxSort + 10,
+      allow_repeat: newAllowRepeat,
       category: newTaskCategory,
     });
 
@@ -147,6 +189,14 @@ export default function TasksView({
     }
 
     setNewTaskName("");
+    setNewTaskDescription("");
+    setNewTaskType("required");
+    setNewImportance("medium");
+    setNewTimeMode("unscheduled");
+    setNewTimeOfDay("morning");
+    setNewScheduledTime("12:00");
+    setNewSortOrder(maxSort + 10);
+    setNewAllowRepeat(true);
     setNewTaskCategory("other");
     setAdding(false);
     router.refresh();
@@ -216,111 +266,194 @@ export default function TasksView({
         </div>
       )}
 
-      {visibleCategories.length > 1 && (
-        <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <FilterPill
-            active={activeCategory === "all"}
-            onClick={() => setActiveCategory("all")}
-          >
-            All
-          </FilterPill>
-          {visibleCategories.map((category) => (
-            <FilterPill
-              key={category}
-              active={activeCategory === category}
-              onClick={() => setActiveCategory(category)}
-            >
-              {categoryLabel(categories, category)}
-            </FilterPill>
-          ))}
-        </div>
-      )}
-
-      {todos.length > 0 && (
+      {groupedTodos.length > 0 && (
         <div className="space-y-5 mb-4">
-          {visibleCategories.map((category) => {
-            const tasksInCategory = visibleTodos.filter(
-              (todo) => todo.category === category
-            );
-            if (tasksInCategory.length === 0) return null;
-
-            return (
-              <section key={category}>
-                <div className="flex items-baseline justify-between mb-2 px-1">
-                  <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
-                    {categoryLabel(categories, category)} ({tasksInCategory.length})
-                  </h2>
-                </div>
-                <ul className="space-y-2">
-                  {tasksInCategory.map((todo) => (
-                    <li key={todo.id}>
-                      <TaskRow
-                        todo={todo}
-                        isComplete={optimistic[todo.id] ?? todo.is_completed}
-                        isSaving={!!savingIds[todo.id]}
-                        canCompleteTasks={canCompleteTasks}
-                        canManageTasks={canManageTasks}
-                        onToggle={() => toggle(todo)}
-                        onDelete={() => deleteTask(todo.id)}
-                        onChangeCategory={(category) =>
-                          changeTaskCategory(todo.id, category)
-                        }
-                        categories={categories}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+          {groupedTodos.map((group) => (
+            <section key={group.key}>
+              <div className="flex items-baseline justify-between mb-2 px-1">
+                <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500">
+                  {group.label} ({group.tasks.length})
+                </h2>
+              </div>
+              <ul className="space-y-2">
+                {group.tasks.map((todo) => (
+                  <li key={todo.id}>
+                    <TaskRow
+                      todo={todo}
+                      isComplete={optimistic[todo.id] ?? todo.is_completed}
+                      isSaving={!!savingIds[todo.id]}
+                      canCompleteTasks={canCompleteTasks}
+                      canManageTasks={canManageTasks}
+                      onToggle={() => toggle(todo)}
+                      onDelete={() => deleteTask(todo.id)}
+                      onChangeCategory={(category) => changeTaskCategory(todo.id, category)}
+                      categories={categories}
+                      lang={lang}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </div>
       )}
 
       {canManageTasks && (
         <>
           {adding ? (
-            <form onSubmit={addTask} className="bg-white rounded-2xl shadow-soft p-3 flex gap-2 mb-2">
-              <input
-                type="text"
-                autoFocus
-                value={newTaskName}
-                onChange={(e) => setNewTaskName(e.target.value)}
-                placeholder="What needs doing?"
-                className="flex-1 px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition text-sm"
-                maxLength={140}
-              />
-              <select
-                value={newTaskCategory}
-                onChange={(e) =>
-                  setNewTaskCategory(e.target.value as TaskCategory)
-                }
-                className="px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
-                aria-label="Task category"
-              >
-                {categories.map((category) => (
-                  <option key={category.key} value={category.key}>
-                    {category.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                disabled={!newTaskName.trim()}
-                className="bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-cream-50 px-4 rounded-xl text-sm font-medium transition"
-              >
-                Add
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAdding(false);
-                  setNewTaskName("");
-                  setNewTaskCategory("other");
-                }}
-                className="bg-cream-200 hover:bg-cream-200/70 text-ink-700 px-3 rounded-xl text-sm font-medium transition"
-              >
-                Cancel
-              </button>
+            <form onSubmit={addTask} className="bg-white rounded-2xl shadow-soft p-4 space-y-3 mb-2">
+              <div className="grid gap-3">
+                <input
+                  type="text"
+                  autoFocus
+                  value={newTaskName}
+                  onChange={(e) => setNewTaskName(e.target.value)}
+                  placeholder="What needs doing?"
+                  className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition text-sm"
+                  maxLength={140}
+                />
+                <textarea
+                  value={newTaskDescription}
+                  onChange={(e) => setNewTaskDescription(e.target.value)}
+                  placeholder="Optional details or instructions"
+                  rows={2}
+                  className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition text-sm resize-none"
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <TypeButton active={newTaskType === "required"} onClick={() => setNewTaskType("required")} label={tr("task.required", lang)} />
+                  <TypeButton active={newTaskType === "optional"} onClick={() => setNewTaskType("optional")} label={tr("task.optional", lang)} />
+                  <TypeButton active={newTaskType === "prn"} onClick={() => setNewTaskType("prn")} label={tr("task.prn", lang)} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+                      {tr("task.importance", lang)}
+                    </span>
+                    <select
+                      value={newImportance}
+                      onChange={(e) => setNewImportance(e.target.value as Todo["importance"])}
+                      className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+                    >
+                      <option value="low">{tr("task.importanceLow", lang)}</option>
+                      <option value="medium">{tr("task.importanceMedium", lang)}</option>
+                      <option value="high">{tr("task.importanceHigh", lang)}</option>
+                      <option value="critical">{tr("task.importanceCritical", lang)}</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+                      {tr("task.timeMode", lang)}
+                    </span>
+                    <select
+                      value={newTimeMode}
+                      onChange={(e) => setNewTimeMode(e.target.value as Todo["time_mode"])}
+                      className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+                    >
+                      <option value="unscheduled">{tr("task.unscheduled", lang)}</option>
+                      <option value="time_of_day">{tr("task.timeOfDay", lang)}</option>
+                      <option value="exact_time">{tr("task.exactTime", lang)}</option>
+                    </select>
+                  </label>
+                </div>
+                {newTimeMode === "time_of_day" && (
+                  <label className="block">
+                    <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+                      {tr("task.timeOfDay", lang)}
+                    </span>
+                    <select
+                      value={newTimeOfDay}
+                      onChange={(e) =>
+                        setNewTimeOfDay(e.target.value as NonNullable<Todo["time_of_day"]>)
+                      }
+                      className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+                    >
+                      <option value="morning">{tr("task.morning", lang)}</option>
+                      <option value="early_afternoon">{tr("task.earlyAfternoon", lang)}</option>
+                      <option value="late_afternoon">{tr("task.lateAfternoon", lang)}</option>
+                      <option value="evening">{tr("task.evening", lang)}</option>
+                      <option value="bedtime">{tr("task.bedtime", lang)}</option>
+                    </select>
+                  </label>
+                )}
+                {newTimeMode === "exact_time" && (
+                  <label className="block">
+                    <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+                      {tr("task.exactTime", lang)}
+                    </span>
+                    <input
+                      type="time"
+                      value={newScheduledTime}
+                      onChange={(e) => setNewScheduledTime(e.target.value)}
+                      className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+                    />
+                  </label>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+                      {tr("task.manualOrder", lang)}
+                    </span>
+                    <input
+                      type="number"
+                      value={newSortOrder}
+                      onChange={(e) => setNewSortOrder(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 self-end pb-1.5 text-sm text-ink-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newAllowRepeat}
+                      onChange={(e) => setNewAllowRepeat(e.target.checked)}
+                      className="w-4 h-4 accent-forest-600"
+                    />
+                    {tr("task.allowRepeat", lang)}
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+                    Category
+                  </span>
+                  <select
+                    value={newTaskCategory}
+                    onChange={(e) => setNewTaskCategory(e.target.value as TaskCategory)}
+                    className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+                  >
+                    {categories.map((category) => (
+                      <option key={category.key} value={category.key}>
+                        {category.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdding(false);
+                    setNewTaskName("");
+                    setNewTaskDescription("");
+                    setNewTaskType("required");
+                    setNewImportance("medium");
+                    setNewTimeMode("unscheduled");
+                    setNewTimeOfDay("morning");
+                    setNewScheduledTime("12:00");
+                    setNewSortOrder(0);
+                    setNewAllowRepeat(true);
+                    setNewTaskCategory("other");
+                  }}
+                  className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
+                >
+                  Add task
+                </button>
+              </div>
             </form>
           ) : (
             <button
@@ -349,6 +482,7 @@ function TaskRow({
   onDelete,
   onChangeCategory,
   categories,
+  lang,
 }: {
   todo: Todo;
   isComplete: boolean;
@@ -359,12 +493,19 @@ function TaskRow({
   onDelete: () => void;
   onChangeCategory: (category: TaskCategory) => void;
   categories: TaskCategoryOption[];
+  lang: "en" | "es";
 }) {
+  const category = todo.category ?? deriveTaskCategory({ taskName: todo.task_name, description: todo.description, notes: todo.notes });
+  const badges = [
+    todo.is_optional ? tr("task.optional", lang) : null,
+    todo.is_prn ? tr("task.prn", lang) : null,
+    todo.importance !== "medium" ? importanceLabel(todo.importance, lang) : null,
+    todo.allow_repeat ? null : tr("task.single", lang),
+  ].filter(Boolean) as string[];
+
   return (
     <div
-      className={`flex items-start gap-3 bg-white rounded-2xl p-4 shadow-soft transition ${
-        isComplete ? "opacity-60" : ""
-      }`}
+      className={`flex items-start gap-3 bg-white rounded-2xl p-4 shadow-soft transition ${isComplete ? "opacity-60" : ""}`}
     >
       <button
         onClick={onToggle}
@@ -374,11 +515,7 @@ function TaskRow({
           isComplete
             ? "bg-forest-600 border-forest-600"
             : "border-ink-300 hover:border-forest-500"
-        } ${
-          !canCompleteTasks || isSaving
-            ? "cursor-not-allowed"
-            : "cursor-pointer active:scale-90"
-        }`}
+        } ${!canCompleteTasks || isSaving ? "cursor-not-allowed" : "cursor-pointer active:scale-90"}`}
       >
         {isComplete && (
           <svg
@@ -396,42 +533,57 @@ function TaskRow({
       </button>
 
       <div className="flex-1 min-w-0">
-        <p
-          className={`text-ink-900 font-medium leading-snug ${
-            isComplete ? "line-through text-ink-500" : ""
-          }`}
-        >
-          {todo.task_name}
-        </p>
-        {todo.description && (
-          <p className="text-xs text-ink-500 mt-0.5">{todo.description}</p>
-        )}
-        {isComplete && todo.completed_at && (
-          <p className="text-xs text-ink-500 mt-1">
-            Done {formatTime(new Date(todo.completed_at))}
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={`text-ink-900 font-medium leading-snug ${isComplete ? "line-through text-ink-500" : ""}`}>
+            {todo.task_name}
           </p>
+          {todo.time_mode === "exact_time" && todo.scheduled_time && (
+            <span className="text-[10px] uppercase tracking-[0.18em] bg-forest-100 text-forest-700 px-1.5 py-0.5 rounded">
+              {formatTaskClock(todo.scheduled_time)}
+            </span>
+          )}
+          {todo.time_mode === "time_of_day" && todo.time_of_day && (
+            <span className="text-[10px] uppercase tracking-[0.18em] bg-forest-100 text-forest-700 px-1.5 py-0.5 rounded">
+              {getTaskTimeGroupLabel(
+                {
+                  timeMode: todo.time_mode,
+                  timeOfDay: todo.time_of_day,
+                  scheduledTime: todo.scheduled_time,
+                },
+                lang
+              )}
+            </span>
+          )}
+        </div>
+        {todo.description && <p className="text-xs text-ink-500 mt-0.5">{todo.description}</p>}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {badges.map((badge) => (
+            <span key={badge} className="text-[10px] uppercase tracking-[0.18em] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
+              {badge}
+            </span>
+          ))}
+          <span className="text-[10px] uppercase tracking-[0.18em] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
+            {categoryLabel(categories, category)}
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.18em] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
+            #{todo.sort_order}
+          </span>
+        </div>
+        {isComplete && todo.completed_at && (
+          <p className="text-xs text-ink-500 mt-1">Done {formatTime(new Date(todo.completed_at))}</p>
         )}
-        {isSaving && (
-          <p className="text-xs text-ink-500 mt-1">Saving...</p>
-        )}
+        {isSaving && <p className="text-xs text-ink-500 mt-1">Saving...</p>}
         {canManageTasks && (
           <label className="mt-2 inline-flex items-center gap-2 text-xs text-ink-500">
             Category
             <select
-              value={
-                todo.category ??
-                deriveTaskCategory({
-                  taskName: todo.task_name,
-                  description: todo.description,
-                  notes: todo.notes,
-                })
-              }
+              value={category}
               onChange={(e) => onChangeCategory(e.target.value as TaskCategory)}
               className="bg-cream-50 border border-cream-200 rounded-lg px-2 py-1 text-xs text-ink-900 focus:outline-none focus:border-forest-500"
             >
-              {categories.map((category) => (
-                <option key={category.key} value={category.key}>
-                  {category.label}
+              {categories.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
                 </option>
               ))}
             </select>
@@ -462,25 +614,26 @@ function TaskRow({
   );
 }
 
-function FilterPill({
+function TypeButton({
   active,
   onClick,
-  children,
+  label,
 }: {
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  label: string;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+      className={`rounded-xl px-3 py-2 text-sm font-medium transition border ${
         active
-          ? "bg-forest-600 text-cream-50"
-          : "bg-white text-ink-700 hover:bg-cream-100 border border-cream-200"
+          ? "bg-forest-600 border-forest-600 text-cream-50"
+          : "bg-cream-50 border-cream-200 text-ink-600 hover:bg-cream-100"
       }`}
     >
-      {children}
+      {label}
     </button>
   );
 }
@@ -494,4 +647,17 @@ function formatTime(d: Date) {
 
 function categoryLabel(categories: TaskCategoryOption[], key: string) {
   return categories.find((category) => category.key === key)?.label ?? key;
+}
+
+function importanceLabel(value: Todo["importance"], lang: "en" | "es") {
+  switch (value) {
+    case "low":
+      return tr("task.importanceLow", lang);
+    case "high":
+      return tr("task.importanceHigh", lang);
+    case "critical":
+      return tr("task.importanceCritical", lang);
+    default:
+      return tr("task.importanceMedium", lang);
+  }
 }

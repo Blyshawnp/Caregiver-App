@@ -56,7 +56,7 @@ export default async function NewShiftPage() {
     supabase.from("clients").select("id, full_name").order("full_name"),
     supabase
       .from("todo_templates")
-      .select("id, task_name, description, default_for_new_shifts, sort_order, caregiver_id, category")
+      .select("id, task_name, description, default_for_new_shifts, sort_order, caregiver_id, category, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, allow_repeat")
       .eq("organization_id", profile.organization_id)
       .eq("is_active", true)
       .order("sort_order", { ascending: true })

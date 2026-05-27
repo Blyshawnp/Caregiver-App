@@ -148,6 +148,7 @@ export default async function AppLayout({
         userId={profile?.id}
         notificationCount={notificationCount}
         role={profile?.role ?? "caregiver"}
+        lang={lang}
       />
 
       <div className="flex-1 pb-24">

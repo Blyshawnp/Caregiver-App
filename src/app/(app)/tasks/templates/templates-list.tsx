@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PlusIcon } from "@/components/icons";
@@ -8,6 +8,7 @@ import {
   type TaskCategory,
   type TaskCategoryOption,
 } from "@/lib/task-categories";
+import { t as tr } from "@/lib/i18n";
 
 type Template = {
   id: string;
@@ -25,20 +26,30 @@ type Template = {
     | "evening"
     | "bedtime"
     | null;
+  is_optional: boolean;
+  is_prn: boolean;
+  importance: "low" | "medium" | "high" | "critical";
+  time_mode: "unscheduled" | "time_of_day" | "exact_time";
+  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  scheduled_time: string | null;
+  allow_repeat: boolean;
 };
 
 type Caregiver = { id: string; full_name: string };
+type TaskType = "required" | "optional" | "prn";
 
 export default function TemplatesList({
   templates,
   caregivers,
   organizationId,
   categories,
+  lang,
 }: {
   templates: Template[];
   caregivers: Caregiver[];
   organizationId: string;
   categories: TaskCategoryOption[];
+  lang: "en" | "es";
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -47,8 +58,15 @@ export default function TemplatesList({
   const [newIsDefault, setNewIsDefault] = useState(true);
   const [newCaregiverId, setNewCaregiverId] = useState<string>("");
   const [newCategory, setNewCategory] = useState<TaskCategory>("other");
+  const [newTaskType, setNewTaskType] = useState<TaskType>("required");
+  const [newImportance, setNewImportance] = useState<Template["importance"]>("medium");
+  const [newTimeMode, setNewTimeMode] = useState<Template["time_mode"]>("unscheduled");
+  const [newTimeOfDay, setNewTimeOfDay] = useState<NonNullable<Template["time_of_day"]>>("morning");
+  const [newScheduledTime, setNewScheduledTime] = useState("12:00");
+  const [newSortOrder, setNewSortOrder] = useState(0);
+  const [newAllowRepeat, setNewAllowRepeat] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("all"); // "all", "shared", caregiverId
+  const [filter, setFilter] = useState<string>("all");
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
 
   const caregiverNameById = useMemo(() => {
@@ -57,11 +75,9 @@ export default function TemplatesList({
     return m;
   }, [caregivers]);
 
-  // Apply filter
   const filtered = useMemo(() => {
     if (filter === "all") return templates;
-    if (filter === "shared")
-      return templates.filter((t) => t.caregiver_id == null);
+    if (filter === "shared") return templates.filter((t) => t.caregiver_id == null);
     return templates.filter((t) => t.caregiver_id === filter);
   }, [templates, filter]);
 
@@ -75,9 +91,16 @@ export default function TemplatesList({
       task_name: newName.trim(),
       description: newDescription.trim() || null,
       default_for_new_shifts: newIsDefault,
-      sort_order: maxSort + 10,
+      sort_order: Number.isFinite(newSortOrder) ? newSortOrder : maxSort + 10,
       caregiver_id: newCaregiverId || null,
       category: newCategory,
+      is_optional: newTaskType === "optional",
+      is_prn: newTaskType === "prn",
+      importance: newImportance,
+      time_mode: newTimeMode,
+      time_of_day: newTimeMode === "time_of_day" ? newTimeOfDay : null,
+      scheduled_time: newTimeMode === "exact_time" ? newScheduledTime : null,
+      allow_repeat: newAllowRepeat,
     });
     if (error) {
       alert(error.message);
@@ -88,6 +111,13 @@ export default function TemplatesList({
     setNewIsDefault(true);
     setNewCaregiverId("");
     setNewCategory("other");
+    setNewTaskType("required");
+    setNewImportance("medium");
+    setNewTimeMode("unscheduled");
+    setNewTimeOfDay("morning");
+    setNewScheduledTime("12:00");
+    setNewSortOrder(maxSort + 10);
+    setNewAllowRepeat(true);
     setAdding(false);
     router.refresh();
   }
@@ -103,19 +133,13 @@ export default function TemplatesList({
 
   async function reassignTemplate(id: string, caregiverId: string | null) {
     const supabase = createClient();
-    await supabase
-      .from("todo_templates")
-      .update({ caregiver_id: caregiverId })
-      .eq("id", id);
+    await supabase.from("todo_templates").update({ caregiver_id: caregiverId }).eq("id", id);
     router.refresh();
   }
 
   async function changeCategory(id: string, category: TaskCategory) {
     const supabase = createClient();
-    await supabase
-      .from("todo_templates")
-      .update({ category })
-      .eq("id", id);
+    await supabase.from("todo_templates").update({ category }).eq("id", id);
     router.refresh();
   }
 
@@ -137,46 +161,27 @@ export default function TemplatesList({
   }
 
   async function deleteTemplate(id: string) {
-    if (
-      !confirm(
-        "Delete this task from the master list? Existing shifts won't be affected."
-      )
-    )
-      return;
+    if (!confirm("Delete this task from the master list? Existing shifts won't be affected.")) return;
     const supabase = createClient();
-    await supabase
-      .from("todo_templates")
-      .update({ is_active: false })
-      .eq("id", id);
+    await supabase.from("todo_templates").update({ is_active: false }).eq("id", id);
     router.refresh();
   }
 
   return (
     <div>
-      {/* Filter */}
       {caregivers.length > 0 && (
         <div className="mb-4 flex items-center gap-2 flex-wrap">
           <span className="text-xs uppercase tracking-[0.18em] text-ink-500 mr-1">
             Show:
           </span>
-          <FilterPill
-            active={filter === "all"}
-            onClick={() => setFilter("all")}
-          >
+          <FilterPill active={filter === "all"} onClick={() => setFilter("all")}>
             All
           </FilterPill>
-          <FilterPill
-            active={filter === "shared"}
-            onClick={() => setFilter("shared")}
-          >
+          <FilterPill active={filter === "shared"} onClick={() => setFilter("shared")}>
             Everyone
           </FilterPill>
           {caregivers.map((c) => (
-            <FilterPill
-              key={c.id}
-              active={filter === c.id}
-              onClick={() => setFilter(c.id)}
-            >
+            <FilterPill key={c.id} active={filter === c.id} onClick={() => setFilter(c.id)}>
               {c.full_name.split(" ")[0]}
             </FilterPill>
           ))}
@@ -208,12 +213,9 @@ export default function TemplatesList({
         </div>
       </form>
 
-      {/* Group by category */}
       {categories.map((category) => {
         const cat = category.key;
-        const tasksInCat = filtered.filter(
-          (t) => normalizeCategory(t.category) === cat
-        );
+        const tasksInCat = filtered.filter((t) => normalizeCategory(t.category) === cat);
         if (tasksInCat.length === 0) return null;
 
         return (
@@ -229,11 +231,8 @@ export default function TemplatesList({
                   <TemplateRow
                     template={t}
                     caregivers={caregivers}
-                    caregiverName={
-                      t.caregiver_id
-                        ? (caregiverNameById.get(t.caregiver_id) ?? null)
-                        : null
-                    }
+                    caregiverName={t.caregiver_id ? (caregiverNameById.get(t.caregiver_id) ?? null) : null}
+                    lang={lang}
                     isEditing={editingId === t.id}
                     onEdit={() => setEditingId(t.id)}
                     onCancelEdit={() => setEditingId(null)}
@@ -254,12 +253,8 @@ export default function TemplatesList({
         );
       })}
 
-      {/* Add new */}
       {adding ? (
-        <form
-          onSubmit={addTemplate}
-          className="bg-white rounded-2xl shadow-soft p-4 space-y-3"
-        >
+        <form onSubmit={addTemplate} className="bg-white rounded-2xl shadow-soft p-4 space-y-3">
           <input
             type="text"
             autoFocus
@@ -277,14 +272,83 @@ export default function TemplatesList({
             rows={2}
             className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm resize-none"
           />
-          <label className="block">
-            <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
-              Task category
-            </span>
+          <TaskTypePicker value={newTaskType} onChange={setNewTaskType} lang={lang} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Importance">
+              <select
+                value={newImportance}
+                onChange={(e) => setNewImportance(e.target.value as Template["importance"])}
+                className={inputCls}
+              >
+                <option value="low">{tr("task.importanceLow", lang)}</option>
+                <option value="medium">{tr("task.importanceMedium", lang)}</option>
+                <option value="high">{tr("task.importanceHigh", lang)}</option>
+                <option value="critical">{tr("task.importanceCritical", lang)}</option>
+              </select>
+            </Field>
+            <Field label="Time mode">
+              <select
+                value={newTimeMode}
+                onChange={(e) => setNewTimeMode(e.target.value as Template["time_mode"])}
+                className={inputCls}
+              >
+                <option value="unscheduled">{tr("task.unscheduled", lang)}</option>
+                <option value="time_of_day">{tr("task.timeOfDay", lang)}</option>
+                <option value="exact_time">{tr("task.exactTime", lang)}</option>
+              </select>
+            </Field>
+          </div>
+          {newTimeMode === "time_of_day" && (
+            <Field label="Time of day">
+              <select
+                value={newTimeOfDay}
+                onChange={(e) =>
+                  setNewTimeOfDay(e.target.value as NonNullable<Template["time_of_day"]>)
+                }
+                className={inputCls}
+              >
+                <option value="morning">{tr("task.morning", lang)}</option>
+                <option value="early_afternoon">{tr("task.earlyAfternoon", lang)}</option>
+                <option value="late_afternoon">{tr("task.lateAfternoon", lang)}</option>
+                <option value="evening">{tr("task.evening", lang)}</option>
+                <option value="bedtime">{tr("task.bedtime", lang)}</option>
+              </select>
+            </Field>
+          )}
+          {newTimeMode === "exact_time" && (
+            <Field label="Exact time">
+              <input
+                type="time"
+                value={newScheduledTime}
+                onChange={(e) => setNewScheduledTime(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Manual order">
+              <input
+                type="number"
+                value={newSortOrder}
+                onChange={(e) => setNewSortOrder(Number(e.target.value))}
+                className={inputCls}
+              />
+            </Field>
+            <label className="flex items-center gap-2 self-end pb-3 text-sm text-ink-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={newAllowRepeat}
+                onChange={(e) => setNewAllowRepeat(e.target.checked)}
+                className="w-4 h-4 accent-forest-600"
+              />
+              Repeat task on shift
+            </label>
+          </div>
+          <Field label="Category">
             <select
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value as TaskCategory)}
-              className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+              className={inputCls}
             >
               {categories.map((cat) => (
                 <option key={cat.key} value={cat.key}>
@@ -292,15 +356,15 @@ export default function TemplatesList({
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
           <label className="block">
             <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
-              Assign to
+              Assigned to
             </span>
             <select
               value={newCaregiverId}
               onChange={(e) => setNewCaregiverId(e.target.value)}
-              className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+              className={inputCls}
             >
               <option value="">Everyone (shared task)</option>
               {caregivers.map((c) => (
@@ -328,6 +392,14 @@ export default function TemplatesList({
                 setNewDescription("");
                 setNewIsDefault(true);
                 setNewCaregiverId("");
+                setNewCategory("other");
+                setNewTaskType("required");
+                setNewImportance("medium");
+                setNewTimeMode("unscheduled");
+                setNewTimeOfDay("morning");
+                setNewScheduledTime("12:00");
+                setNewSortOrder(0);
+                setNewAllowRepeat(true);
               }}
               className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
             >
@@ -354,29 +426,6 @@ export default function TemplatesList({
   );
 }
 
-function FilterPill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-        active
-          ? "bg-forest-600 text-cream-50"
-          : "bg-white text-ink-700 hover:bg-cream-100 border border-cream-200"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 function TemplateRow({
   template,
   caregivers,
@@ -390,10 +439,12 @@ function TemplateRow({
   onReassign,
   onChangeCategory,
   categories,
+  lang,
 }: {
   template: Template;
   caregivers: Caregiver[];
   caregiverName: string | null;
+  lang: "en" | "es";
   isEditing: boolean;
   onEdit: () => void;
   onCancelEdit: () => void;
@@ -406,20 +457,43 @@ function TemplateRow({
 }) {
   const [name, setName] = useState(template.task_name);
   const [description, setDescription] = useState(template.description ?? "");
+  const [taskType, setTaskType] = useState<TaskType>(
+    template.is_prn ? "prn" : template.is_optional ? "optional" : "required"
+  );
+  const [importance, setImportance] = useState(template.importance);
+  const [timeMode, setTimeMode] = useState(template.time_mode);
+  const [timeOfDay, setTimeOfDay] = useState<NonNullable<Template["time_of_day"]>>(
+    template.time_of_day ?? "morning"
+  );
+  const [scheduledTime, setScheduledTime] = useState(template.scheduled_time ?? "12:00");
+  const [sortOrder, setSortOrder] = useState(template.sort_order);
+  const [allowRepeat, setAllowRepeat] = useState(template.allow_repeat);
   const [savingEdit, setSavingEdit] = useState(false);
 
   async function saveEdit() {
     if (!name.trim()) return;
     setSavingEdit(true);
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("todo_templates")
       .update({
         task_name: name.trim(),
         description: description.trim() || null,
+        is_optional: taskType === "optional",
+        is_prn: taskType === "prn",
+        importance,
+        time_mode: timeMode,
+        time_of_day: timeMode === "time_of_day" ? timeOfDay : null,
+        scheduled_time: timeMode === "exact_time" ? scheduledTime : null,
+        sort_order: sortOrder,
+        allow_repeat: allowRepeat,
       })
       .eq("id", template.id);
     setSavingEdit(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
     onSaved();
   }
 
@@ -431,38 +505,71 @@ function TemplateRow({
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={140}
-          className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+          className={inputCls}
         />
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm resize-none"
+          className={inputCls}
         />
-        <label className="block">
-          <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
-            Task category
-          </span>
-          <select
-            value={normalizeCategory(template.category)}
-            onChange={(e) => onChangeCategory(e.target.value as TaskCategory)}
-            className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
-          >
+              <TaskTypePicker value={taskType} onChange={setTaskType} lang={lang} />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Importance">
+            <select value={importance} onChange={(e) => setImportance(e.target.value as Template["importance"])} className={inputCls}>
+              <option value="low">{tr("task.importanceLow", lang)}</option>
+              <option value="medium">{tr("task.importanceMedium", lang)}</option>
+              <option value="high">{tr("task.importanceHigh", lang)}</option>
+              <option value="critical">{tr("task.importanceCritical", lang)}</option>
+            </select>
+          </Field>
+          <Field label="Time mode">
+            <select value={timeMode} onChange={(e) => setTimeMode(e.target.value as Template["time_mode"])} className={inputCls}>
+              <option value="unscheduled">{tr("task.unscheduled", lang)}</option>
+              <option value="time_of_day">{tr("task.timeOfDay", lang)}</option>
+              <option value="exact_time">{tr("task.exactTime", lang)}</option>
+            </select>
+          </Field>
+        </div>
+        {timeMode === "time_of_day" && (
+          <Field label="Time of day">
+            <select value={timeOfDay} onChange={(e) => setTimeOfDay(e.target.value as NonNullable<Template["time_of_day"]>)} className={inputCls}>
+              <option value="morning">{tr("task.morning", lang)}</option>
+              <option value="early_afternoon">{tr("task.earlyAfternoon", lang)}</option>
+              <option value="late_afternoon">{tr("task.lateAfternoon", lang)}</option>
+              <option value="evening">{tr("task.evening", lang)}</option>
+              <option value="bedtime">{tr("task.bedtime", lang)}</option>
+            </select>
+          </Field>
+        )}
+        {timeMode === "exact_time" && (
+          <Field label="Exact time">
+            <input type="time" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} className={inputCls} />
+          </Field>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Manual order">
+            <input type="number" value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} className={inputCls} />
+          </Field>
+          <label className="flex items-center gap-2 self-end pb-3 text-sm text-ink-700 cursor-pointer">
+            <input type="checkbox" checked={allowRepeat} onChange={(e) => setAllowRepeat(e.target.checked)} className="w-4 h-4 accent-forest-600" />
+            Repeat task on shift
+          </label>
+        </div>
+        <Field label="Category">
+          <select value={normalizeCategory(template.category)} onChange={(e) => onChangeCategory(e.target.value as TaskCategory)} className={inputCls}>
             {categories.map((cat) => (
               <option key={cat.key} value={cat.key}>
                 {cat.label}
               </option>
             ))}
           </select>
-        </label>
-        <label className="block">
-          <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
-            Assigned to
-          </span>
+        </Field>
+        <Field label="Assigned to">
           <select
             value={template.caregiver_id ?? ""}
             onChange={(e) => onReassign(e.target.value || null)}
-            className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 text-sm"
+            className={inputCls}
           >
             <option value="">Everyone</option>
             {caregivers.map((c) => (
@@ -471,7 +578,7 @@ function TemplateRow({
               </option>
             ))}
           </select>
-        </label>
+        </Field>
         <div className="flex gap-2">
           <button
             onClick={onCancelEdit}
@@ -516,24 +623,19 @@ function TemplateRow({
             </span>
           )}
         </p>
-        {template.description && (
-          <p className="text-xs text-ink-500 mt-0.5">{template.description}</p>
-        )}
+        {template.description && <p className="text-xs text-ink-500 mt-0.5">{template.description}</p>}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <TemplateBadge label={template.is_prn ? tr("task.prn", lang) : template.is_optional ? tr("task.optional", lang) : tr("task.required", lang)} />
+          <TemplateBadge label={importanceLabel(template.importance, lang)} />
+          <TemplateBadge label={template.time_mode === "exact_time" && template.scheduled_time ? template.scheduled_time : template.time_mode === "time_of_day" && template.time_of_day ? timeOfDayLabel(template.time_of_day, lang) : tr("task.unscheduled", lang)} />
+          <TemplateBadge label={template.allow_repeat ? (lang === "es" ? "Repetible" : "Repeatable") : tr("task.single", lang)} />
+          <TemplateBadge label={`#${template.sort_order}`} />
+        </div>
       </div>
       <div className="flex gap-1 shrink-0">
-        <button
-          onClick={onEdit}
-          className="text-xs text-forest-600 hover:underline"
-        >
-          Edit
-        </button>
+        <button onClick={onEdit} className="text-xs text-forest-600 hover:underline">Edit</button>
         <span className="text-ink-300">·</span>
-        <button
-          onClick={onDelete}
-          className="text-xs text-terracotta-600 hover:underline"
-        >
-          Delete
-        </button>
+        <button onClick={onDelete} className="text-xs text-terracotta-600 hover:underline">Delete</button>
       </div>
     </div>
   );
@@ -543,9 +645,92 @@ function normalizeCategory(category: Template["category"]): TaskCategory {
   return category ?? "other";
 }
 
-function categoryLabel(categories: TaskCategoryOption[], key: string) {
-  return categories.find((category) => category.key === key)?.label ?? key;
+function TemplateBadge({ label }: { label: string }) {
+  return (
+    <span className="text-[10px] uppercase tracking-[0.18em] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
+      {label}
+    </span>
+  );
 }
+
+function TaskTypePicker({
+  value,
+  onChange,
+  lang,
+}: {
+  value: TaskType;
+  onChange: (value: TaskType) => void;
+  lang: "en" | "es";
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <TypeButton active={value === "required"} onClick={() => onChange("required")} label={tr("task.required", lang)} />
+      <TypeButton active={value === "optional"} onClick={() => onChange("optional")} label={tr("task.optional", lang)} />
+      <TypeButton active={value === "prn"} onClick={() => onChange("prn")} label={tr("task.prn", lang)} />
+    </div>
+  );
+}
+
+function TypeButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl px-3 py-2 text-sm font-medium transition border ${
+        active
+          ? "bg-forest-600 border-forest-600 text-cream-50"
+          : "bg-cream-50 border-cream-200 text-ink-600 hover:bg-cream-100"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function FilterPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+        active
+          ? "bg-forest-600 text-cream-50"
+          : "bg-white text-ink-700 hover:bg-cream-100 border border-cream-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+const inputCls =
+  "w-full px-4 py-3 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition";
 
 function CategoryEditor({ category }: { category: TaskCategoryOption }) {
   const router = useRouter();
@@ -585,4 +770,32 @@ function CategoryEditor({ category }: { category: TaskCategoryOption }) {
       </button>
     </div>
   );
+}
+
+function importanceLabel(value: Template["importance"], lang: "en" | "es") {
+  switch (value) {
+    case "low":
+      return tr("task.importanceLow", lang);
+    case "high":
+      return tr("task.importanceHigh", lang);
+    case "critical":
+      return tr("task.importanceCritical", lang);
+    default:
+      return tr("task.importanceMedium", lang);
+  }
+}
+
+function timeOfDayLabel(value: NonNullable<Template["time_of_day"]>, lang: "en" | "es") {
+  switch (value) {
+    case "morning":
+      return tr("task.morning", lang);
+    case "early_afternoon":
+      return tr("task.earlyAfternoon", lang);
+    case "late_afternoon":
+      return tr("task.lateAfternoon", lang);
+    case "evening":
+      return tr("task.evening", lang);
+    case "bedtime":
+      return tr("task.bedtime", lang);
+  }
 }

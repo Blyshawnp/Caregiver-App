@@ -83,8 +83,15 @@ type ShiftDetail = {
     description: string | null;
     is_completed: boolean;
     completed_at: string | null;
+    is_optional: boolean;
+    is_prn: boolean;
+    importance: "low" | "medium" | "high" | "critical";
+    time_mode: "unscheduled" | "time_of_day" | "exact_time";
+    time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+    scheduled_time: string | null;
     sort_order: number;
     notes: string | null;
+    allow_repeat: boolean;
     category: import("@/lib/task-categories").TaskCategory | null;
   }> | null;
 };
@@ -157,7 +164,7 @@ export default async function ShiftDetailPage({
       clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
       check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, check_out_reason, total_minutes, flagged_outside_geofence, flag_reason ),
-      shift_todos ( id, task_name, description, is_completed, completed_at, sort_order, notes, category )
+      shift_todos ( id, task_name, description, is_completed, completed_at, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, sort_order, notes, allow_repeat, category )
     `
     )
     .eq("id", id)
@@ -659,14 +666,15 @@ export default async function ShiftDetailPage({
       )}
 
       <section className="mt-4">
-        <TasksView
-          shiftId={id}
-          todos={todos}
-          canManageTasks={canEdit}
-          canCompleteTasks={canCompleteTasks}
-          currentUserId={profile?.id ?? user.id}
-          categories={normalizeTaskCategories(categoryRows as TaskCategoryOption[] | null)}
-        />
+      <TasksView
+        shiftId={id}
+        todos={todos}
+        canManageTasks={canEdit}
+        canCompleteTasks={canCompleteTasks}
+        currentUserId={profile?.id ?? user.id}
+        categories={normalizeTaskCategories(categoryRows as TaskCategoryOption[] | null)}
+        lang={lang}
+      />
       </section>
 
       {/* Actions */}

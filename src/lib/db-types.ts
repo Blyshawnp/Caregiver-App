@@ -118,7 +118,14 @@ export type ShiftTodoRow = {
   completed_at: string | null;
   completed_by: string | null;
   notes: string | null;
+  is_optional: boolean;
+  is_prn: boolean;
+  importance: "low" | "medium" | "high" | "critical";
+  time_mode: "unscheduled" | "time_of_day" | "exact_time";
+  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  scheduled_time: string | null;
   sort_order: number;
+  allow_repeat: boolean;
 };
 
 /**
@@ -158,6 +165,19 @@ export type ShiftWithRelations = ShiftRow & {
     >
   >;
   shift_todos: Array<
-    Pick<ShiftTodoRow, "id" | "task_name" | "is_completed">
+    Pick<
+      ShiftTodoRow,
+      | "id"
+      | "task_name"
+      | "is_completed"
+      | "is_optional"
+      | "is_prn"
+      | "importance"
+      | "time_mode"
+      | "time_of_day"
+      | "scheduled_time"
+      | "sort_order"
+      | "allow_repeat"
+    >
   >;
 };

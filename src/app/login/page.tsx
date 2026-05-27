@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import AppLogo from "@/components/app-logo";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/lib/use-translation";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -47,17 +50,11 @@ export default function LoginPage() {
       <div className="relative w-full max-w-sm">
         {/* Brand */}
         <div className="mb-8 text-center">
-          <img
-            src="/icon-192.png"
-            alt="Carer Vista Pro"
-            className="w-24 h-24 object-contain mx-auto mb-4 drop-shadow"
-          />
-          <h1 className="font-display text-4xl text-ink-900 mb-1.5">
-            Carer Vista Pro
-          </h1>
-          <p className="text-ink-500 text-sm">
-            Sign in to your account
-          </p>
+          <div className="mx-auto mb-5 inline-flex">
+            <AppLogo href="/login" variant="auth" showText={false} className="justify-center" />
+          </div>
+          <h1 className="font-display text-4xl text-ink-900 mb-1.5">{t("auth.title")}</h1>
+          <p className="text-ink-500 text-sm">{t("auth.signInTitle")}</p>
         </div>
 
         {/* Card */}
@@ -67,15 +64,15 @@ export default function LoginPage() {
         >
           <div className="space-y-4 relative">
             <Field
-              label="Email"
-              type="email"
-              autoComplete="email"
+              label={t("auth.emailOrUsername")}
+              type="text"
+              autoComplete="username"
               value={email}
               onChange={setEmail}
               required
             />
             <Field
-              label="Password"
+              label={t("auth.password")}
               type="password"
               autoComplete="current-password"
               value={password}
@@ -94,13 +91,13 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl font-medium tracking-wide transition disabled:opacity-60 disabled:cursor-not-allowed shadow-soft active:scale-[0.99]"
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? t("auth.signingIn") : t("auth.signIn")}
             </button>
           </div>
         </form>
 
         <p className="text-center text-xs text-ink-500 mt-6">
-          Need access? Ask your administrator to add you.
+          {t("auth.needAccess")}
         </p>
       </div>
     </main>

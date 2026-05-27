@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import TemplatesList from "./templates-list";
 import { normalizeTaskCategories, type TaskCategoryOption } from "@/lib/task-categories";
+import { getUserLanguage } from "@/lib/get-user-language";
 
 export default async function TemplatesPage() {
   const supabase = await createClient();
@@ -18,12 +19,13 @@ export default async function TemplatesPage() {
     .single<{ role: "admin" | "client" | "caregiver" | "family"; organization_id: string }>();
 
   if (!profile || (profile.role === "caregiver" || profile.role === "family")) redirect("/tasks");
+  const lang = await getUserLanguage();
 
   const [templatesRes, caregiversRes, categoriesRes] = await Promise.all([
     supabase
       .from("todo_templates")
       .select(
-        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id, category"
+        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id, category, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, allow_repeat"
       )
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
@@ -67,6 +69,7 @@ export default async function TemplatesPage() {
         categories={normalizeTaskCategories(
           (categoriesRes.data ?? []) as TaskCategoryOption[]
         )}
+        lang={lang}
       />
     </main>
   );

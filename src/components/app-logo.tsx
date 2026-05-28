@@ -74,7 +74,7 @@ export default function AppLogo({
           </span>
         ) : (
           <Image
-            src="/CarerLogo.png"
+            src="/logo.png"
             alt="Caregiver App"
             width={size.width}
             height={size.height}

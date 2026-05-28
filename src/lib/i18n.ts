@@ -24,7 +24,7 @@ const en = {
   "nav.messages": "Messages",
   "nav.me": "Me",
 
-  "auth.title": "Caregiver App",
+  "auth.title": "Carer Vista Pro",
   "auth.signInTitle": "Sign in to your account",
   "auth.emailOrUsername": "Email or username",
   "auth.password": "Password",
@@ -162,7 +162,7 @@ const es: Record<TranslationKey, string> = {
   "nav.messages": "Mensajes",
   "nav.me": "Yo",
 
-  "auth.title": "Aplicación del cuidador",
+  "auth.title": "Carer Vista Pro",
   "auth.signInTitle": "Inicie sesión en su cuenta",
   "auth.emailOrUsername": "Correo electrónico o nombre de usuario",
   "auth.password": "Contraseña",

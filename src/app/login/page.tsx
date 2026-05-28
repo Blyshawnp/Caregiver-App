@@ -53,7 +53,6 @@ export default function LoginPage() {
           <div className="mx-auto mb-5 inline-flex">
             <AppLogo href="/login" variant="auth" showText={false} className="justify-center" />
           </div>
-          <h1 className="font-display text-4xl text-ink-900 mb-1.5">{t("auth.title")}</h1>
           <p className="text-ink-500 text-sm">{t("auth.signInTitle")}</p>
         </div>
 

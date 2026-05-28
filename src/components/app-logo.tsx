@@ -18,12 +18,12 @@ const logoSizes: Record<
   }
 > = {
   auth: {
-    wrapper: "w-[220px] sm:w-[260px]",
-    image: "w-[220px] sm:w-[260px] h-auto",
-    width: 260,
-    height: 146,
-    sizes: "(min-width: 640px) 260px, 220px",
-    fallback: "w-[220px] sm:w-[260px] min-h-[82px] text-base",
+    wrapper: "w-[280px] sm:w-[340px]",
+    image: "w-[280px] sm:w-[340px] h-auto",
+    width: 340,
+    height: 190,
+    sizes: "(min-width: 640px) 340px, 280px",
+    fallback: "w-[280px] sm:w-[340px] min-h-[112px] text-base",
   },
   header: {
     wrapper: "w-[120px] sm:w-[150px]",
@@ -62,7 +62,7 @@ export default function AppLogo({
   return (
     <Link
       href={href}
-      aria-label="Caregiver App home"
+      aria-label="Carer Vista Pro home"
       className={`flex items-center gap-3 min-w-0 ${className}`}
     >
       <span className={`relative shrink-0 overflow-visible ${size.wrapper}`}>
@@ -70,12 +70,12 @@ export default function AppLogo({
           <span
             className={`flex items-center justify-center text-center font-extrabold uppercase leading-none text-forest-700 ${size.fallback}`}
           >
-            Caregiver App
+            Carer Vista Pro
           </span>
         ) : (
           <Image
             src="/CVPlogo.png"
-            alt="Caregiver App"
+            alt="Carer Vista Pro"
             width={size.width}
             height={size.height}
             sizes={size.sizes}
@@ -88,7 +88,7 @@ export default function AppLogo({
       {(showText || logoFailed) && (
         <span className="min-w-0 leading-none">
           <span className={`block uppercase tracking-[0.18em] font-extrabold text-forest-700 ${textSize} truncate`}>
-            Caregiver App
+            Carer Vista Pro
           </span>
         </span>
       )}

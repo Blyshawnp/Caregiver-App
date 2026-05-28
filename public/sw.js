@@ -12,6 +12,7 @@ const STATIC_ASSETS = [
   "/icon-maskable-192.png",
   "/icon-maskable-512.png",
   "/apple-touch-icon.png",
+  "/favicon-cvp.ico",
   "/favicon.ico",
   "/favicon-32.png",
 ];
@@ -91,6 +92,7 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/icon-") ||
     url.pathname === "/manifest.json" ||
     url.pathname === "/apple-touch-icon.png" ||
+    url.pathname === "/favicon-cvp.ico" ||
     url.pathname === "/favicon.ico" ||
     url.pathname === "/favicon-32.png"
   ) {

@@ -114,9 +114,9 @@ export default function InstallPrompt() {
         <div className="fixed bottom-24 left-3 right-3 z-40 max-w-md mx-auto pb-[env(safe-area-inset-bottom)] animate-slide-up">
           <div className="bg-forest-600 text-cream-50 rounded-2xl shadow-lifted p-4 flex items-center gap-3">
             <img
-              src="/icon-192.png"
-              alt=""
-              className="w-10 h-10 rounded-xl object-cover shrink-0 bg-cream-50/15"
+              src="/CVPlogo.png"
+              alt="Carer Vista Pro"
+              className="w-28 max-w-[34vw] h-auto object-contain shrink-0"
             />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm">Install Carer Vista Pro</p>

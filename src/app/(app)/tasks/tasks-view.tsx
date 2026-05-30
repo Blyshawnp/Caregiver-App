@@ -35,6 +35,7 @@ type Todo = {
   notes: string | null;
   allow_repeat: boolean;
   category?: TaskCategory | null;
+  status?: string | null;
 };
 
 type TaskType = "required" | "optional" | "prn";
@@ -73,10 +74,11 @@ export default function TasksView({
   const [newAllowRepeat, setNewAllowRepeat] = useState(true);
   const categories = normalizeTaskCategories(categoryRows);
 
-  const completedCount = todos.filter((t) =>
+  const requiredTodos = todos.filter((t) => !t.is_optional && !t.is_prn);
+  const completedCount = requiredTodos.filter((t) =>
     optimistic[t.id] !== undefined ? optimistic[t.id] : t.is_completed
   ).length;
-  const progressPct = todos.length === 0 ? 0 : Math.round((completedCount / todos.length) * 100);
+  const progressPct = requiredTodos.length === 0 ? 0 : Math.round((completedCount / requiredTodos.length) * 100);
 
   const groupedTodos = useMemo(() => {
     const ordered = sortTasks(todos);
@@ -128,10 +130,12 @@ export default function TasksView({
       is_completed: boolean;
       completed_at: string | null;
       completed_by: string | null;
+      status: string;
     } = {
       is_completed: newValue,
       completed_at: newValue ? new Date().toISOString() : null,
       completed_by: newValue ? currentUserId : null,
+      status: newValue ? 'completed' : 'pending',
     };
     const { error } = await supabase
       .from("shift_todos")
@@ -227,6 +231,30 @@ export default function TasksView({
     router.refresh();
   }
 
+  async function updateTaskStatus(id: string, newStatus: string) {
+    const supabase = createClient();
+    const update: Record<string, unknown> = { status: newStatus };
+    if (newStatus === 'completed') {
+      update.is_completed = true;
+      update.completed_at = new Date().toISOString();
+      update.completed_by = currentUserId;
+    } else if (newStatus === 'not_needed' || newStatus === 'client_declined' || newStatus === 'skipped') {
+      update.is_completed = false;
+      update.completed_at = null;
+      update.completed_by = null;
+    }
+    const { error } = await supabase
+      .from('shift_todos')
+      .update(update)
+      .eq('id', id)
+      .eq('shift_id', shiftId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    startTransition(() => router.refresh());
+  }
+
   return (
     <div>
       {todos.length > 0 && (
@@ -235,7 +263,7 @@ export default function TasksView({
             <div className="flex justify-between items-baseline mb-2">
               <h2 className="font-display text-base">Progress</h2>
               <span className="text-sm text-ink-500">
-                {completedCount} / {todos.length}
+                {completedCount} / {requiredTodos.length}
               </span>
             </div>
             <div className="h-2 bg-cream-200 rounded-full overflow-hidden">
@@ -287,6 +315,7 @@ export default function TasksView({
                       onToggle={() => toggle(todo)}
                       onDelete={() => deleteTask(todo.id)}
                       onChangeCategory={(category) => changeTaskCategory(todo.id, category)}
+                      onUpdateStatus={(status: string) => updateTaskStatus(todo.id, status)}
                       categories={categories}
                       lang={lang}
                     />
@@ -481,6 +510,7 @@ function TaskRow({
   onToggle,
   onDelete,
   onChangeCategory,
+  onUpdateStatus,
   categories,
   lang,
 }: {
@@ -492,6 +522,7 @@ function TaskRow({
   onToggle: () => void;
   onDelete: () => void;
   onChangeCategory: (category: TaskCategory) => void;
+  onUpdateStatus: (status: string) => void;
   categories: TaskCategoryOption[];
   lang: "en" | "es";
 }) {
@@ -569,6 +600,40 @@ function TaskRow({
             #{todo.sort_order}
           </span>
         </div>
+        {todo.is_prn && canCompleteTasks && !isComplete && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <button
+              type="button"
+              onClick={() => onUpdateStatus('not_needed')}
+              className="text-[11px] bg-cream-200 hover:bg-cream-300 text-ink-700 px-2.5 py-1 rounded-lg font-medium transition"
+            >
+              Not needed this shift
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateStatus('client_declined')}
+              className="text-[11px] bg-cream-200 hover:bg-cream-300 text-ink-700 px-2.5 py-1 rounded-lg font-medium transition"
+            >
+              Client declined
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateStatus('needs_follow_up')}
+              className="text-[11px] bg-terracotta-400/15 hover:bg-terracotta-400/25 text-terracotta-700 px-2.5 py-1 rounded-lg font-medium transition"
+            >
+              Needs follow-up
+            </button>
+          </div>
+        )}
+        {todo.status && todo.status !== 'pending' && todo.status !== 'completed' && (
+          <span className={`inline-block text-[10px] uppercase tracking-[0.18em] px-1.5 py-0.5 rounded mt-2 ${
+            todo.status === 'needs_follow_up'
+              ? 'bg-terracotta-400/15 text-terracotta-700'
+              : 'bg-cream-200 text-ink-600'
+          }`}>
+            {todo.status === 'not_needed' ? 'Not needed' : todo.status === 'client_declined' ? 'Client declined' : todo.status === 'needs_follow_up' ? 'Needs follow-up' : todo.status.replace(/_/g, ' ')}
+          </span>
+        )}
         {isComplete && todo.completed_at && (
           <p className="text-xs text-ink-500 mt-1">Done {formatTime(new Date(todo.completed_at))}</p>
         )}

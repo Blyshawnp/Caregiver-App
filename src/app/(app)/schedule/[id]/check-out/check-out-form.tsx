@@ -25,7 +25,7 @@ type Shift = {
   };
 };
 
-type Todo = { id: string; task_name: string; is_completed: boolean };
+type Todo = { id: string; task_name: string; is_completed: boolean; is_optional: boolean; is_prn: boolean };
 
 type Status =
   | { kind: "init" }
@@ -57,7 +57,10 @@ export default function CheckOutForm({
   const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
-  const incomplete = todos.filter((t) => !t.is_completed);
+  const incomplete = todos.filter((t) => !t.is_completed && !t.is_optional && !t.is_prn);
+  const pendingPrn = todos.filter((t) => !t.is_completed && t.is_prn);
+  const requiredTasks = todos.filter((t) => !t.is_optional && !t.is_prn);
+  const requiredComplete = requiredTasks.filter((t) => t.is_completed).length;
 
   useEffect(() => {
     void runLocate();
@@ -205,7 +208,7 @@ export default function CheckOutForm({
             <div className="flex justify-between items-baseline mb-2">
               <h2 className="font-display text-base">Tasks</h2>
               <span className="text-sm text-ink-500">
-                {todos.length - incomplete.length} / {todos.length} complete
+                {requiredComplete} / {requiredTasks.length} required complete
               </span>
             </div>
             {incomplete.length > 0 ? (
@@ -217,7 +220,12 @@ export default function CheckOutForm({
                 as incomplete.
               </p>
             ) : (
-              <p className="text-sm text-forest-600">All tasks complete</p>
+              <p className="text-sm text-forest-600">All required tasks complete</p>
+            )}
+            {pendingPrn.length > 0 && (
+              <p className="text-sm text-ink-500 mt-1">
+                {pendingPrn.length} PRN task{pendingPrn.length === 1 ? "" : "s"} not yet marked — you can mark them &ldquo;Not needed this shift&rdquo; if appropriate.
+              </p>
             )}
             <Link
               href="/tasks"

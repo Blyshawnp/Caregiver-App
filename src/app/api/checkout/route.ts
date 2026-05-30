@@ -39,6 +39,8 @@ type ShiftRecord = {
     id: string;
     task_name: string;
     is_completed: boolean;
+    is_optional: boolean;
+    is_prn: boolean;
   }> | null;
 };
 
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
         scheduled_end,
         clients ( full_name ),
         profiles:caregiver_id ( full_name ),
-        shift_todos ( id, task_name, is_completed )
+        shift_todos ( id, task_name, is_completed, is_optional, is_prn )
       `
       )
       .eq("id", payload.shiftId)
@@ -149,7 +151,7 @@ export async function POST(request: Request) {
     }
 
     const incompleteTasks = (shift.shift_todos ?? []).filter(
-      (todo) => !todo.is_completed
+      (todo) => !todo.is_completed && !todo.is_optional && !todo.is_prn
     );
     if (incompleteTasks.length > 0 && !payload.allowIncomplete) {
       return NextResponse.json(

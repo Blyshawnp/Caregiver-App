@@ -93,6 +93,7 @@ type ShiftDetail = {
     notes: string | null;
     allow_repeat: boolean;
     category: import("@/lib/task-categories").TaskCategory | null;
+    status: string | null;
   }> | null;
 };
 
@@ -164,7 +165,7 @@ export default async function ShiftDetailPage({
       clients ( full_name, address, home_notes ),
       shift_types ( name, color ),
       check_ins ( id, check_in_time, check_out_time, check_out_method, check_out_by, check_out_reason, total_minutes, flagged_outside_geofence, flag_reason ),
-      shift_todos ( id, task_name, description, is_completed, completed_at, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, sort_order, notes, allow_repeat, category )
+      shift_todos ( id, task_name, description, is_completed, completed_at, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, sort_order, notes, allow_repeat, category, status )
     `
     )
     .eq("id", id)
@@ -323,7 +324,8 @@ export default async function ShiftDetailPage({
     .order("sort_order", { ascending: true })
     .order("label", { ascending: true });
 
-  const todosDone = todos.filter((t) => t.is_completed).length;
+  const requiredTodos = todos.filter((t) => !t.is_optional && !t.is_prn);
+  const todosDone = requiredTodos.filter((t) => t.is_completed).length;
   const shiftStatus = getShiftStatus(
     {
       scheduled_start: shift.scheduled_start,

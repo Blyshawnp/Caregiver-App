@@ -37,6 +37,7 @@ type ShiftForCheckOut = {
     is_completed: boolean;
     is_optional: boolean;
     is_prn: boolean;
+    status: string | null;
   }> | null;
 };
 
@@ -63,7 +64,7 @@ export default async function CheckOutPage({
       scheduled_end,
       clients ( full_name, address, latitude, longitude, geofence_radius_meters ),
       check_ins ( id, check_in_time, check_out_time ),
-      shift_todos ( id, task_name, is_completed, is_optional, is_prn )
+      shift_todos ( id, task_name, is_completed, is_optional, is_prn, status )
     `
     )
     .eq("id", id)

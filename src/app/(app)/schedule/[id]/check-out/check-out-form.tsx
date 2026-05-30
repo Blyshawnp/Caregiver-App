@@ -9,6 +9,7 @@ import {
   formatDistance,
 } from "@/lib/geo";
 import { MapPinIcon, ClockIcon } from "@/components/icons";
+import { createClient } from "@/lib/supabase/client";
 
 type Shift = {
   id: string;
@@ -25,7 +26,7 @@ type Shift = {
   };
 };
 
-type Todo = { id: string; task_name: string; is_completed: boolean; is_optional: boolean; is_prn: boolean };
+type Todo = { id: string; task_name: string; is_completed: boolean; is_optional: boolean; is_prn: boolean; status?: string | null };
 
 type Status =
   | { kind: "init" }
@@ -56,6 +57,55 @@ export default function CheckOutForm({
   const [confirmingFlag, setConfirmingFlag] = useState(false);
   const [confirmingIncomplete, setConfirmingIncomplete] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [requirePrnAck, setRequirePrnAck] = useState(false);
+
+  async function updateTaskStatus(id: string, newStatus: string) {
+    const supabase = createClient();
+    const update: Record<string, any> = { status: newStatus };
+    if (newStatus === "completed") {
+      update.is_completed = true;
+      update.completed_at = new Date().toISOString();
+      update.completed_by = shift.caregiver_id;
+    } else {
+      update.is_completed = false;
+      update.completed_at = null;
+      update.completed_by = null;
+    }
+    const { error } = await supabase
+      .from("shift_todos")
+      .update(update)
+      .eq("id", id)
+      .eq("shift_id", shift.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function markAllPrnNotNeeded() {
+    const supabase = createClient();
+    const pendingPrnIds = pendingPrn.map((t) => t.id);
+    if (pendingPrnIds.length === 0) return;
+
+    const { error } = await supabase
+      .from("shift_todos")
+      .update({
+        status: "not_needed",
+        is_completed: false,
+        completed_at: null,
+        completed_by: null,
+      })
+      .in("id", pendingPrnIds)
+      .eq("shift_id", shift.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    router.refresh();
+  }
 
   const incomplete = todos.filter((t) => !t.is_completed && !t.is_optional && !t.is_prn);
   const pendingPrn = todos.filter((t) => !t.is_completed && t.is_prn);
@@ -211,25 +261,95 @@ export default function CheckOutForm({
                 {requiredComplete} / {requiredTasks.length} required complete
               </span>
             </div>
+            
+            <div className="flex items-center justify-between mt-3 mb-3 p-3 bg-cream-50 rounded-2xl border border-cream-200">
+              <div>
+                <span className="text-xs font-semibold text-ink-700 block">Require PRN documentation</span>
+                <span className="text-[10px] text-ink-500 block">Simulate settings require_prn_acknowledgment</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={requirePrnAck}
+                onChange={(e) => setRequirePrnAck(e.target.checked)}
+                className="w-4 h-4 text-forest-600 border-cream-300 rounded focus:ring-forest-500"
+              />
+            </div>
+
             {incomplete.length > 0 ? (
               <p className="text-sm text-ink-700">
                 <span className="font-medium text-terracotta-600">
                   {incomplete.length} incomplete
                 </span>
-                {" — "}you can still check out, but unfinished tasks will stay marked
+                {" — "}you can still check out, but unfinished required tasks will stay marked
                 as incomplete.
               </p>
             ) : (
               <p className="text-sm text-forest-600">All required tasks complete</p>
             )}
+
             {pendingPrn.length > 0 && (
-              <p className="text-sm text-ink-500 mt-1">
-                {pendingPrn.length} PRN task{pendingPrn.length === 1 ? "" : "s"} not yet marked — you can mark them &ldquo;Not needed this shift&rdquo; if appropriate.
-              </p>
+              <div className="mt-3 p-3 bg-cream-50 rounded-2xl border border-cream-200">
+                <p className="text-xs font-semibold uppercase tracking-wider text-ink-600 mb-1">
+                  PRN / If-Needed Tasks Unmarked
+                </p>
+                <p className="text-xs text-ink-500 mb-3">
+                  Some PRN tasks were not marked. If they were not needed, you can mark them &ldquo;Not needed this shift&rdquo;.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await markAllPrnNotNeeded();
+                    }}
+                    className="text-[11px] bg-forest-600 hover:bg-forest-700 text-cream-50 px-3 py-1.5 rounded-lg font-medium transition"
+                  >
+                    Mark all PRN as Not needed
+                  </button>
+                  <Link
+                    href={`/tasks?shift=${shift.id}`}
+                    className="text-[11px] bg-cream-200 hover:bg-cream-300 text-ink-700 px-3 py-1.5 rounded-lg font-medium transition text-center"
+                  >
+                    Review PRN tasks
+                  </Link>
+                </div>
+                
+                {/* List of unmarked PRN tasks with quick individual controls */}
+                <div className="space-y-2 mt-2">
+                  {pendingPrn.map((t) => (
+                    <div key={t.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 bg-white rounded-xl border border-cream-100 gap-2">
+                      <span className="text-xs text-ink-800 font-medium">{t.task_name}</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => updateTaskStatus(t.id, "not_needed")}
+                          className="text-[10px] bg-cream-100 hover:bg-cream-200 text-ink-700 px-2 py-1 rounded font-medium"
+                        >
+                          Not needed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateTaskStatus(t.id, "client_declined")}
+                          className="text-[10px] bg-cream-100 hover:bg-cream-200 text-ink-700 px-2 py-1 rounded font-medium"
+                        >
+                          Declined
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateTaskStatus(t.id, "needs_follow_up")}
+                          className="text-[10px] bg-terracotta-100 hover:bg-terracotta-200 text-terracotta-700 px-2 py-1 rounded font-medium"
+                        >
+                          Follow-up
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
+            
             <Link
               href="/tasks"
-              className="text-sm text-forest-600 font-medium hover:underline mt-2 inline-block"
+              className="text-sm text-forest-600 font-medium hover:underline mt-3 inline-block"
             >
               View tasks
             </Link>
@@ -317,6 +437,12 @@ export default function CheckOutForm({
         </div>
       )}
 
+      {requirePrnAck && pendingPrn.length > 0 && (
+        <p className="text-xs text-terracotta-600 font-medium text-center mb-2">
+          Documentation required: Please choose a status for all PRN tasks before checkout.
+        </p>
+      )}
+
       <div className="space-y-2">
         {!confirmingIncomplete && !confirmingFlag && (
           <button
@@ -324,7 +450,8 @@ export default function CheckOutForm({
             disabled={
               status.kind === "submitting" ||
               status.kind === "init" ||
-              status.kind === "locating"
+              status.kind === "locating" ||
+              (requirePrnAck && pendingPrn.length > 0)
             }
             className="block w-full bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-3.5 rounded-2xl font-medium text-center transition active:scale-[0.99] disabled:opacity-60"
           >

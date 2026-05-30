@@ -10,6 +10,7 @@ import {
 import DeleteShiftButton from "./delete-shift-button";
 import AcceptDeclineButtons from "./accept-decline-buttons";
 import LiveOnShiftCard from "./live-on-shift-card";
+import TopShiftActionArea from "./top-shift-action-area";
 import ForceCheckOutButton from "./force-check-out-button";
 import AdminTimeAdjuster from "./admin-time-adjuster";
 import ReleaseShiftButton from "./release-shift-button";
@@ -24,6 +25,7 @@ import { t as tr } from "@/lib/i18n";
 import {
   computeShiftPay,
   roundUpToQuarter,
+  formatCurrency,
 } from "@/lib/pay";
 import {
   formatTimeInTz,
@@ -376,6 +378,47 @@ export default async function ShiftDetailPage({
         ← Back to schedule
       </Link>
 
+      <TopShiftActionArea
+        shiftId={id}
+        clientName={canShowClientDetails ? shift.clients?.full_name ?? "General availability" : "Client scheduled"}
+        shiftDateTime={`${formatDateInTz(start)} · ${formatTimeInTz(start)} – ${formatTimeInTz(end)}`}
+        shiftStatusLabel={
+          shiftStatus.kind === "active_checked_in"
+            ? "Active"
+            : shiftStatus.kind === "completed"
+              ? "Completed"
+              : shiftStatus.kind === "past_unchecked"
+                ? "Missed"
+                : shiftStatus.kind === "open_expired"
+                  ? "Expired"
+                  : shiftStatus.kind === "ready_to_check_in"
+                    ? "Ready"
+                    : shiftStatus.kind === "upcoming"
+                      ? "Upcoming"
+                      : "Scheduled"
+        }
+        shiftStatusTone={
+          shiftStatus.kind === "active_checked_in" || shiftStatus.kind === "completed" || shiftStatus.kind === "ready_to_check_in"
+            ? "forest"
+            : shift.assignment_status === "pending"
+              ? "terracotta"
+              : "muted"
+        }
+        role={profile?.role ?? "caregiver"}
+        isAssignedCaregiver={isAssignedCaregiver}
+        canCheckIn={!!shiftStatus.canCheckIn}
+        canCheckOut={shiftStatus.kind === "active_checked_in"}
+        canClaim={!!canClaim}
+        iReleasedThis={!!iReleasedThis}
+        assignmentStatus={shift.assignment_status}
+        isReleased={isReleased}
+        computedPayAmount={computedPay.amount}
+        isPayOverridden={computedPay.isOverridden}
+        hourlyRate={hourlyRate}
+        caregiverId={profile?.id ?? ""}
+        showPay={isAssignedCaregiver || profile?.role === "admin"}
+      />
+
       {/* Header */}
       <header className="mb-5">
         <div className="flex items-center gap-2 mb-2">
@@ -529,7 +572,7 @@ export default async function ShiftDetailPage({
           {shift.bonus_amount != null && shift.bonus_amount > 0 && (
             <Detail
               label="Bonus"
-              value={`$${Number(shift.bonus_amount).toFixed(2)}${
+              value={`${formatCurrency(shift.bonus_amount)}${
                 shift.bonus_reason ? ` · ${shift.bonus_reason}` : ""
               }`}
             />
@@ -537,7 +580,7 @@ export default async function ShiftDetailPage({
           {canEdit && shift.caregiver_id && checkIn?.check_out_time && (
             <Detail
               label="Pay"
-              value={`$${roundUpToQuarter(computedPay.amount).toFixed(2)}${
+              value={`${formatCurrency(roundUpToQuarter(computedPay.amount))}${
                 computedPay.isOverridden ? " (adjusted)" : ""
               }`}
             />

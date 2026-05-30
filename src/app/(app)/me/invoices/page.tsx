@@ -5,6 +5,8 @@ import {
   getCurrentPayPeriod,
   formatPayPeriod,
   roundUpToQuarter,
+  formatCurrency,
+  formatPay,
 } from "@/lib/pay";
 import { ArrowRightIcon } from "@/components/icons";
 
@@ -140,7 +142,7 @@ export default async function CaregiverInvoicesPage({
               </span>
             </div>
             <p className="font-display text-3xl">
-              ${roundUpToQuarter(currentTotal).toFixed(2)}
+              {formatPay(currentTotal)}
             </p>
             <p className="text-xs text-cream-50/80 mt-0.5">
               {currentHours.toFixed(1)} hrs · {currentShifts} shift
@@ -180,8 +182,7 @@ export default async function CaregiverInvoicesPage({
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-ink-900">
-                      $
-                      {Number(s.total_amount).toFixed(2)}
+                      {formatCurrency(s.total_amount)}
                     </p>
                     <p className="text-xs text-ink-500">
                       {periodStart && periodEnd

@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { roundUpToQuarter, formatPayPeriod } from "@/lib/pay";
+import { roundUpToQuarter, formatPayPeriod, formatCurrency } from "@/lib/pay";
 import { ArrowRightIcon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
@@ -108,7 +108,7 @@ export default async function PayrollPeriodPage({
             Total payroll
           </p>
           <p className="font-display text-4xl">
-            ${Number(period.total_amount ?? 0).toFixed(2)}
+            {formatCurrency(period.total_amount)}
           </p>
           <p className="text-xs text-cream-50/80 mt-1">
             {Number(period.total_hours ?? 0).toFixed(1)} hours ·{" "}
@@ -144,7 +144,7 @@ export default async function PayrollPeriodPage({
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="font-display text-sm">
-                        ${Number(s.total_amount).toFixed(2)}
+                        {formatCurrency(s.total_amount)}
                       </p>
                       <ArrowRightIcon size={14} className="text-ink-300" />
                     </div>

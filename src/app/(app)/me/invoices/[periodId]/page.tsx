@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { roundUpToQuarter } from "@/lib/pay";
+import { roundUpToQuarter, formatCurrency, formatPay } from "@/lib/pay";
 import {
   formatTimeInTz,
   formatShortDateInTz,
@@ -129,7 +129,7 @@ export default async function InvoiceDetailPage({
             Total pay
           </p>
           <p className="font-display text-4xl">
-            ${Number(snap.total_amount).toFixed(2)}
+            {formatCurrency(snap.total_amount)}
           </p>
           <p className="text-xs text-cream-50/80 mt-1">
             {Number(snap.total_hours).toFixed(1)} hours · {snap.shift_count}{" "}
@@ -159,7 +159,7 @@ export default async function InvoiceDetailPage({
                         {formatShortDateInTz(start)}
                       </p>
                       <p className="font-display text-sm">
-                        ${roundUpToQuarter(amount).toFixed(2)}
+                        {formatPay(amount)}
                       </p>
                     </div>
                     <p className="text-xs text-ink-500">
@@ -167,11 +167,11 @@ export default async function InvoiceDetailPage({
                       {item.client_name && ` · ${item.client_name}`}
                     </p>
                     <p className="text-xs text-ink-500 mt-0.5">
-                      {hours.toFixed(2)} hrs × ${rate.toFixed(2)}/hr
+                      {hours.toFixed(1)} hrs × {formatCurrency(rate)}/hr
                       {Number(item.bonus_amount) > 0 && (
                         <>
                           {" "}
-                          + ${Number(item.bonus_amount).toFixed(2)} bonus
+                          + {formatCurrency(item.bonus_amount)} bonus
                           {item.bonus_reason && ` (${item.bonus_reason})`}
                         </>
                       )}

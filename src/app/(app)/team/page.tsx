@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PlusIcon, ArrowRightIcon } from "@/components/icons";
 import UserAvatar from "@/components/user-avatar";
+import { formatCurrency } from "@/lib/pay";
 
 type TeamMember = {
   id: string;
@@ -237,7 +238,7 @@ function PersonRow({ person }: { person: TeamMember }) {
           {person.role === "caregiver"
             ? `${person.shift_count} upcoming · ${
                 person.current_rate
-                  ? `$${person.current_rate.toFixed(2)}/hr`
+                  ? `${formatCurrency(person.current_rate)}/hr`
                   : "No rate set"
               }`
             : person.email}

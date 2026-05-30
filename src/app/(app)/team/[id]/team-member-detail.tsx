@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import UserAvatar from "@/components/user-avatar";
+import { formatCurrency } from "@/lib/pay";
 
 type Person = {
   id: string;
@@ -219,7 +220,7 @@ export default function TeamMemberDetail({
                 {currentRate ? (
                   <div>
                     <p className="font-display text-3xl text-ink-900">
-                      ${currentRate.base_hourly_rate.toFixed(2)}
+                      {formatCurrency(currentRate.base_hourly_rate)}
                       <span className="text-base text-ink-500 font-sans ml-1">
                         /hr
                       </span>

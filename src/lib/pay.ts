@@ -21,7 +21,17 @@ export function roundUpToQuarter(amount: number): number {
  * Format a dollar amount for display, always rounded UP to $0.25.
  */
 export function formatPay(amount: number): string {
-  return `$${roundUpToQuarter(amount).toFixed(2)}`;
+  return formatCurrency(roundUpToQuarter(amount));
+}
+
+export function formatCurrency(amount: number | string | null | undefined): string {
+  if (amount == null) return "$0.00";
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(num)) return "$0.00";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(num);
 }
 
 /**
@@ -203,3 +213,45 @@ export function formatPayPeriod(p: PayPeriod): string {
     });
   return `${fmt(p.start)} – ${fmt(p.end)}`;
 }
+
+export function formatEnumLabel(val: string | null | undefined): string {
+  if (!val) return "";
+  const mapping: Record<string, string> = {
+    early_afternoon: "Early Afternoon",
+    late_afternoon: "Late Afternoon",
+    not_needed: "Not needed this shift",
+    needs_follow_up: "Needs follow-up",
+    client_declined: "Client declined",
+    admin_forced: "Admin assigned",
+    agency_company: "Agency / Company",
+    personal_family: "Personal / Family Care",
+    solo_caregiver: "Solo Caregiver",
+    client_directed_care: "Client-Directed Care",
+    pending: "Pending",
+    completed: "Completed",
+    skipped: "Skipped",
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+    critical: "Critical",
+    unscheduled: "Unscheduled",
+    time_of_day: "Time of day",
+    exact_time: "Exact time",
+    morning: "Morning",
+    evening: "Evening",
+    bedtime: "Bedtime",
+    admin: "Admin",
+    client: "Client",
+    caregiver: "Caregiver",
+    family: "Family",
+  };
+  
+  if (mapping[val]) return mapping[val];
+  if (mapping[val.toLowerCase()]) return mapping[val.toLowerCase()];
+  
+  // fallback: replace underscores with spaces and capitalize words
+  return val
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+

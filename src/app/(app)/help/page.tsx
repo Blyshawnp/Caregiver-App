@@ -71,7 +71,8 @@ export default async function HelpPage() {
             <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
               <li>If you check in or out outside the geofence, the shift gets <strong>flagged</strong> and the admin sees the reason.</li>
               <li>If you leave the location after your scheduled end time, you'll be checked out automatically.</li>
-              <li>Tasks don't have to be 100% complete to check out, but a warning will show.</li>
+              <li>Shift action buttons (Accept, Check in, Check out, Lunch and Break timers) are located at the top of the shift detail page for easy mobile access.</li>
+              <li>Unfinished required tasks will prompt a checkout warning, but optional and PRN tasks will not block checkout.</li>
             </ul>
           ) : (
             <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
@@ -113,9 +114,11 @@ export default async function HelpPage() {
         <Section title="Tasks">
           {role === "caregiver" ? (
             <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
-              <li>The <strong>Tasks</strong> tab shows tasks for the current or upcoming shift.</li>
+              <li><strong>Required Tasks:</strong> Must be completed by shift end. Incomplete required tasks will trigger warnings at checkout.</li>
+              <li><strong>Optional Tasks:</strong> Good to complete if possible, but leaving them unfinished will never trigger missed-task warnings or block checkout.</li>
+              <li><strong>PRN / If-Needed Tasks:</strong> Tasks that are only done if required. Leaving a PRN task unchecked is normal and does not mean it was missed. You can mark it <strong>"Not needed this shift"</strong>, <strong>"Client declined"</strong>, or <strong>"Needs follow-up"</strong>.</li>
+              <li><strong>Checkout Reminder:</strong> A gentle reminder is displayed at checkout if any PRN tasks remain unmarked. If require_prn_acknowledgment is enabled, you must choose a status for each PRN task before checking out.</li>
               <li>Tap a task's checkbox to mark it complete. Notes can be added per task.</li>
-              <li>You can add custom tasks for your own reference during a shift.</li>
             </ul>
           ) : (
             <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">

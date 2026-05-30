@@ -18,6 +18,7 @@ import {
   sortTasks,
 } from "@/lib/task-scheduling";
 import { t as tr } from "@/lib/i18n";
+import { formatEnumLabel } from "@/lib/pay";
 
 type Todo = {
   id: string;
@@ -631,7 +632,7 @@ function TaskRow({
               ? 'bg-terracotta-400/15 text-terracotta-700'
               : 'bg-cream-200 text-ink-600'
           }`}>
-            {todo.status === 'not_needed' ? 'Not needed' : todo.status === 'client_declined' ? 'Client declined' : todo.status === 'needs_follow_up' ? 'Needs follow-up' : todo.status.replace(/_/g, ' ')}
+            {formatEnumLabel(todo.status)}
           </span>
         )}
         {isComplete && todo.completed_at && (

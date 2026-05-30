@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { roundUpToQuarter } from "@/lib/pay";
+import { roundUpToQuarter, formatCurrency, formatPay } from "@/lib/pay";
 
 type Mode = "amount" | "hours_rate" | "clear";
 
@@ -153,8 +153,8 @@ export default function PayOverrideButton({
           Adjust pay for this shift
         </p>
         <p className="text-xs text-ink-500">
-          Computed: ${roundUpToQuarter(computedAmount).toFixed(2)} (
-          {computedHours.toFixed(2)} hrs × ${computedRate.toFixed(2)}/hr)
+          Computed: {formatPay(computedAmount)} (
+          {computedHours.toFixed(1)} hrs × {formatCurrency(computedRate)}/hr)
         </p>
 
         {/* Mode tabs */}
@@ -231,7 +231,7 @@ export default function PayOverrideButton({
             New pay
           </span>
           <span className="font-display text-lg text-forest-700">
-            ${roundUpToQuarter(previewAmount).toFixed(2)}
+            {formatPay(previewAmount)}
           </span>
         </div>
 

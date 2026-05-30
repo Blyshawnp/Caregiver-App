@@ -82,9 +82,9 @@ export function getTaskTimeGroupLabel(input: {
     const timeOfDay = normalizeTaskTimeOfDay(input.timeOfDay);
     if (timeOfDay === "morning") return lang === "es" ? "Mañana" : "Morning";
     if (timeOfDay === "early_afternoon")
-      return lang === "es" ? "Tarde temprana" : "Early afternoon";
+      return lang === "es" ? "Tarde temprana" : "Early Afternoon";
     if (timeOfDay === "late_afternoon")
-      return lang === "es" ? "Tarde" : "Late afternoon";
+      return lang === "es" ? "Tarde" : "Late Afternoon";
     if (timeOfDay === "evening") return lang === "es" ? "Noche" : "Evening";
     if (timeOfDay === "bedtime") return lang === "es" ? "Hora de dormir" : "Bedtime";
   }

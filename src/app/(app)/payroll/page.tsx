@@ -5,6 +5,8 @@ import {
   getCurrentPayPeriod,
   formatPayPeriod,
   roundUpToQuarter,
+  formatCurrency,
+  formatPay,
 } from "@/lib/pay";
 import { ArrowRightIcon } from "@/components/icons";
 
@@ -153,7 +155,7 @@ export default async function PayrollPage({
             </span>
           </div>
           <p className="font-display text-3xl">
-            ${roundUpToQuarter(liveOrgTotal).toFixed(2)}
+            {formatPay(liveOrgTotal)}
           </p>
           <p className="text-xs text-cream-50/80 mt-0.5">
             {liveOrgHours.toFixed(1)} hrs · {liveTotals.size} caregiver
@@ -180,7 +182,7 @@ export default async function PayrollPage({
                         {namesById.get(caregiverId) ?? "Caregiver"}
                       </p>
                       <p className="font-display text-sm">
-                        ${roundUpToQuarter(totals.pay).toFixed(2)}
+                        {formatPay(totals.pay)}
                       </p>
                     </div>
                     <p className="text-xs text-ink-500">
@@ -219,7 +221,7 @@ export default async function PayrollPage({
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-ink-900">
-                      ${Number(p.total_amount ?? 0).toFixed(2)}
+                      {formatCurrency(p.total_amount)}
                     </p>
                     <p className="text-xs text-ink-500">
                       {formatPayPeriod({ start, end })} ·{" "}

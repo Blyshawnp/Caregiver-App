@@ -128,27 +128,28 @@ export default async function PayrollPeriodPage({
           ) : (
             <ul className="divide-y divide-cream-200">
               {snapshots.map((s) => (
-                <li key={s.id}>
-                  <Link
-                    href={`/payroll/${periodId}?caregiver=${s.caregiver_id}`}
-                    className="flex items-center justify-between py-3 first:pt-0 last:pb-0 hover:bg-cream-50 -mx-2 px-2 rounded transition"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink-900">
-                        {s.profiles?.full_name ?? "Caregiver"}
-                      </p>
-                      <p className="text-xs text-ink-500">
-                        {Number(s.total_hours).toFixed(1)} hrs ·{" "}
-                        {s.shift_count} shift{s.shift_count === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <p className="font-display text-sm">
-                        {formatCurrency(s.total_amount)}
-                      </p>
-                      <ArrowRightIcon size={14} className="text-ink-300" />
-                    </div>
-                  </Link>
+                <li key={s.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink-900">
+                      {s.profiles?.full_name ?? "Caregiver"}
+                    </p>
+                    <p className="text-xs text-ink-500">
+                      {Number(s.total_hours).toFixed(1)} hrs ·{" "}
+                      {s.shift_count} shift{s.shift_count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <p className="font-display text-sm mr-1">
+                      {formatCurrency(s.total_amount)}
+                    </p>
+                    <Link
+                      href={`/print?type=invoice&id=${s.id}`}
+                      target="_blank"
+                      className="bg-cream-100 hover:bg-cream-200 text-ink-700 text-[10px] px-2.5 py-1.5 rounded-lg font-semibold transition no-print"
+                    >
+                      🖨️ Print Invoice
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>

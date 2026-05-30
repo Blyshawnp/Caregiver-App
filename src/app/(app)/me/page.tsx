@@ -270,25 +270,42 @@ export default async function MePage() {
             label={t("me.clientsAndGeofence", lang)}
             Icon={MapPinIcon}
           />
-          <NavLink
+           <NavLink
             href="/payroll"
             label={t("me.payroll", lang)}
+            Icon={UserIcon}
+          />
+          <NavLink
+            href="/feedback"
+            label="Manage caregiver feedback"
+            Icon={UserIcon}
+          />
+          <NavLink
+            href="/me/year-end-summaries"
+            label="Year-End Summaries Dashboard"
             Icon={UserIcon}
           />
         </section>
       )}
 
-      {/* Client actions */}
-      {profile?.role === "client" && (
+      {/* Client & Family actions */}
+      {(profile?.role === "client" || profile?.role === "family") && (
         <section className="space-y-2 mb-4">
-          <NavLink
-            href="/clients"
-            label={t("me.homeInfo", lang)}
-            Icon={MapPinIcon}
-          />
+          {profile.role === "client" && (
+            <NavLink
+              href="/clients"
+              label={t("me.homeInfo", lang)}
+              Icon={MapPinIcon}
+            />
+          )}
           <NavLink
             href="/payroll"
             label={t("me.payroll", lang)}
+            Icon={UserIcon}
+          />
+          <NavLink
+            href="/feedback/new"
+            label="Submit caregiver feedback"
             Icon={UserIcon}
           />
         </section>
@@ -302,10 +319,25 @@ export default async function MePage() {
             label={t("me.myInvoices", lang)}
             Icon={UserIcon}
           />
+          <NavLink
+            href="/feedback"
+            label="Received feedback & commendations"
+            Icon={UserIcon}
+          />
+          <NavLink
+            href="/me/year-end-summaries"
+            label="Year-End Summaries"
+            Icon={UserIcon}
+          />
         </section>
       )}
 
       <section className="space-y-2 mb-4">
+        <NavLink
+          href="/documents"
+          label="Documents & agreements"
+          Icon={UserIcon}
+        />
         <NavLink
           href="/me/notifications"
           label="Notification settings"

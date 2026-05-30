@@ -2,6 +2,9 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import HomeInfoEditor from "./home-info-editor";
+import EmergencyGuideEditor from "./emergency-guide-editor";
+import PetsEditor from "./pets-editor";
+import ClientChecklist from "./checklist";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -10,6 +13,9 @@ type ClientHomeInfo = {
   id: string;
   full_name: string;
   organization_id: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
   wifi_ssid: string | null;
   wifi_password: string | null;
   emergency_contact_1_name: string | null;
@@ -55,10 +61,15 @@ type Document = {
 
 export default async function HomeInfoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const { tab } = (await searchParams) ?? {};
+  const currentTab = tab === "guide" ? "guide" : tab === "pets" ? "pets" : "info";
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -67,16 +78,16 @@ export default async function HomeInfoPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organization_id")
     .eq("id", user.id)
-    .single<{ role: "admin" | "client" | "caregiver" | "family" }>();
+    .single<{ role: "admin" | "client" | "caregiver" | "family"; organization_id: string }>();
 
   if (!profile || (profile.role === "caregiver" || profile.role === "family")) redirect("/me");
 
   const { data: client, error: clientError } = await supabase
     .from("clients")
     .select(
-      "id, full_name, organization_id, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes, preferred_hospital_name, preferred_hospital_address, preferred_hospital_phone, primary_physician_name, primary_physician_address, primary_physician_phone, has_panic_button, panic_button_location, has_medical_alert, medical_alert_location, first_aid_location, hypoglycemia_kit_location, fire_extinguisher_location, aed_location"
+      "id, full_name, organization_id, address, latitude, longitude, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes, preferred_hospital_name, preferred_hospital_address, preferred_hospital_phone, primary_physician_name, primary_physician_address, primary_physician_phone, has_panic_button, panic_button_location, has_medical_alert, medical_alert_location, first_aid_location, hypoglycemia_kit_location, fire_extinguisher_location, aed_location"
     )
     .eq("id", id)
     .single<ClientHomeInfo>();
@@ -87,10 +98,6 @@ export default async function HomeInfoPage({
         <div className="bg-white rounded-3xl p-8 shadow-soft text-center">
           <h1 className="font-display text-2xl mb-2">Couldn't load home info</h1>
           <p className="text-ink-500 text-sm mb-2">{clientError.message}</p>
-          <p className="text-xs text-ink-500 mb-5">
-            If a column is missing, run the latest migration in Supabase SQL
-            Editor.
-          </p>
           <Link
             href="/clients"
             className="inline-block bg-forest-600 hover:bg-forest-700 text-cream-50 px-5 py-2.5 rounded-2xl text-sm font-medium transition"
@@ -104,7 +111,7 @@ export default async function HomeInfoPage({
 
   if (!client) notFound();
 
-  // Fetch allergies (silent fail if Batch C SQL not run)
+  // 1. Fetch allergies
   let allergies: Allergy[] = [];
   try {
     const { data } = await supabase
@@ -118,7 +125,7 @@ export default async function HomeInfoPage({
     allergies = [];
   }
 
-  // Fetch documents (silent fail)
+  // 2. Fetch documents
   let documents: Document[] = [];
   try {
     const { data } = await supabase
@@ -133,9 +140,33 @@ export default async function HomeInfoPage({
     documents = [];
   }
 
+  // 3. Fetch emergency preparedness guide
+  const { data: guide } = await supabase
+    .from("client_emergency_guides")
+    .select("*")
+    .eq("client_id", client.id)
+    .maybeSingle();
+
+  // 4. Fetch pet details
+  const { data: petsData } = await supabase
+    .from("client_pets")
+    .select("*")
+    .eq("client_id", client.id)
+    .order("created_at", { ascending: true });
+
+  const pets = petsData ?? [];
+
+  // Compute checklist metrics
+  const isGeofenceSet = !!(client.address && client.latitude && client.longitude);
+  const isContactsAdded = !!client.emergency_contact_1_name;
+  const isPetsConfigured = pets.length > 0;
+  const isGuideConfigured = !!(guide?.enabled);
+  const isNotesAdded = !!client.home_notes;
+  const isAllergiesConfigured = allergies.length > 0;
+
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
-      <header className="mb-6">
+      <header className="mb-5">
         <Link
           href="/clients"
           className="text-sm text-forest-600 hover:underline mb-2 inline-block"
@@ -146,16 +177,71 @@ export default async function HomeInfoPage({
           {client.full_name}
         </h1>
         <p className="text-ink-500 text-sm">
-          Home info for caregivers
+          Manage emergency plans, care circle instructions, and pet information.
         </p>
       </header>
 
-      <HomeInfoEditor
-        client={client}
-        allergies={allergies}
-        documents={documents}
-        canEditWifi={profile.role === "admin"}
+      {/* Completion Checklist */}
+      <ClientChecklist
+        isGeofenceSet={isGeofenceSet}
+        isContactsAdded={isContactsAdded}
+        isPetsConfigured={isPetsConfigured}
+        isGuideConfigured={isGuideConfigured}
+        isNotesAdded={isNotesAdded}
+        isAllergiesConfigured={isAllergiesConfigured}
       />
+
+      {/* Navigation tabs */}
+      <div className="flex gap-1.5 p-1 bg-cream-50 rounded-2xl border border-cream-200/80 mb-5 text-center no-print">
+        <Link
+          href={`/clients/${client.id}/home-info?tab=info`}
+          className={`flex-1 text-xs py-2.5 rounded-xl font-medium transition ${
+            currentTab === "info"
+              ? "bg-white text-forest-700 shadow-sm"
+              : "text-ink-500 hover:text-ink-900"
+          }`}
+        >
+          General & Home Info
+        </Link>
+        <Link
+          href={`/clients/${client.id}/home-info?tab=guide`}
+          className={`flex-1 text-xs py-2.5 rounded-xl font-medium transition ${
+            currentTab === "guide"
+              ? "bg-white text-forest-700 shadow-sm"
+              : "text-ink-500 hover:text-ink-900"
+          }`}
+        >
+          Emergency Guide
+        </Link>
+        <Link
+          href={`/clients/${client.id}/home-info?tab=pets`}
+          className={`flex-1 text-xs py-2.5 rounded-xl font-medium transition ${
+            currentTab === "pets"
+              ? "bg-white text-forest-700 shadow-sm"
+              : "text-ink-500 hover:text-ink-900"
+          }`}
+        >
+          Pet Records
+        </Link>
+      </div>
+
+      {/* Tab content */}
+      {currentTab === "info" && (
+        <HomeInfoEditor
+          client={client}
+          allergies={allergies}
+          documents={documents}
+          canEditWifi={profile.role === "admin"}
+        />
+      )}
+
+      {currentTab === "guide" && (
+        <EmergencyGuideEditor clientId={client.id} initialGuide={guide} />
+      )}
+
+      {currentTab === "pets" && (
+        <PetsEditor clientId={client.id} initialPets={pets} orgId={profile.organization_id} />
+      )}
     </main>
   );
 }

@@ -153,10 +153,39 @@ export default async function HelpPage() {
 
         <Section title="Privacy & access">
           <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
-            <li>Each role only sees data within their own organization.</li>
+            <li>Each role only sees data within its own organization.</li>
             <li>Caregivers can see all home info needed to do their work, but never edit Wi-Fi or sensitive admin settings.</li>
             <li>Admins can do everything in their org.</li>
             <li>Clients can edit emergency contacts, allergies, notes — but not Wi-Fi password.</li>
+            <li><strong>Sensitive Documents:</strong> Shared documents may contain highly sensitive medical or personal information. Users should only upload, view, or share documents they are explicitly authorized to share.</li>
+            <li><strong>Print Approvals & Acknowledgments:</strong> Printing sensitive documents may require administrator approval. When a document requires acknowledgment, your read/acknowledgment records will be stored and made visible to administrators.</li>
+          </ul>
+        </Section>
+
+        <Section title="Feedback & Commendations">
+          <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
+            <li>Clients and families can submit positive commendations, thank you notes, concerns, or complaints about caregivers via <strong>Me &rarr; Submit caregiver feedback</strong>.</li>
+            <li><strong>Admin Review:</strong> All feedback is securely sent to administrators. Complaints and concerns are never shared with caregivers automatically.</li>
+            <li><strong>Commendations & Appreciation:</strong> Administrators can choose to share positive commendations or appreciations directly with the caregiver to recognize their good work.</li>
+            <li><strong>Emergency Warning:</strong> Caregiver feedback is NOT monitored 24/7 and should never be used for emergencies or active safety issues. Please report emergencies via 911 immediately.</li>
+          </ul>
+        </Section>
+
+        <Section title="Emergency Prep & Pet Records">
+          <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
+            <li><strong>Accuracy:</strong> Pet information and emergency preparedness instructions are user-entered and must be kept up-to-date and accurate.</li>
+            <li><strong>Not a Substitute:</strong> This app is NOT a substitute for professional emergency services (such as calling 911).</li>
+            <li><strong>Caregiver Instructions:</strong> Caregivers must follow the organization and client's instructions during an event and immediately call emergency services (911) when appropriate.</li>
+          </ul>
+        </Section>
+
+        <Section title="Invoices & Year-End Summaries">
+          <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
+            <li><strong>How to Print Invoices:</strong> Go to <strong>Me &rarr; Invoices</strong>, select any locked invoice statement, and click the <strong>🖨️ Print Invoice</strong> button.</li>
+            <li><strong>Year-End summaries:</strong> Released automatically every January 5 for the prior calendar year. Go to <strong>Me &rarr; Year-End Summaries</strong> to view them.</li>
+            <li><strong>How to Print summaries:</strong> Inside any EOY summary card, click <strong>🖨️ Print or Save as PDF</strong>. Works on mobile, PWA, and desktop browsers.</li>
+            <li><strong>Correction Requests:</strong> If hours/pay rates look wrong, enter details in the correction form under the summary card. Administrators will review and respond.</li>
+            <li><strong>Independent Contractor Status:</strong> Caregivers are considered independent contractors and are responsible for their own taxes and records. No W-2 or 1099 is issued by this app. It is strictly for recordkeeping.</li>
           </ul>
         </Section>
 

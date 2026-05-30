@@ -116,6 +116,13 @@ export default async function InvoiceDetailPage({
               { timeZone: "America/New_York" }
             )}
         </p>
+        <Link
+          href={`/print?type=invoice&id=${snap.id}`}
+          target="_blank"
+          className="text-xs bg-cream-100 hover:bg-cream-200 text-ink-700 px-3.5 py-1.5 rounded-lg font-medium transition inline-block mt-2 no-print"
+        >
+          🖨️ Print Invoice
+        </Link>
       </header>
 
       {/* Total card */}

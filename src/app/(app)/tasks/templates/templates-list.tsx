@@ -208,7 +208,12 @@ export default function TemplatesList({
         </div>
         <div className="grid gap-2">
           {categories.map((category) => (
-            <CategoryEditor key={category.key} category={category} />
+            <CategoryEditor
+              key={category.key}
+              category={category}
+              allCategories={categories}
+              templates={templates}
+            />
           ))}
         </div>
       </form>
@@ -732,10 +737,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   "w-full px-4 py-3 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 placeholder:text-ink-300 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition";
 
-function CategoryEditor({ category }: { category: TaskCategoryOption }) {
+function CategoryEditor({
+  category,
+  allCategories,
+  templates,
+}: {
+  category: TaskCategoryOption;
+  allCategories: TaskCategoryOption[];
+  templates: Template[];
+}) {
   const router = useRouter();
   const [label, setLabel] = useState(category.label);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [reassignTo, setReassignTo] = useState("other");
+
+  const categoryTemplates = templates.filter((t) => t.category === category.key);
+  const hasTasks = categoryTemplates.length > 0;
 
   async function save() {
     setSaving(true);
@@ -753,6 +771,68 @@ function CategoryEditor({ category }: { category: TaskCategoryOption }) {
     router.refresh();
   }
 
+  async function handleDelete() {
+    setSaving(true);
+    const response = await fetch(`/api/task-categories?id=${(category as any).id}&reassignTo=${reassignTo}`, {
+      method: "DELETE",
+    });
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
+    setSaving(false);
+    setDeleting(false);
+    if (!response.ok) {
+      alert(result?.error ?? "Could not remove category.");
+      return;
+    }
+    router.refresh();
+  }
+
+  if (deleting) {
+    return (
+      <div className="bg-cream-100 border border-cream-200 rounded-xl p-3 space-y-2 text-sm text-ink-700">
+        <p className="font-medium text-ink-900">Remove category: {category.label}?</p>
+        {hasTasks ? (
+          <>
+            <p className="text-xs text-ink-500">
+              This category has {categoryTemplates.length} task{categoryTemplates.length === 1 ? "" : "s"}. Select where to move them:
+            </p>
+            <select
+              value={reassignTo}
+              onChange={(e) => setReassignTo(e.target.value)}
+              className="w-full px-2 py-1 bg-white border border-cream-200 rounded-lg text-xs"
+            >
+              <option value="other">Uncategorized (Other)</option>
+              {allCategories
+                .filter((cat) => cat.key !== category.key && cat.key !== "other")
+                .map((cat) => (
+                  <option key={cat.key} value={cat.key}>
+                    Move to: {cat.label}
+                  </option>
+                ))}
+            </select>
+          </>
+        ) : (
+          <p className="text-xs text-ink-500">This category has no tasks and will be safely removed.</p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setDeleting(false)}
+            className="flex-1 bg-white border border-cream-200 text-ink-700 py-1 rounded-lg text-xs font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="flex-1 bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 py-1 rounded-lg text-xs font-medium"
+          >
+            Confirm Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex gap-2">
       <input
@@ -768,6 +848,15 @@ function CategoryEditor({ category }: { category: TaskCategoryOption }) {
       >
         {saving ? "Saving" : "Rename"}
       </button>
+      {category.key !== "other" && (
+        <button
+          type="button"
+          onClick={() => setDeleting(true)}
+          className="bg-terracotta-400/10 text-terracotta-700 hover:bg-terracotta-400/20 px-3 py-2 rounded-xl text-xs font-medium"
+        >
+          Delete
+        </button>
+      )}
     </div>
   );
 }

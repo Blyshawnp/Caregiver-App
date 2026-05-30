@@ -30,9 +30,9 @@ export default async function EditShiftPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organization_id")
     .eq("id", user.id)
-    .single<{ role: Role }>();
+    .single<{ role: Role; organization_id: string }>();
 
   if (!profile || profile.role === "caregiver") {
     return (
@@ -53,14 +53,42 @@ export default async function EditShiftPage({
     );
   }
 
-  const [shiftRes, caregiversRes, shiftTypesRes, clientsRes] = await Promise.all([
+  const [shiftRes, caregiversRes, shiftTypesRes, clientsRes, templatesRes, categoriesRes] = await Promise.all([
     supabase
       .from("shifts")
       .select(
-        "id, scheduled_start, scheduled_end, caregiver_id, client_id, shift_type_id, bonus_amount, bonus_reason, notes"
+        `
+        id,
+        scheduled_start,
+        scheduled_end,
+        caregiver_id,
+        client_id,
+        shift_type_id,
+        bonus_amount,
+        bonus_reason,
+        notes,
+        shift_todos (
+          id,
+          task_name,
+          description,
+          is_completed,
+          completed_at,
+          is_optional,
+          is_prn,
+          importance,
+          time_mode,
+          time_of_day,
+          scheduled_time,
+          sort_order,
+          notes,
+          allow_repeat,
+          category,
+          status
+        )
+        `
       )
       .eq("id", id)
-      .single<EditableShift>(),
+      .single(),
     supabase
       .from("profiles")
       .select("id, full_name")
@@ -69,16 +97,36 @@ export default async function EditShiftPage({
       .order("full_name"),
     supabase.from("shift_types").select("id, name, color").order("name"),
     supabase.from("clients").select("id, full_name").order("full_name"),
+    supabase
+      .from("todo_templates")
+      .select(
+        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id, category, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, allow_repeat"
+      )
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("task_name", { ascending: true }),
+    supabase
+      .from("task_categories")
+      .select("id, key, label, sort_order")
+      .eq("organization_id", profile.organization_id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
   ]);
 
   if (!shiftRes.data) notFound();
 
+  const { shift_todos, ...shiftData } = shiftRes.data as any;
+
   return (
     <EditShiftForm
-      shift={shiftRes.data}
+      shift={shiftData}
       caregivers={caregiversRes.data ?? []}
       shiftTypes={shiftTypesRes.data ?? []}
       clients={clientsRes.data ?? []}
+      initialTodos={shift_todos ?? []}
+      templates={templatesRes.data ?? []}
+      categories={categoriesRes.data ?? []}
+      organizationId={profile.organization_id}
     />
   );
 }

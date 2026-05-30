@@ -222,32 +222,78 @@ export default function NewShiftForm({
     }
 
     if (createdShifts && selectedApplicableTemplates.length > 0) {
-      const taskRows = createdShifts.flatMap((shift) =>
-        selectedApplicableTemplates.map((template, index) => ({
-          shift_id: shift.id,
-          template_id: template.id,
-          task_name: template.task_name,
-          description: template.description,
-          is_optional: template.is_optional,
-          is_prn: template.is_prn,
-          importance: template.importance,
-          time_mode: template.time_mode,
-          time_of_day: template.time_of_day,
-          scheduled_time: template.scheduled_time,
-          sort_order: template.sort_order ?? (index + 1) * 10,
-          allow_repeat: template.allow_repeat,
-          category: template.category,
-        }))
-      );
-
-      const { error: taskError } = await supabase
+      // Fetch any automatically created todos (from DB triggers) for these shifts
+      const createdShiftIds = createdShifts.map((s) => s.id);
+      const { data: existingTodos } = await supabase
         .from("shift_todos")
-        .insert(taskRows);
+        .select("id, shift_id, template_id")
+        .in("shift_id", createdShiftIds);
 
-      if (taskError) {
-        setError(`Shift was created, but tasks could not be added: ${taskError.message}`);
-        setSubmitting(false);
-        return;
+      const existingMap = new Map<string, Set<string>>();
+      if (existingTodos) {
+        for (const todo of existingTodos) {
+          if (todo.template_id) {
+            if (!existingMap.has(todo.shift_id)) {
+              existingMap.set(todo.shift_id, new Set());
+            }
+            existingMap.get(todo.shift_id)!.add(todo.template_id);
+          }
+        }
+      }
+
+      // If user unselected some default templates, delete them from the database
+      const selectedIdsSet = new Set(selectedApplicableTemplates.map((t) => t.id));
+      const todosToDelete: string[] = [];
+      if (existingTodos) {
+        for (const todo of existingTodos) {
+          if (todo.template_id && !selectedIdsSet.has(todo.template_id)) {
+            todosToDelete.push(todo.id);
+          }
+        }
+      }
+
+      if (todosToDelete.length > 0) {
+        await supabase
+          .from("shift_todos")
+          .delete()
+          .in("id", todosToDelete);
+      }
+
+      // Filter templates to only insert those that are selected and NOT already in the database
+      const taskRows: any[] = [];
+      for (const shift of createdShifts) {
+        const shiftExistingTemplates = existingMap.get(shift.id) ?? new Set<string>();
+        selectedApplicableTemplates.forEach((template, index) => {
+          if (!shiftExistingTemplates.has(template.id)) {
+            taskRows.push({
+              shift_id: shift.id,
+              template_id: template.id,
+              task_name: template.task_name,
+              description: template.description,
+              is_optional: template.is_optional,
+              is_prn: template.is_prn,
+              importance: template.importance,
+              time_mode: template.time_mode,
+              time_of_day: template.time_of_day,
+              scheduled_time: template.scheduled_time,
+              sort_order: template.sort_order ?? (index + 1) * 10,
+              allow_repeat: template.allow_repeat,
+              category: template.category,
+            });
+          }
+        });
+      }
+
+      if (taskRows.length > 0) {
+        const { error: taskError } = await supabase
+          .from("shift_todos")
+          .insert(taskRows);
+
+        if (taskError) {
+          setError(`Shift was created, but tasks could not be added: ${taskError.message}`);
+          setSubmitting(false);
+          return;
+        }
       }
     }
 

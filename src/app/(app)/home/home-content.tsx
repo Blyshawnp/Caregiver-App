@@ -261,13 +261,13 @@ function StartingSoonCard({
         <p className="text-[10px] font-bold uppercase tracking-wider text-terracotta-600 mb-2">
           {startedAlready ? "Shift started" : "Starting soon"}
         </p>
-        <h2 className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
+        <p className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
           {startedAlready
             ? "It's time"
             : minsUntil < 60
               ? `In ${minsUntil} min`
               : `In ${Math.floor(minsUntil / 60)}h ${minsUntil % 60}m`}
-        </h2>
+        </p>
         <p className="text-ink-500 text-sm mb-5">
           {formatTime(startsAt)} · {shift.shift_type_name ?? "Shift"}
           for {shift.client_name ?? "General availability"}
@@ -317,9 +317,9 @@ function UpcomingCard({
         <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
           Next shift
         </p>
-        <h2 className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
+        <p className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
           {formatRelativeDay(startsAt, now)}
-        </h2>
+        </p>
         <p className="text-ink-500 text-sm mb-5">
           {formatTime(startsAt)} – {formatTime(new Date(shift.scheduled_end))} ·{" "}
           {shift.shift_type_name ?? "Shift"}

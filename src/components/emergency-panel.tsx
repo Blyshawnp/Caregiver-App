@@ -38,12 +38,23 @@ type EmergencyInfo = {
   aed_location: string | null;
 };
 
+type EmergencyPet = {
+  name: string;
+  pet_type: string;
+  emergency_notes: string | null;
+  vet_name: string | null;
+  vet_phone: string | null;
+  emergency_vet_phone: string | null;
+};
+
 export default function EmergencyPanel({
   info,
   allergies,
+  pets = [],
 }: {
   info: EmergencyInfo;
   allergies: Allergy[];
+  pets?: EmergencyPet[];
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -75,7 +86,8 @@ export default function EmergencyPanel({
     hasHospital ||
     hasPhysician ||
     hasDevices ||
-    allergies.length > 0;
+    allergies.length > 0 ||
+    pets.length > 0;
   if (!hasAnyInfo) return null;
 
   return (
@@ -105,12 +117,14 @@ export default function EmergencyPanel({
             {hasContacts && "Contacts · "}
             {hasHospital && "Hospital · "}
             {hasPhysician && "Physician · "}
-            {hasDevices && "Devices"}
+            {hasDevices && "Devices · "}
+            {pets.length > 0 && `${pets.length} pet${pets.length === 1 ? "" : "s"}`}
             {allergies.length === 0 &&
               !hasContacts &&
               !hasHospital &&
               !hasPhysician &&
               !hasDevices &&
+              pets.length === 0 &&
               "Tap to view"}
           </p>
         </div>
@@ -224,6 +238,57 @@ export default function EmergencyPanel({
                   location={info.fire_extinguisher_location}
                 />
               )}
+            </Section>
+          )}
+
+          {/* PETS */}
+          {pets.length > 0 && (
+            <Section title="Pets in the home">
+              {pets.map((pet, i) => (
+                <div
+                  key={i}
+                  className="bg-cream-50 rounded-xl px-3 py-2.5 space-y-1"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="font-medium text-ink-900">
+                      {pet.name}
+                      <span className="ml-1.5 text-xs text-ink-500 font-normal">
+                        {pet.pet_type}
+                      </span>
+                    </p>
+                  </div>
+                  {pet.emergency_notes && (
+                    <p className="text-xs text-terracotta-600">
+                      {pet.emergency_notes}
+                    </p>
+                  )}
+                  {pet.vet_name && (
+                    <p className="text-xs text-ink-500">
+                      Vet: {pet.vet_name}
+                    </p>
+                  )}
+                  {(pet.vet_phone || pet.emergency_vet_phone) && (
+                    <div className="flex gap-3 text-xs">
+                      {pet.vet_phone && (
+                        <a
+                          href={`tel:${pet.vet_phone}`}
+                          className="text-forest-600 hover:underline"
+                        >
+                          Vet: {pet.vet_phone}
+                        </a>
+                      )}
+                      {pet.emergency_vet_phone && (
+                        <a
+                          href={`tel:${pet.emergency_vet_phone}`}
+                          className="text-terracotta-600 hover:underline"
+                        >
+                          Emergency vet: {pet.emergency_vet_phone}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </Section>
           )}
         </div>

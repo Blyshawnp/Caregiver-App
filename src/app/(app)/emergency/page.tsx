@@ -42,6 +42,17 @@ type Allergy = {
   notes: string | null;
 };
 
+type EmergencyPet = {
+  id: string;
+  client_id: string;
+  name: string;
+  pet_type: string;
+  emergency_notes: string | null;
+  vet_name: string | null;
+  vet_phone: string | null;
+  emergency_vet_phone: string | null;
+};
+
 export default async function EmergencyPage() {
   const supabase = await createClient();
   const {
@@ -72,6 +83,20 @@ export default async function EmergencyPage() {
     allAllergies = (data ?? []) as Allergy[];
   } catch {
     allAllergies = [];
+  }
+
+  let allPets: EmergencyPet[] = [];
+  try {
+    const clientIds = clients.map((c) => c.id);
+    if (clientIds.length > 0) {
+      const { data } = await supabase
+        .from("client_pets")
+        .select("id, client_id, name, pet_type, emergency_notes, vet_name, vet_phone, emergency_vet_phone")
+        .in("client_id", clientIds);
+      allPets = (data ?? []) as EmergencyPet[];
+    }
+  } catch {
+    allPets = [];
   }
 
   const { data: urgentIncidents } = await supabase
@@ -198,7 +223,7 @@ export default async function EmergencyPage() {
                     </a>
                   )}
                 </div>
-                <EmergencyPanel info={client} allergies={clientAllergies} />
+                <EmergencyPanel info={client} allergies={clientAllergies} pets={allPets.filter((p) => p.client_id === client.id)} />
               </div>
             );
           })}

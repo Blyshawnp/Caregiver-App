@@ -3,26 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-
-type Pet = {
-  id?: string;
-  name: string;
-  pet_type: string;
-  sex: "Male" | "Female" | "Unknown" | null;
-  spayed_neutered: "Yes" | "No" | "Unknown" | null;
-  photo_url: string | null;
-  feeding_instructions: string | null;
-  medication_instructions: string | null;
-  behavior_notes: string | null;
-  emergency_notes: string | null;
-  supplies_location: string | null;
-  vet_name: string | null;
-  vet_phone: string | null;
-  emergency_vet_phone: string | null;
-  microchip_number: string | null;
-  vaccine_info: string | null;
-  show_to_caregivers: boolean;
-};
+import PetsList, { type Pet } from "@/components/pets-list";
 
 export default function PetsEditor({
   clientId,
@@ -39,23 +20,25 @@ export default function PetsEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
-  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
 
-  // Unsaved changes warning prompt
-  useEffect(() => {
-    function handleBeforeUnload(e: BeforeUnloadEvent) {
-      if (isDirty) {
-        e.preventDefault();
-        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
-        return e.returnValue;
-      }
-    }
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
+  // Modal State
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    mode: "add" | "edit";
+    index: number | null;
+    pet: Pet;
+  }>({
+    isOpen: false,
+    mode: "add",
+    index: null,
+    pet: getEmptyPet(),
+  });
 
-  function addPet() {
-    const newPet: Pet = {
+  const [uploading, setUploading] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  function getEmptyPet(): Pet {
+    return {
       name: "",
       pet_type: "Dog",
       sex: "Unknown",
@@ -73,28 +56,59 @@ export default function PetsEditor({
       vaccine_info: "",
       show_to_caregivers: true,
     };
-    setPets([...pets, newPet]);
-    setIsDirty(true);
   }
 
-  function removePet(idx: number) {
+  // Unsaved changes warning prompt
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  function handleAddClick() {
+    setModalError(null);
+    setModalState({
+      isOpen: true,
+      mode: "add",
+      index: null,
+      pet: getEmptyPet(),
+    });
+  }
+
+  function handleEditClick(pet: Pet, index: number) {
+    setModalError(null);
+    setModalState({
+      isOpen: true,
+      mode: "edit",
+      index,
+      pet: { ...pet },
+    });
+  }
+
+  function handleRemoveClick(index: number) {
     const updated = [...pets];
-    updated.splice(idx, 1);
+    updated.splice(index, 1);
     setPets(updated);
     setIsDirty(true);
   }
 
-  function updatePetField(idx: number, field: keyof Pet, val: any) {
-    const updated = [...pets];
-    updated[idx] = { ...updated[idx], [field]: val };
-    setPets(updated);
-    setIsDirty(true);
+  function updateModalPetField(field: keyof Pet, val: any) {
+    setModalState((prev) => ({
+      ...prev,
+      pet: { ...prev.pet, [field]: val },
+    }));
   }
 
-  async function handlePhotoUpload(idx: number, file: File | null) {
+  async function handlePhotoUpload(file: File | null) {
     if (!file) return;
-    setUploadingIdx(idx);
-    setError(null);
+    setUploading(true);
+    setModalError(null);
 
     try {
       const supabase = createClient();
@@ -117,40 +131,52 @@ export default function PetsEditor({
         throw new Error(signedError?.message ?? "Failed to generate signed URL.");
       }
 
-      updatePetField(idx, "photo_url", signedData.signedUrl);
+      updateModalPetField("photo_url", signedData.signedUrl);
     } catch (err: any) {
-      setError(err.message ?? "Failed to upload photo.");
+      setModalError(err.message ?? "Failed to upload photo.");
     } finally {
-      setUploadingIdx(null);
+      setUploading(false);
     }
   }
 
-  async function save(e: React.FormEvent) {
+  function handleModalSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
+    setModalError(null);
 
-    // Validate pets list before POST
-    for (const pet of pets) {
-      if (!pet.name.trim()) {
-        setError("All pets must have a name.");
-        setSaving(false);
+    const { pet, mode, index } = modalState;
+
+    if (!pet.name.trim()) {
+      setModalError("Pet name is required.");
+      return;
+    }
+
+    const isDogOrCat = pet.pet_type === "Dog" || pet.pet_type === "Cat";
+    if (isDogOrCat) {
+      if (!pet.sex) {
+        setModalError(`Sex is required for ${pet.pet_type}s.`);
         return;
       }
-      const isDogOrCat = pet.pet_type === "Dog" || pet.pet_type === "Cat";
-      if (isDogOrCat) {
-        if (!pet.sex) {
-          setError(`Sex is required for dog/cat: ${pet.name}.`);
-          setSaving(false);
-          return;
-        }
-        if (!pet.spayed_neutered) {
-          setError(`Spayed/neutered status is required for dog/cat: ${pet.name}.`);
-          setSaving(false);
-          return;
-        }
+      if (!pet.spayed_neutered) {
+        setModalError(`Spayed/neutered status is required for ${pet.pet_type}s.`);
+        return;
       }
     }
+
+    const updatedPets = [...pets];
+    if (mode === "add") {
+      updatedPets.push(pet);
+    } else if (mode === "edit" && index !== null) {
+      updatedPets[index] = pet;
+    }
+
+    setPets(updatedPets);
+    setIsDirty(true);
+    setModalState((prev) => ({ ...prev, isOpen: false }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setError(null);
 
     const res = await fetch(`/api/clients/${clientId}/pets`, {
       method: "POST",
@@ -176,51 +202,83 @@ export default function PetsEditor({
   const sexOptions = ["Male", "Female", "Unknown"];
   const spayedOptions = ["Yes", "No", "Unknown"];
 
+  const modalPet = modalState.pet;
+  const isDogOrCat = modalPet.pet_type === "Dog" || modalPet.pet_type === "Cat";
+
   return (
-    <form onSubmit={save} className="space-y-4">
+    <div className="space-y-6">
       {/* Dirty unsaved alert */}
       {isDirty && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-3.5 rounded-2xl flex justify-between items-center no-print">
           <span className="font-semibold">⚠️ You have unsaved changes in pet records.</span>
           <button
-            type="submit"
+            type="button"
+            onClick={save}
             disabled={saving}
-            className="bg-forest-600 hover:bg-forest-700 text-cream-50 px-3 py-1 rounded-lg font-medium transition"
+            className="bg-forest-600 hover:bg-forest-700 text-cream-50 px-4 py-1.5 rounded-xl font-medium transition active:scale-[0.98] shadow-sm shrink-0"
           >
             {saving ? "Saving..." : "Save Now"}
           </button>
         </div>
       )}
 
-      {pets.map((pet, idx) => {
-        const isDogOrCat = pet.pet_type === "Dog" || pet.pet_type === "Cat";
-        return (
-          <section
-            key={idx}
-            className="bg-white rounded-3xl shadow-soft p-5 border border-cream-200/50 grain-overlay relative"
+      {/* Reusable premium PetsList */}
+      <PetsList
+        pets={pets}
+        readOnly={false}
+        onAdd={handleAddClick}
+        onEdit={handleEditClick}
+        onRemove={handleRemoveClick}
+      />
+
+      {pets.length > 0 && (
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || !isDirty}
+            className="w-full bg-forest-600 hover:bg-forest-700 disabled:bg-cream-300 disabled:text-ink-300 text-cream-50 py-3.5 rounded-2xl text-sm font-semibold transition shadow-soft disabled:shadow-none active:scale-[0.99] no-print"
           >
-            {/* Remove pet button */}
-            <button
-              type="button"
-              onClick={() => removePet(idx)}
-              className="absolute top-4 right-4 w-7 h-7 rounded-full bg-cream-100 hover:bg-red-50 text-ink-500 hover:text-red-700 transition flex items-center justify-center font-bold text-xs"
-              title="Remove pet"
-            >
-              ✕
-            </button>
+            {saving ? "Saving Pet records..." : "Save Pet Records"}
+          </button>
+        </div>
+      )}
 
-            <div className="relative space-y-4">
-              <h2 className="font-display text-sm font-bold uppercase tracking-wider text-ink-900 mb-2">
-                Pet #{idx + 1}
-              </h2>
+      {error && <p className="text-sm text-terracotta-600 font-medium text-center">{error}</p>}
 
+      {/* EDIT/ADD MODAL OVERLAY */}
+      {modalState.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print animate-fade-in">
+          <form
+            onSubmit={handleModalSubmit}
+            className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-lifted border border-cream-200/50 flex flex-col animate-scale-in"
+          >
+            {/* Modal Title Header */}
+            <div className="p-6 border-b border-cream-200 flex items-center justify-between">
+              <h3 className="font-sans text-xl font-bold text-ink-900">
+                {modalState.mode === "add" ? "Add New Pet" : `Edit ${modalPet.name}`}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
+                className="w-7 h-7 rounded-full bg-cream-100 hover:bg-cream-200 text-ink-600 flex items-center justify-center font-bold text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form Scroll Area */}
+            <div className="p-6 space-y-5 overflow-y-auto flex-1 text-left">
+              {/* Pet Name & Type */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Pet Name</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Pet Name
+                  </label>
                   <input
                     type="text"
-                    value={pet.name}
-                    onChange={(e) => updatePetField(idx, "name", e.target.value)}
+                    value={modalPet.name}
+                    onChange={(e) => updateModalPetField("name", e.target.value)}
                     placeholder="e.g. Max, Bella"
                     className={inputCls}
                     required
@@ -228,10 +286,12 @@ export default function PetsEditor({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Pet Type</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Pet Type
+                  </label>
                   <select
-                    value={pet.pet_type}
-                    onChange={(e) => updatePetField(idx, "pet_type", e.target.value)}
+                    value={modalPet.pet_type}
+                    onChange={(e) => updateModalPetField("pet_type", e.target.value)}
                     className={inputCls}
                   >
                     {petTypes.map((type) => (
@@ -243,15 +303,15 @@ export default function PetsEditor({
                 </div>
               </div>
 
-              {/* Sex & Neutered for Dog/Cat (Required) or Other (Optional) */}
+              {/* Sex & Spayed options */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
                     Sex {isDogOrCat && <span className="text-terracotta-700 font-bold">*</span>}
                   </label>
                   <select
-                    value={pet.sex || "Unknown"}
-                    onChange={(e) => updatePetField(idx, "sex", e.target.value)}
+                    value={modalPet.sex || "Unknown"}
+                    onChange={(e) => updateModalPetField("sex", e.target.value)}
                     className={inputCls}
                     required={isDogOrCat}
                   >
@@ -264,12 +324,12 @@ export default function PetsEditor({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
                     Spayed / Neutered {isDogOrCat && <span className="text-terracotta-700 font-bold">*</span>}
                   </label>
                   <select
-                    value={pet.spayed_neutered || "Unknown"}
-                    onChange={(e) => updatePetField(idx, "spayed_neutered", e.target.value)}
+                    value={modalPet.spayed_neutered || "Unknown"}
+                    onChange={(e) => updateModalPetField("spayed_neutered", e.target.value)}
                     className={inputCls}
                     required={isDogOrCat}
                   >
@@ -282,20 +342,22 @@ export default function PetsEditor({
                 </div>
               </div>
 
-              {/* Photo upload */}
+              {/* Photo Upload Area */}
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Pet Photo</label>
-                {pet.photo_url && (
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                  Pet Photo
+                </label>
+                {modalPet.photo_url && (
                   <div className="relative w-28 h-28 rounded-2xl overflow-hidden border border-cream-200 shadow-sm mb-2 bg-cream-50">
                     <img
-                      src={pet.photo_url}
-                      alt={pet.name}
+                      src={modalPet.photo_url}
+                      alt={modalPet.name}
                       className="w-full h-full object-cover"
                     />
                     <button
                       type="button"
-                      onClick={() => updatePetField(idx, "photo_url", null)}
-                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center text-[10px]"
+                      onClick={() => updateModalPetField("photo_url", null)}
+                      className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center text-[10px]"
                     >
                       ✕
                     </button>
@@ -304,163 +366,186 @@ export default function PetsEditor({
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handlePhotoUpload(idx, e.target.files?.[0] ?? null)}
-                  disabled={uploadingIdx === idx}
-                  className="w-full text-xs text-ink-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-semibold file:bg-forest-50 file:text-forest-700 hover:file:bg-forest-100 cursor-pointer"
+                  onChange={(e) => handlePhotoUpload(e.target.files?.[0] ?? null)}
+                  disabled={uploading}
+                  className="w-full text-xs text-ink-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-bold file:bg-forest-50 file:text-forest-700 hover:file:bg-forest-100 cursor-pointer"
                 />
-                {uploadingIdx === idx && <p className="text-[10px] text-forest-700 mt-1">Uploading image...</p>}
+                {uploading && <p className="text-[10px] text-forest-700 mt-1">Uploading image...</p>}
               </div>
 
+              {/* Care instructions */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Feeding Instructions</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Feeding Instructions
+                  </label>
                   <textarea
-                    value={pet.feeding_instructions || ""}
-                    onChange={(e) => updatePetField(idx, "feeding_instructions", e.target.value)}
-                    placeholder="e.g. 1 cup kibble at 8 AM and 5 PM."
+                    value={modalPet.feeding_instructions || ""}
+                    onChange={(e) => updateModalPetField("feeding_instructions", e.target.value)}
+                    placeholder="e.g. 1 cup kibble at 8 AM."
                     className={inputCls}
                     rows={2}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Medication Instructions</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Medication Instructions
+                  </label>
                   <textarea
-                    value={pet.medication_instructions || ""}
-                    onChange={(e) => updatePetField(idx, "medication_instructions", e.target.value)}
-                    placeholder="e.g. 1 pill in peanut butter once daily."
+                    value={modalPet.medication_instructions || ""}
+                    onChange={(e) => updateModalPetField("medication_instructions", e.target.value)}
+                    placeholder="e.g. 1 pill once daily."
                     className={inputCls}
                     rows={2}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Behavior Notes</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Behavior Notes
+                  </label>
                   <textarea
-                    value={pet.behavior_notes || ""}
-                    onChange={(e) => updatePetField(idx, "behavior_notes", e.target.value)}
-                    placeholder="e.g. Friendly, scares easily around vacuum cleaners."
+                    value={modalPet.behavior_notes || ""}
+                    onChange={(e) => updateModalPetField("behavior_notes", e.target.value)}
+                    placeholder="e.g. Friendly, scares easily."
                     className={inputCls}
                     rows={2}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Emergency Notes</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Emergency Notes
+                  </label>
                   <textarea
-                    value={pet.emergency_notes || ""}
-                    onChange={(e) => updatePetField(idx, "emergency_notes", e.target.value)}
-                    placeholder="e.g. Cage in emergency, leash location in laundry closet."
+                    value={modalPet.emergency_notes || ""}
+                    onChange={(e) => updateModalPetField("emergency_notes", e.target.value)}
+                    placeholder="e.g. Leash in laundry closet."
                     className={inputCls}
                     rows={2}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-cream-100 pt-3">
+              {/* Vet, location details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-cream-100 pt-3.5">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Location of supplies</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Location of supplies
+                  </label>
                   <input
                     type="text"
-                    value={pet.supplies_location || ""}
-                    onChange={(e) => updatePetField(idx, "supplies_location", e.target.value)}
+                    value={modalPet.supplies_location || ""}
+                    onChange={(e) => updateModalPetField("supplies_location", e.target.value)}
                     placeholder="e.g. Kitchen pantry"
                     className={inputCls}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Vet Name</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Vet Name
+                  </label>
                   <input
                     type="text"
-                    value={pet.vet_name || ""}
-                    onChange={(e) => updatePetField(idx, "vet_name", e.target.value)}
-                    placeholder="e.g. Dr. Adams"
+                    value={modalPet.vet_name || ""}
+                    onChange={(e) => updateModalPetField("vet_name", e.target.value)}
+                    placeholder="Dr. Adams"
                     className={inputCls}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Vet Phone</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Vet Phone
+                  </label>
                   <input
                     type="tel"
-                    value={pet.vet_phone || ""}
-                    onChange={(e) => updatePetField(idx, "vet_phone", e.target.value)}
+                    value={modalPet.vet_phone || ""}
+                    onChange={(e) => updateModalPetField("vet_phone", e.target.value)}
                     placeholder="555-444-3333"
                     className={inputCls}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Emergency Vet Phone</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Emergency Vet Phone
+                  </label>
                   <input
                     type="tel"
-                    value={pet.emergency_vet_phone || ""}
-                    onChange={(e) => updatePetField(idx, "emergency_vet_phone", e.target.value)}
+                    value={modalPet.emergency_vet_phone || ""}
+                    onChange={(e) => updateModalPetField("emergency_vet_phone", e.target.value)}
                     placeholder="555-999-8888"
                     className={inputCls}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Microchip Number (Optional)</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Microchip Number (Optional)
+                  </label>
                   <input
                     type="text"
-                    value={pet.microchip_number || ""}
-                    onChange={(e) => updatePetField(idx, "microchip_number", e.target.value)}
+                    value={modalPet.microchip_number || ""}
+                    onChange={(e) => updateModalPetField("microchip_number", e.target.value)}
                     placeholder="e.g. 981022459"
                     className={inputCls}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Rabies / Vaccine Info (Optional)</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
+                    Rabies / Vaccine Info (Optional)
+                  </label>
                   <input
                     type="text"
-                    value={pet.vaccine_info || ""}
-                    onChange={(e) => updatePetField(idx, "vaccine_info", e.target.value)}
-                    placeholder="e.g. Rabies valid until Nov 2027"
+                    value={modalPet.vaccine_info || ""}
+                    onChange={(e) => updateModalPetField("vaccine_info", e.target.value)}
+                    placeholder="Rabies valid until Nov 2027"
                     className={inputCls}
                   />
                 </div>
               </div>
 
-              <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold uppercase tracking-wider text-ink-500 pt-3 border-t border-cream-100">
+              {/* Caregiver Visibility checkbox */}
+              <label className="flex items-center gap-3 cursor-pointer text-xs font-semibold uppercase tracking-wider text-ink-500 pt-3 border-t border-cream-100">
                 <input
                   type="checkbox"
-                  checked={pet.show_to_caregivers}
-                  onChange={(e) => updatePetField(idx, "show_to_caregivers", e.target.checked)}
+                  checked={modalPet.show_to_caregivers}
+                  onChange={(e) => updateModalPetField("show_to_caregivers", e.target.checked)}
                   className="w-4 h-4 rounded text-forest-600 focus:ring-forest-500"
                 />
                 <span>Show Pet Records to Caregivers on shift</span>
               </label>
+
+              {modalError && (
+                <p className="text-xs text-red-600 font-bold text-center mt-2">{modalError}</p>
+              )}
             </div>
-          </section>
-        );
-      })}
 
-      <div className="flex flex-col gap-2.5">
-        <button
-          type="button"
-          onClick={addPet}
-          className="w-full text-center bg-cream-50 hover:bg-cream-100 text-forest-600 border border-forest-500/30 py-3 rounded-2xl text-sm font-medium transition"
-        >
-          + Add Pet
-        </button>
-
-        {pets.length > 0 && (
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl text-sm font-medium transition disabled:opacity-60"
-          >
-            {saving ? "Saving Pet records..." : "Save Pet Records"}
-          </button>
-        )}
-      </div>
-
-      {error && <p className="text-sm text-terracotta-600 font-medium text-center">{error}</p>}
-    </form>
+            {/* Modal Actions */}
+            <div className="bg-cream-50 p-4 border-t border-cream-200 rounded-b-3xl flex gap-3">
+              <button
+                type="submit"
+                disabled={uploading}
+                className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl text-sm font-semibold transition active:scale-[0.98] shadow-sm disabled:opacity-50"
+              >
+                Done
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
+                className="bg-white hover:bg-cream-200 text-ink-700 border border-cream-300/60 px-5 py-3 rounded-2xl text-sm font-medium transition active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -20,6 +20,7 @@
   h1, h2, h3, h4 {
     @apply font-display tracking-tight;
     font-feature-settings: "ss01";
+    font-variation-settings: "WONK" 0, "SOFT" 100;
   }
   /* Don't let buttons/links show the blue iOS tap flash */
   button, a, [role="button"] {

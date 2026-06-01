@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import HomeInfoCard from "@/components/home-info-card";
 import type { Role } from "@/lib/db-types";
+import PetsList from "@/components/pets-list";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -74,6 +75,15 @@ export default async function ShiftHomeAccessPage({
     .eq("client_id", shift.client_id)
     .order("created_at", { ascending: false });
 
+  const { data: petsRows } = await supabase
+    .from("client_pets")
+    .select("*")
+    .eq("client_id", shift.client_id)
+    .eq("show_to_caregivers", true)
+    .order("created_at", { ascending: true });
+
+  const pets = petsRows ?? [];
+
   const documents = await Promise.all(
     ((documentRows ?? []) as Omit<ClientDocument, "signedUrl">[]).map(
       async (doc) => {
@@ -137,6 +147,12 @@ export default async function ShiftHomeAccessPage({
           Edit home info
           <span className="text-ink-300">→</span>
         </Link>
+      )}
+
+      {pets.length > 0 && (
+        <section className="mt-4 bg-white rounded-3xl shadow-soft p-5 grain-overlay">
+          <PetsList pets={pets} readOnly={true} />
+        </section>
       )}
 
       <section className="mt-4 bg-white rounded-3xl shadow-soft p-5 grain-overlay">

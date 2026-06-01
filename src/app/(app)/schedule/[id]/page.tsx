@@ -442,13 +442,13 @@ export default async function ShiftDetailPage({
               backgroundColor: shift.shift_types?.color ?? "#0D6587",
             }}
           />
-          <p className="text-xs uppercase tracking-wider text-ink-500">
-            {shift.shift_types?.name ?? "Shift"} · #{id.slice(0, 8).toUpperCase()}
+          <p className="text-xs uppercase tracking-normal text-ink-500">
+            {formatShiftTypeName(shift.shift_types?.name)} · #{id.slice(0, 8).toUpperCase()}
           </p>
         </div>
-        <h1 className="font-sans font-bold text-3xl text-ink-900 leading-tight">
+        <p className="font-sans text-3xl font-semibold tracking-normal leading-tight text-ink-900">
           {formatDateInTz(start)}
-        </h1>
+        </p>
         <p className="text-ink-500 text-sm">
           {formatTimeInTz(start)} – {formatTimeInTz(end)}
         </p>
@@ -1018,4 +1018,14 @@ function formatEventMetadata(metadata: Record<string, unknown> | null) {
 function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   return value ? [value] : [];
+}
+
+function formatShiftTypeName(name: string | null | undefined): string {
+  if (!name) return "Shift";
+  const normalized = name.replace(/_/g, " ").trim();
+  const isFullDaySpaced = /^f\s*u\s*l\s*l\s*d\s*a\s*y$/i.test(normalized.replace(/\s+/g, ''));
+  if (isFullDaySpaced || normalized.toLowerCase() === "full day") {
+    return "Full day";
+  }
+  return normalized;
 }

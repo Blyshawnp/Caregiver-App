@@ -258,10 +258,10 @@ function StartingSoonCard({
   return (
     <article className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
       <div className="relative">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-terracotta-600 mb-2">
+        <p className="text-xs font-medium uppercase tracking-normal text-terracotta-600 mb-2">
           {startedAlready ? "Shift started" : "Starting soon"}
         </p>
-        <p className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
+        <p className="font-sans text-3xl font-semibold tracking-normal leading-tight text-ink-900 mb-1">
           {startedAlready
             ? "It's time"
             : minsUntil < 60
@@ -269,7 +269,7 @@ function StartingSoonCard({
               : `In ${Math.floor(minsUntil / 60)}h ${minsUntil % 60}m`}
         </p>
         <p className="text-ink-500 text-sm mb-5">
-          {formatTime(startsAt)} · {shift.shift_type_name ?? "Shift"}
+          {formatTime(startsAt)} · {formatShiftTypeName(shift.shift_type_name)}
           for {shift.client_name ?? "General availability"}
         </p>
 
@@ -314,15 +314,15 @@ function UpcomingCard({
   return (
     <article className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
       <div className="relative">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
+        <p className="text-xs font-medium uppercase tracking-normal text-ink-500 mb-2">
           Next shift
         </p>
-        <p className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
+        <p className="font-sans text-3xl font-semibold tracking-normal leading-tight text-ink-900 mb-1">
           {formatRelativeDay(startsAt, now)}
         </p>
         <p className="text-ink-500 text-sm mb-5">
           {formatTime(startsAt)} – {formatTime(new Date(shift.scheduled_end))} ·{" "}
-          {shift.shift_type_name ?? "Shift"}
+          {formatShiftTypeName(shift.shift_type_name)}
         </p>
 
         {shift.caregiver_name && (
@@ -410,10 +410,10 @@ function UpcomingRow({ shift, now }: { shift: ShiftRow; now: Date }) {
       className="flex items-center gap-4 bg-white rounded-2xl p-4 shadow-soft hover:bg-cream-50 transition"
     >
       <div className="text-center w-12 shrink-0">
-        <p className="text-[10px] uppercase tracking-wide text-ink-500">
+        <p className="text-[10px] uppercase tracking-normal text-ink-500">
           {start.toLocaleDateString(undefined, { month: "short" })}
         </p>
-        <p className="font-display text-2xl leading-none">
+        <p className="font-sans text-2xl font-semibold tracking-normal leading-none text-ink-900">
           {start.getDate()}
         </p>
       </div>
@@ -423,7 +423,7 @@ function UpcomingRow({ shift, now }: { shift: ShiftRow; now: Date }) {
       />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-ink-900 truncate">
-          {shift.shift_type_name ?? "Shift"}{" "}
+          {formatShiftTypeName(shift.shift_type_name)}{" "}
           <span className="text-ink-500 font-normal">
             · {formatRelativeDay(start, now)}
           </span>
@@ -462,6 +462,16 @@ function formatRelativeDay(d: Date, now: Date) {
   if (diffDays > 1 && diffDays < 7)
     return d.toLocaleDateString(undefined, { weekday: "long" });
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+export function formatShiftTypeName(name: string | null | undefined): string {
+  if (!name) return "Shift";
+  const normalized = name.replace(/_/g, " ").trim();
+  const isFullDaySpaced = /^f\s*u\s*l\s*l\s*d\s*a\s*y$/i.test(normalized.replace(/\s+/g, ''));
+  if (isFullDaySpaced || normalized.toLowerCase() === "full day") {
+    return "Full day";
+  }
+  return normalized;
 }
 
 function ActivePanel({

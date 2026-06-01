@@ -140,7 +140,7 @@ function TradeCard({ shift, viewerRole }: { shift: TradeShift; viewerRole: Role 
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: shift.shift_types?.color ?? "#B75F45" }} />
           <p className="font-medium text-ink-900 truncate">
-            {shift.shift_types?.name ?? "Shift"} · {shift.clients?.full_name ?? "Client"}
+            {formatShiftTypeName(shift.shift_types?.name)} · {shift.clients?.full_name ?? "Client"}
           </p>
         </div>
         <p className="text-xs text-ink-500 truncate">
@@ -161,9 +161,9 @@ function TradeCard({ shift, viewerRole }: { shift: TradeShift; viewerRole: Role 
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <h2 className="text-xs uppercase tracking-[0.18em] text-ink-500 px-1">
+    <p className="text-xs font-medium uppercase tracking-normal text-ink-500 px-1">
       {title}
-    </h2>
+    </p>
   );
 }
 
@@ -188,4 +188,14 @@ function formatTime(date: Date) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatShiftTypeName(name: string | null | undefined): string {
+  if (!name) return "Shift";
+  const normalized = name.replace(/_/g, " ").trim();
+  const isFullDaySpaced = /^f\s*u\s*l\s*l\s*d\s*a\s*y$/i.test(normalized.replace(/\s+/g, ''));
+  if (isFullDaySpaced || normalized.toLowerCase() === "full day") {
+    return "Full day";
+  }
+  return normalized;
 }

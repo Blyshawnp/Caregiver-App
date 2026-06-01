@@ -325,9 +325,9 @@ function ListView({
     <div className="space-y-6">
       {grouped.map(({ dateKey, label, items }) => (
         <section key={dateKey}>
-          <h2 className="font-sans text-sm font-bold text-ink-700 mb-2 px-1">
+          <p className="font-sans text-sm font-bold text-ink-700 mb-2 px-1">
             {label}
-          </h2>
+          </p>
           <ul className="space-y-2">
             {items.map((s) => (
               <li key={s.id}>
@@ -442,7 +442,7 @@ function ShiftCard({
                     : "text-ink-900"
               }`}
             >
-              {shift.shift_type_name ?? "Shift"} #{shift.id.slice(0, 8).toUpperCase()}
+              {formatShiftTypeName(shift.shift_type_name)} #{shift.id.slice(0, 8).toUpperCase()}
             </p>
             {status.kind === "completed" && (
               <span className="text-[10px] uppercase tracking-wider text-forest-600 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
@@ -827,4 +827,14 @@ function shiftDisplayColor(shift: ScheduleShift) {
     return "#9CA3AF";
   }
   return shift.shift_type_color ?? "#0D6587";
+}
+
+function formatShiftTypeName(name: string | null | undefined): string {
+  if (!name) return "Shift";
+  const normalized = name.replace(/_/g, " ").trim();
+  const isFullDaySpaced = /^f\s*u\s*l\s*l\s*d\s*a\s*y$/i.test(normalized.replace(/\s+/g, ''));
+  if (isFullDaySpaced || normalized.toLowerCase() === "full day") {
+    return "Full day";
+  }
+  return normalized;
 }

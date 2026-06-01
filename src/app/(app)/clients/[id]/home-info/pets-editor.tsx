@@ -109,8 +109,15 @@ export default function PetsEditor({
         throw new Error(uploadError?.message ?? "Photo upload failed.");
       }
 
-      const photoUrl = `https://xunvxasgoxhujshmhkqy.supabase.co/storage/v1/object/authenticated/client-documents/${data.path}`;
-      updatePetField(idx, "photo_url", photoUrl);
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from("client-documents")
+        .createSignedUrl(data.path, 315360000);
+
+      if (signedError || !signedData?.signedUrl) {
+        throw new Error(signedError?.message ?? "Failed to generate signed URL.");
+      }
+
+      updatePetField(idx, "photo_url", signedData.signedUrl);
     } catch (err: any) {
       setError(err.message ?? "Failed to upload photo.");
     } finally {

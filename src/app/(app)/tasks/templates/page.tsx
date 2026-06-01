@@ -21,11 +21,11 @@ export default async function TemplatesPage() {
   if (!profile || (profile.role === "caregiver" || profile.role === "family")) redirect("/tasks");
   const lang = await getUserLanguage();
 
-  const [templatesRes, caregiversRes, categoriesRes] = await Promise.all([
+  const [templatesRes, caregiversRes, categoriesRes, clientsRes] = await Promise.all([
     supabase
       .from("todo_templates")
       .select(
-        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id, category, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, allow_repeat"
+        "id, task_name, description, default_for_new_shifts, sort_order, is_active, caregiver_id, category, is_optional, is_prn, importance, time_mode, time_of_day, scheduled_time, allow_repeat, default_days_of_week, auto_add_to_matching_shifts, auto_add_start_date, auto_add_end_date, applies_to_all_clients, client_id"
       )
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
@@ -44,6 +44,11 @@ export default async function TemplatesPage() {
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
       .order("label", { ascending: true }),
+    supabase
+      .from("clients")
+      .select("id, full_name")
+      .eq("organization_id", profile.organization_id)
+      .order("full_name"),
   ]);
 
   return (
@@ -65,6 +70,7 @@ export default async function TemplatesPage() {
       <TemplatesList
         templates={templatesRes.data ?? []}
         caregivers={caregiversRes.data ?? []}
+        clients={clientsRes.data ?? []}
         organizationId={profile.organization_id}
         categories={normalizeTaskCategories(
           (categoriesRes.data ?? []) as TaskCategoryOption[]

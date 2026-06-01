@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRightIcon } from "./icons";
 
-const DISMISS_KEY = "caregiver-install-dismissed";
-const DISMISS_DAYS = 14;
+const DISMISS_UNTIL_KEY = "pwa_install_dismissed_until";
+const NEVER_SHOW_KEY = "pwa_install_never_show";
+const LAST_PROMPTED_KEY = "pwa_install_last_prompted_at";
 
 type Platform = "ios" | "android" | "desktop" | "unsupported";
 
-// Chromium's beforeinstallprompt isn't in lib.dom.d.ts yet, so we model it.
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -24,23 +23,32 @@ function detectPlatform(): Platform {
 
 function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
-  // iOS-specific. The `standalone` property is a non-standard Safari extension
-  // not in the lib types, so we narrow with a type guard instead of `as any`.
   const nav = window.navigator as Navigator & { standalone?: boolean };
   if (nav.standalone === true) return true;
-  // PWA standard
   return window.matchMedia("(display-mode: standalone)").matches;
 }
 
-function isDismissed(): boolean {
+function isPromptSuppressed(): boolean {
   if (typeof window === "undefined") return true;
   try {
-    const raw = localStorage.getItem(DISMISS_KEY);
-    if (!raw) return false;
-    const dismissedAt = parseInt(raw, 10);
-    if (isNaN(dismissedAt)) return false;
-    const days = (Date.now() - dismissedAt) / 86_400_000;
-    return days < DISMISS_DAYS;
+    const neverShow = localStorage.getItem(NEVER_SHOW_KEY);
+    if (neverShow === "true") return true;
+
+    const dismissedUntil = localStorage.getItem(DISMISS_UNTIL_KEY);
+    if (dismissedUntil) {
+      const until = parseInt(dismissedUntil, 10);
+      if (!isNaN(until) && Date.now() < until) return true;
+    }
+
+    // Avoid prompting repeatedly on every single page load
+    const lastPrompt = localStorage.getItem(LAST_PROMPTED_KEY);
+    if (lastPrompt) {
+      const last = parseInt(lastPrompt, 10);
+      // Wait at least 15 minutes between page load auto-prompts
+      if (!isNaN(last) && Date.now() - last < 900_000) return true;
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -50,42 +58,62 @@ export default function InstallPrompt() {
   const [platform, setPlatform] = useState<Platform>("unsupported");
   const [show, setShow] = useState(false);
   const [showIosSheet, setShowIosSheet] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     const p = detectPlatform();
     setPlatform(p);
 
     if (isStandalone()) return;
-    if (isDismissed()) return;
+    if (isPromptSuppressed()) return;
 
     if (p === "ios") {
-      // iOS doesn't auto-prompt; show our banner after a short delay.
-      const t = setTimeout(() => setShow(true), 3000);
+      const t = setTimeout(() => {
+        setShow(true);
+        try {
+          localStorage.setItem(LAST_PROMPTED_KEY, String(Date.now()));
+        } catch {}
+      }, 5000);
       return () => clearTimeout(t);
     }
 
     if (p === "android" || p === "desktop") {
-      // Listen for Chrome's beforeinstallprompt
       const handler = (e: Event) => {
         e.preventDefault();
         setDeferredPrompt(e as BeforeInstallPromptEvent);
         setShow(true);
+        try {
+          localStorage.setItem(LAST_PROMPTED_KEY, String(Date.now()));
+        } catch {}
       };
       window.addEventListener("beforeinstallprompt", handler);
       return () => window.removeEventListener("beforeinstallprompt", handler);
     }
   }, []);
 
-  function dismiss() {
+  function handleNotNow() {
+    setShow(false);
+    // Suppress for 1 hour
+    try {
+      localStorage.setItem(DISMISS_UNTIL_KEY, String(Date.now() + 3600_000));
+    } catch {}
+  }
+
+  function handleRemindTomorrow() {
+    setShow(false);
+    setShowIosSheet(false);
+    // Suppress for 24 hours
+    try {
+      localStorage.setItem(DISMISS_UNTIL_KEY, String(Date.now() + 24 * 3600_000));
+    } catch {}
+  }
+
+  function handleNeverShow() {
     setShow(false);
     setShowIosSheet(false);
     try {
-      localStorage.setItem(DISMISS_KEY, String(Date.now()));
-    } catch {
-      /* ignore */
-    }
+      localStorage.setItem(NEVER_SHOW_KEY, "true");
+    } catch {}
   }
 
   async function handleInstallClick() {
@@ -100,7 +128,7 @@ export default function InstallPrompt() {
       if (outcome === "accepted") {
         setShow(false);
       } else {
-        dismiss();
+        handleRemindTomorrow();
       }
     }
   }
@@ -112,40 +140,44 @@ export default function InstallPrompt() {
       {/* Install banner */}
       {show && !showIosSheet && (
         <div className="fixed bottom-24 left-3 right-3 z-40 max-w-md mx-auto pb-[env(safe-area-inset-bottom)] animate-slide-up">
-          <div className="bg-forest-600 text-cream-50 rounded-2xl shadow-lifted p-4 flex items-center gap-3">
-            <img
-              src="/CVPlogo.png"
-              alt="Carer Vista Pro"
-              className="w-28 max-w-[34vw] h-auto object-contain shrink-0"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm">Install Carer Vista Pro</p>
-              <p className="text-xs text-cream-50/80">
-                Add it to your home screen
-              </p>
+          <div className="bg-forest-600 text-cream-50 rounded-3xl shadow-lifted p-5 flex flex-col gap-3.5 border border-forest-500/30">
+            <div className="flex items-start justify-between">
+              <div className="flex gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cream-50/10 grid place-items-center font-display text-xl font-bold shrink-0 text-cream-50">
+                  C
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm leading-tight text-cream-50">Install Caregiver App</p>
+                  <p className="text-[11px] text-cream-50/70 mt-0.5">
+                    Add Caregiver App to your home screen for rapid offline check-ins, tasks, and notes.
+                  </p>
+                </div>
+              </div>
             </div>
-            <button
-              onClick={handleInstallClick}
-              className="bg-cream-50 text-forest-700 px-3 py-1.5 rounded-xl text-sm font-medium transition active:scale-95"
-            >
-              Install
-            </button>
-            <button
-              onClick={dismiss}
-              aria-label="Dismiss"
-              className="w-7 h-7 rounded-full hover:bg-cream-50/15 grid place-items-center transition shrink-0"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                className="w-4 h-4"
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleInstallClick}
+                className="flex-1 bg-cream-50 hover:bg-cream-100 text-forest-700 py-2 rounded-xl text-xs font-semibold transition active:scale-95 text-center"
               >
-                <path d="M6 6l12 12M6 18L18 6" />
-              </svg>
-            </button>
+                Install App
+              </button>
+              <button
+                onClick={handleNotNow}
+                className="bg-forest-700/40 hover:bg-forest-700/60 text-cream-50 px-3 py-2 rounded-xl text-xs font-medium transition"
+              >
+                Not now
+              </button>
+            </div>
+
+            <div className="flex justify-between items-center border-t border-cream-50/10 pt-2 text-[10px] text-cream-50/60 font-medium">
+              <button onClick={handleRemindTomorrow} className="hover:text-cream-50 hover:underline">
+                Remind in 24h
+              </button>
+              <button onClick={handleNeverShow} className="hover:text-cream-50 hover:underline">
+                Don't show again
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -154,7 +186,7 @@ export default function InstallPrompt() {
       {showIosSheet && (
         <div
           className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-sm flex items-end justify-center px-3 pb-3 animate-fade-in"
-          onClick={dismiss}
+          onClick={() => setShowIosSheet(false)}
         >
           <div
             className="bg-cream-50 rounded-3xl shadow-lifted w-full max-w-md p-6 pb-8 grain-overlay relative"
@@ -162,36 +194,46 @@ export default function InstallPrompt() {
           >
             <div className="relative">
               <div className="w-12 h-1 bg-cream-200 rounded-full mx-auto mb-5" />
-              <h2 className="font-display text-2xl text-ink-900 mb-1">
-                Add to Home Screen
-              </h2>
+              <h2 className="font-display text-2xl text-ink-900 mb-1">Add to Home Screen</h2>
               <p className="text-sm text-ink-500 mb-5">
-                Two taps to make Carer Vista Pro feel like a real app on your iPhone.
+                Two taps to make Caregiver App feel like a real app on your iPhone.
               </p>
-              <ol className="space-y-3 mb-6">
+              <ol className="space-y-3.5 mb-6">
                 <Step n={1}>
                   Tap the{" "}
-                  <span className="inline-flex items-center mx-1 px-1.5 py-0.5 bg-cream-200 rounded text-xs">
+                  <span className="inline-flex items-center mx-1 px-1.5 py-0.5 bg-cream-200 rounded text-[11px] font-semibold text-ink-800">
                     <ShareGlyph /> Share
                   </span>{" "}
                   button at the bottom of Safari
                 </Step>
                 <Step n={2}>
-                  Scroll down and tap{" "}
-                  <strong className="font-semibold">Add to Home Screen</strong>
+                  Scroll down and tap <strong className="font-semibold text-ink-950">Add to Home Screen</strong>
                 </Step>
                 <Step n={3}>
-                  Tap{" "}
-                  <strong className="font-semibold">Add</strong>. The
-                  Carer Vista Pro icon will appear with your other apps.
+                  Tap <strong className="font-semibold text-ink-950">Add</strong>. The icon will appear with your other apps.
                 </Step>
               </ol>
-              <button
-                onClick={dismiss}
-                className="w-full bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl font-medium transition"
-              >
-                Got it
-              </button>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowIosSheet(false)}
+                  className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl text-xs font-semibold transition"
+                >
+                  Got it
+                </button>
+                <button
+                  onClick={handleRemindTomorrow}
+                  className="bg-cream-200 hover:bg-cream-300 text-ink-700 px-4 py-3 rounded-2xl text-xs font-semibold transition"
+                >
+                  Remind tomorrow
+                </button>
+                <button
+                  onClick={handleNeverShow}
+                  className="bg-cream-100 hover:bg-cream-200 text-ink-500 px-4 py-3 rounded-2xl text-xs font-medium transition"
+                >
+                  Never
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -229,8 +271,8 @@ export default function InstallPrompt() {
 
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
-    <li className="flex gap-3 text-sm text-ink-700">
-      <span className="w-6 h-6 rounded-full bg-forest-600 text-cream-50 grid place-items-center font-display text-sm shrink-0">
+    <li className="flex gap-3 text-sm text-ink-750">
+      <span className="w-6 h-6 rounded-full bg-forest-600 text-cream-50 grid place-items-center font-display text-sm shrink-0 font-bold">
         {n}
       </span>
       <span className="leading-snug pt-0.5">{children}</span>

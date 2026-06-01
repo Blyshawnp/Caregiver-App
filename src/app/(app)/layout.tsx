@@ -59,10 +59,10 @@ export default async function AppLayout({
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, organization_id, language, avatar_url, avatar_color, organizations(name)"
+      "id, full_name, role, organization_id, language, avatar_url, avatar_color, theme_preference, organizations(name)"
     )
     .eq("id", user.id)
-    .single<ProfileWithOrg>();
+    .single<ProfileWithOrg & { theme_preference: string }>();
 
   const lang: Lang = profile?.language === "es" ? "es" : "en";
 
@@ -139,7 +139,7 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-cream-100">
+    <div className={`min-h-dvh flex flex-col bg-cream-100 theme-${profile?.theme_preference ?? "default"}`}>
       <AppHeader
         fullName={profile?.full_name ?? "There"}
         orgName={profile?.organizations?.name ?? ""}

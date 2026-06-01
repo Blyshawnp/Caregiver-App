@@ -1,4 +1,4 @@
-const LAST_UPDATED = "May 31, 2026";
+const LAST_UPDATED = "June 1, 2026";
 
 export default function PrivacyPage() {
   return (
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
           To coordinate care, we collect and store information entered by the administrator, family members, or caregivers:
         </p>
         <ul className="list-disc pl-5 space-y-1.5 text-sm text-ink-700">
-          <li><strong>Account Details:</strong> Name, email address, password hashes, and profile settings.</li>
+          <li><strong>Account Details:</strong> Name, email address, password hashes, profile settings, and theme color scheme preferences.</li>
           <li><strong>Care Circle Profiles:</strong> User roles (admin, caregiver, client, family).</li>
           <li><strong>Client & Home Info:</strong> Name, address, entry notes, Wi-Fi details, and home notes.</li>
           <li><strong>Emergency & Health Logs:</strong> Emergency contacts, allergy records, medication instructions, and home safety device locations.</li>

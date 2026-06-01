@@ -6,6 +6,8 @@ import { ListIcon, GridIcon, PlusIcon, ArrowRightIcon } from "@/components/icons
 import type { ScheduleShift } from "./page";
 import { getShiftStatus } from "@/lib/shift-status";
 import UserAvatar from "@/components/user-avatar";
+import { useRouter } from "next/navigation";
+import { BulkDeleteModal, BulkAddTaskModal, BulkAddSummaryModal } from "@/components/bulk-modals";
 
 type View = "list" | "calendar";
 
@@ -18,14 +20,39 @@ export default function ScheduleView({
   role: "admin" | "client" | "caregiver" | "family";
   archiveMode?: boolean;
 }) {
+  const router = useRouter();
   const [view, setView] = useState<View>("list");
   const [now, setNow] = useState(() => new Date());
   const canCreate = role === "admin" || role === "client";
+
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedShiftIds, setSelectedShiftIds] = useState<Set<string>>(new Set());
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [bulkSummary, setBulkSummary] = useState<{ shiftsUpdated: number; tasksAdded: number; duplicatesSkipped: number } | null>(null);
+
+  const isBulkAllowed = role === "admin" || role === "client";
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedShiftIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
+
+  const selectedShiftsList = useMemo(() => {
+    return shifts.filter((s) => selectedShiftIds.has(s.id));
+  }, [shifts, selectedShiftIds]);
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -50,6 +77,19 @@ export default function ScheduleView({
             >
               Archive
             </Link>
+            {isBulkAllowed && (
+              <button
+                onClick={() => {
+                  setIsMultiSelectMode(!isMultiSelectMode);
+                  setSelectedShiftIds(new Set());
+                }}
+                className={`text-xs font-medium hover:underline ${
+                  isMultiSelectMode ? "text-terracotta-600" : "text-forest-600"
+                }`}
+              >
+                {isMultiSelectMode ? "Exit multi-select" : "Bulk actions"}
+              </button>
+            )}
           </div>
           {canCreate && (
             <div className="flex gap-2 mt-2">
@@ -136,14 +176,25 @@ export default function ScheduleView({
           </Link>
         </div>
       )}
-
       {view === "list" ? (
-        <ListView shifts={shifts} now={now} />
+        <ListView
+          shifts={shifts}
+          now={now}
+          isMultiSelectMode={isMultiSelectMode}
+          selectedShiftIds={selectedShiftIds}
+          onToggleSelect={handleToggleSelect}
+        />
       ) : (
-        <CalendarView shifts={shifts} now={now} />
+        <CalendarView
+          shifts={shifts}
+          now={now}
+          isMultiSelectMode={isMultiSelectMode}
+          selectedShiftIds={selectedShiftIds}
+          onToggleSelect={handleToggleSelect}
+        />
       )}
 
-      {canCreate && (
+      {canCreate && !isMultiSelectMode && (
         <Link
           href="/schedule/new"
           className="fixed bottom-28 right-5 z-20 w-14 h-14 rounded-full bg-forest-600 hover:bg-forest-700 text-cream-50 shadow-lifted grid place-items-center transition active:scale-95"
@@ -151,6 +202,64 @@ export default function ScheduleView({
         >
           <PlusIcon size={24} />
         </Link>
+      )}
+
+      {isMultiSelectMode && selectedShiftIds.size > 0 && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-30 bg-white border border-cream-200 shadow-lifted rounded-2xl px-5 py-3.5 flex items-center justify-between gap-4 max-w-sm w-[90%] animate-in fade-in slide-in-from-bottom-5">
+          <span className="text-xs font-semibold text-ink-900">
+            {selectedShiftIds.size} selected
+          </span>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => setShowAddTaskModal(true)}
+              className="bg-forest-600 hover:bg-forest-700 text-cream-50 px-3 py-1.5 rounded-xl text-xs font-semibold transition"
+            >
+              Add Tasks
+            </button>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 px-3 py-1.5 rounded-xl text-xs font-semibold transition"
+            >
+              Delete/Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && (
+        <BulkDeleteModal
+          selectedShifts={selectedShiftsList}
+          onClose={() => setShowDeleteModal(false)}
+          onDeleted={() => {
+            setShowDeleteModal(false);
+            setIsMultiSelectMode(false);
+            setSelectedShiftIds(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
+      {showAddTaskModal && (
+        <BulkAddTaskModal
+          selectedShifts={selectedShiftsList}
+          onClose={() => setShowAddTaskModal(false)}
+          onAdded={(summary) => {
+            setShowAddTaskModal(false);
+            setBulkSummary(summary);
+          }}
+        />
+      )}
+
+      {bulkSummary && (
+        <BulkAddSummaryModal
+          summary={bulkSummary}
+          onClose={() => {
+            setBulkSummary(null);
+            setIsMultiSelectMode(false);
+            setSelectedShiftIds(new Set());
+            router.refresh();
+          }}
+        />
       )}
     </main>
   );
@@ -182,8 +291,19 @@ function ToggleBtn({
 }
 
 /* ========== LIST VIEW ========== */
-
-function ListView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
+function ListView({
+  shifts,
+  now,
+  isMultiSelectMode,
+  selectedShiftIds,
+  onToggleSelect,
+}: {
+  shifts: ScheduleShift[];
+  now: Date;
+  isMultiSelectMode: boolean;
+  selectedShiftIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+}) {
   const grouped = useMemo(() => groupByDay(shifts), [shifts]);
 
   if (shifts.length === 0) {
@@ -211,7 +331,13 @@ function ListView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
           <ul className="space-y-2">
             {items.map((s) => (
               <li key={s.id}>
-                <ShiftCard shift={s} now={now} />
+                <ShiftCard
+                  shift={s}
+                  now={now}
+                  isMultiSelectMode={isMultiSelectMode}
+                  selectedShiftIds={selectedShiftIds}
+                  onToggleSelect={onToggleSelect}
+                />
               </li>
             ))}
           </ul>
@@ -221,7 +347,19 @@ function ListView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
   );
 }
 
-function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
+function ShiftCard({
+  shift,
+  now,
+  isMultiSelectMode,
+  selectedShiftIds,
+  onToggleSelect,
+}: {
+  shift: ScheduleShift;
+  now: Date;
+  isMultiSelectMode?: boolean;
+  selectedShiftIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+}) {
   const start = new Date(shift.scheduled_start);
   const end = new Date(shift.scheduled_end);
   const accent = shift.shift_type_color ?? "#0D6587";
@@ -267,98 +405,110 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
             : "bg-white hover:bg-cream-50"
       }`}
     >
+      {isMultiSelectMode && onToggleSelect && selectedShiftIds && (
+        <input
+          type="checkbox"
+          checked={selectedShiftIds.has(shift.id)}
+          onChange={() => onToggleSelect(shift.id)}
+          className="w-5 h-5 accent-forest-600 self-center shrink-0 cursor-pointer mr-1"
+        />
+      )}
       <Link
         href={`/schedule/${shift.id}`}
+        onClick={(e) => {
+          if (isMultiSelectMode && onToggleSelect) {
+            e.preventDefault();
+            onToggleSelect(shift.id);
+          }
+        }}
         className="flex items-stretch gap-4 flex-1 min-w-0"
       >
-      <div
-        className={`w-1 rounded-full shrink-0 ${
-          status.kind === "active_checked_in" ? "bg-cream-50" : ""
-        }`}
-        style={{
-          backgroundColor:
-            status.kind === "active_checked_in" ? undefined : accent,
-        }}
-        aria-hidden
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <p
-            className={`font-medium truncate ${
-              status.kind === "active_checked_in"
-                ? "text-cream-50"
-                : isPastDimmed
-                  ? "text-ink-500 line-through"
-                  : "text-ink-900"
-            }`}
-          >
-            {shift.shift_type_name ?? "Shift"}
-          </p>
-          {status.kind === "completed" && (
-            <span className="text-[10px] uppercase tracking-wider text-forest-600 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
-              Done
-            </span>
-          )}
-          {status.kind === "active_checked_in" && (
-            <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-cream-50 px-1.5 py-0.5 rounded">
-              ON SHIFT NOW
-            </span>
-          )}
-          {shift.is_released && status.kind !== "open_expired" && (
-            <span className="text-[10px] uppercase tracking-wider text-cream-50 font-medium bg-terracotta-500 px-1.5 py-0.5 rounded">
-              Available
-            </span>
-          )}
-          {status.kind === "open_available" && (
-            <span className="text-[10px] uppercase tracking-wider text-forest-700 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
-              Open
-            </span>
-          )}
-          {status.kind === "open_expired" && (
-            <span className="text-[10px] uppercase tracking-wider text-ink-500 font-medium bg-cream-200 px-1.5 py-0.5 rounded">
-              Expired
-            </span>
-          )}
-          {status.kind === "past_unchecked" && (
-            <span className="text-[10px] uppercase tracking-wider text-ink-500 font-medium bg-cream-200 px-1.5 py-0.5 rounded">
-              Missed
-            </span>
-          )}
-          {status.kind !== "active_checked_in" &&
-            !shift.has_check_in &&
-            !shift.is_released &&
-            shift.assignment_status === "pending" && (
-              <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-terracotta-400/15 px-1.5 py-0.5 rounded">
-                Pending
+        <div
+          className={`w-1 rounded-full shrink-0`}
+          style={{
+            backgroundColor:
+              status.kind === "active_checked_in" ? "#FFF" : accent,
+          }}
+          aria-hidden
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <p
+              className={`font-medium truncate ${
+                status.kind === "active_checked_in"
+                  ? "text-cream-50"
+                  : isPastDimmed
+                    ? "text-ink-500 line-through"
+                    : "text-ink-900"
+              }`}
+            >
+              {shift.shift_type_name ?? "Shift"}
+            </p>
+            {status.kind === "completed" && (
+              <span className="text-[10px] uppercase tracking-wider text-forest-600 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
+                Done
               </span>
             )}
+            {status.kind === "active_checked_in" && (
+              <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-cream-50 px-1.5 py-0.5 rounded">
+                ON SHIFT NOW
+              </span>
+            )}
+            {shift.is_released && status.kind !== "open_expired" && (
+              <span className="text-[10px] uppercase tracking-wider text-cream-50 font-medium bg-terracotta-500 px-1.5 py-0.5 rounded">
+                Available
+              </span>
+            )}
+            {status.kind === "open_available" && (
+              <span className="text-[10px] uppercase tracking-wider text-forest-700 font-medium bg-forest-100 px-1.5 py-0.5 rounded">
+                Open
+              </span>
+            )}
+            {status.kind === "open_expired" && (
+              <span className="text-[10px] uppercase tracking-wider text-ink-500 font-medium bg-cream-200 px-1.5 py-0.5 rounded">
+                Expired
+              </span>
+            )}
+            {status.kind === "past_unchecked" && (
+              <span className="text-[10px] uppercase tracking-wider text-ink-500 font-medium bg-cream-200 px-1.5 py-0.5 rounded">
+                Missed
+              </span>
+            )}
+            {status.kind !== "active_checked_in" &&
+              !shift.has_check_in &&
+              !shift.is_released &&
+              shift.assignment_status === "pending" && (
+                <span className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium bg-terracotta-400/15 px-1.5 py-0.5 rounded">
+                  Pending
+                </span>
+              )}
+          </div>
+          <p
+            className={`text-xs ${
+              status.kind === "active_checked_in"
+                ? "text-cream-50/85"
+                : isPastDimmed
+                  ? "text-ink-400 line-through"
+                  : "text-ink-500"
+            }`}
+          >
+            {status.kind === "active_checked_in" && activeStart
+              ? `${activeElapsed} elapsed · started ${formatTime(activeStart)}`
+              : `${formatTime(start)} – ${formatTime(end)} · ${timingLabel} · ${clientLabel}`}
+            {status.kind === "active_checked_in" && (
+              <span className="ml-1">
+                · {clientLabel}
+                {now > end ? " · Overtime" : ""}
+              </span>
+            )}
+          </p>
         </div>
-        <p
-          className={`text-xs ${
-            status.kind === "active_checked_in"
-              ? "text-cream-50/85"
-              : isPastDimmed
-                ? "text-ink-400 line-through"
-                : "text-ink-500"
+        <ArrowRightIcon
+          size={16}
+          className={`self-center shrink-0 ${
+            status.kind === "active_checked_in" ? "text-cream-50/70" : "text-ink-300"
           }`}
-        >
-          {status.kind === "active_checked_in" && activeStart
-            ? `${activeElapsed} elapsed · started ${formatTime(activeStart)}`
-            : `${formatTime(start)} – ${formatTime(end)} · ${timingLabel} · ${clientLabel}`}
-          {status.kind === "active_checked_in" && (
-            <span className="ml-1">
-              · {clientLabel}
-              {now > end ? " · Overtime" : ""}
-            </span>
-          )}
-        </p>
-      </div>
-      <ArrowRightIcon
-        size={16}
-        className={`self-center shrink-0 ${
-          status.kind === "active_checked_in" ? "text-cream-50/70" : "text-ink-300"
-        }`}
-      />
+        />
       </Link>
       {shift.caregiver_name ? (
         <UserAvatar
@@ -381,8 +531,19 @@ function ShiftCard({ shift, now }: { shift: ScheduleShift; now: Date }) {
 }
 
 /* ========== CALENDAR VIEW ========== */
-
-function CalendarView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
+function CalendarView({
+  shifts,
+  now,
+  isMultiSelectMode,
+  selectedShiftIds,
+  onToggleSelect,
+}: {
+  shifts: ScheduleShift[];
+  now: Date;
+  isMultiSelectMode: boolean;
+  selectedShiftIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+}) {
   const [monthOffset, setMonthOffset] = useState(0);
 
   const today = new Date();
@@ -501,7 +662,13 @@ function CalendarView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
           <ul className="space-y-2">
             {selectedShifts.map((s) => (
               <li key={s.id}>
-                <ShiftCard shift={s} now={now} />
+                <ShiftCard
+                  shift={s}
+                  now={now}
+                  isMultiSelectMode={isMultiSelectMode}
+                  selectedShiftIds={selectedShiftIds}
+                  onToggleSelect={onToggleSelect}
+                />
               </li>
             ))}
           </ul>
@@ -512,7 +679,6 @@ function CalendarView({ shifts, now }: { shifts: ScheduleShift[]; now: Date }) {
 }
 
 /* ========== HELPERS ========== */
-
 function dayKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()

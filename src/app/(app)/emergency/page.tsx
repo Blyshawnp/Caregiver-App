@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import EmergencyPanel from "@/components/emergency-panel";
 import { StarOfLifeIcon, ArrowRightIcon } from "@/components/icons";
@@ -90,9 +91,15 @@ export default async function EmergencyPage() {
           ← Back
         </Link>
         <div className="flex items-center gap-3">
-          <span className="relative w-14 h-14 rounded-2xl bg-red-600 text-cream-50 grid place-items-center shrink-0 shadow-xl ring-4 ring-red-200/80">
-            <span className="absolute inset-0 rounded-2xl bg-red-500/30 animate-ping" />
-            <StarOfLifeIcon size={30} className="relative" />
+          <span className="relative w-14 h-14 rounded-2xl overflow-hidden grid place-items-center shrink-0 shadow-xl ring-4 ring-red-200/80">
+            <span className="absolute inset-0 rounded-2xl bg-red-500/30 animate-ping z-0" />
+            <Image
+              src="/icons/emergency.png"
+              alt="Emergency information"
+              width={56}
+              height={56}
+              className="relative z-10 object-contain"
+            />
           </span>
           <div>
             <h1 className="font-display text-3xl text-ink-900 leading-tight">
@@ -114,7 +121,15 @@ export default async function EmergencyPage() {
               className="flex items-center justify-between bg-terracotta-500 text-white p-5 rounded-[2rem] shadow-lg animate-pulse border-2 border-white/20"
             >
               <div className="flex items-center gap-3 min-w-0">
-                 <StarOfLifeIcon size={24} className="shrink-0" />
+                 <div className="shrink-0 w-8 h-8 rounded-lg overflow-hidden grid place-items-center">
+                   <Image
+                     src="/icons/emergency.png"
+                     alt="Emergency"
+                     width={32}
+                     height={32}
+                     className="object-contain"
+                   />
+                 </div>
                  <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-widest font-bold opacity-80 leading-none mb-1">Active Urgent Incident</p>
                     <p className="font-display text-lg truncate leading-none">{inc.title}</p>

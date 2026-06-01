@@ -1,4 +1,4 @@
-const LAST_UPDATED = "May 31, 2026";
+const LAST_UPDATED = "June 1, 2026";
 
 export default function TermsPage() {
   return (
@@ -50,12 +50,15 @@ export default function TermsPage() {
         </p>
       </Section>
 
-      <Section title="Information Accuracy & Geofencing">
+      <Section title="Information Accuracy, Geofencing, & Bulk Actions">
         <p>
           Users are entirely responsible for entering complete and accurate schedules, contact records, allergy alerts, medication lists, safety details, and care guides. The client and caregivers must keep information updated to ensure safety.
         </p>
         <p className="mt-2">
           Location-based geofence checks are strictly for check-in and check-out verification. The application does not perform continuous, real-time location tracking or active geofence monitoring.
+        </p>
+        <p className="mt-2 font-semibold text-ink-950">
+          Bulk Shift Actions: Deleting or cancelling shifts bulk will permanently delete associated tasks, check-in history, and records, which can affect invoices, caregiver pay histories, and reports. Users are strictly responsible for reviewing and confirming all selections before executing bulk actions.
         </p>
       </Section>
 

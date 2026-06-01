@@ -130,6 +130,92 @@ export default function EditShiftForm({
     router.refresh();
   }
 
+  async function applyDefaultTasks() {
+    const shiftDate = date;
+    const parts = shiftDate.split("-").map(Number);
+    const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+
+    const activeDefaults = libraryTemplates.filter(
+      (t) => t.default_for_new_shifts && t.is_active
+    );
+
+    const matchingTemplates = activeDefaults.filter((template: any) => {
+      if (template.caregiver_id && template.caregiver_id !== caregiverId) return false;
+
+      if (template.applies_to_all_clients === false) {
+        if (template.client_id && template.client_id !== clientId) return false;
+      }
+
+      if (template.auto_add_start_date) {
+        if (shiftDate < template.auto_add_start_date) return false;
+      }
+      if (template.auto_add_end_date) {
+        if (shiftDate > template.auto_add_end_date) return false;
+      }
+
+      if (template.default_days_of_week && template.default_days_of_week.length > 0) {
+        if (!template.default_days_of_week.includes(dayOfWeek)) return false;
+      }
+
+      return true;
+    });
+
+    const existingNames = new Set(todos.map((t) => t.task_name.toLowerCase().trim()));
+    const toInsert = matchingTemplates.filter(
+      (template) => !existingNames.has(template.task_name.toLowerCase().trim())
+    );
+
+    if (toInsert.length === 0) {
+      alert("This shift is already up to date with matching default tasks.");
+      return;
+    }
+
+    if (!confirm(`Found ${toInsert.length} matching default task(s) to add. Add them now?`)) {
+      return;
+    }
+
+    const supabase = createClient();
+    const insertedTodos: ShiftTodo[] = [];
+
+    for (const template of toInsert) {
+      const { data, error: insertError } = await supabase
+        .from("shift_todos")
+        .insert({
+          shift_id: shift.id,
+          template_id: template.id,
+          task_name: template.task_name,
+          description: template.description,
+          is_optional: template.is_optional,
+          is_prn: template.is_prn,
+          importance: template.importance,
+          time_mode: template.time_mode,
+          time_of_day: template.time_of_day,
+          scheduled_time: template.scheduled_time,
+          sort_order: template.sort_order,
+          allow_repeat: template.allow_repeat,
+          category: template.category,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        alert(`Error adding ${template.task_name}: ${insertError.message}`);
+        continue;
+      }
+
+      if (data) {
+        insertedTodos.push(data as ShiftTodo);
+      }
+    }
+
+    if (insertedTodos.length > 0) {
+      setTodos((prev) => [...prev, ...insertedTodos]);
+      alert(`Successfully added ${insertedTodos.length} default task(s).`);
+      router.refresh();
+    }
+  }
+
   async function addTodoFromTemplate(template: Template) {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -502,13 +588,22 @@ export default function EditShiftForm({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowPicker(true)}
-            className="w-full bg-cream-200 hover:bg-cream-200/80 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
-          >
-            + Add Tasks from Library
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPicker(true)}
+              className="flex-1 bg-cream-200 hover:bg-cream-200/80 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition"
+            >
+              + Add from Library
+            </button>
+            <button
+              type="button"
+              onClick={applyDefaultTasks}
+              className="flex-1 bg-forest-100 hover:bg-forest-200 text-forest-750 py-2.5 rounded-xl text-sm font-semibold transition"
+            >
+              Apply Default Tasks
+            </button>
+          </div>
         </Card>
 
         {error && (

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import AppLogo from "./app-logo";
 import NotificationBell from "./notification-bell";
 import { StarOfLifeIcon } from "./icons";
@@ -58,9 +59,15 @@ export default function AppHeader({
           aria-label={emergencyLabel}
           title={emergencyLabel}
           data-role={role}
-          className="relative w-11 h-11 rounded-full bg-white text-red-600 grid place-items-center hover:bg-red-50 transition active:scale-95 shadow-soft ring-2 ring-red-600/35 border border-red-200"
+          className="relative w-11 h-11 rounded-full bg-white grid place-items-center hover:bg-red-50 transition active:scale-95 shadow-soft border border-red-200 overflow-hidden"
         >
-          <StarOfLifeIcon size={28} />
+          <Image
+            src="/icons/emergency.png"
+            alt="Emergency"
+            width={44}
+            height={44}
+            className="object-contain"
+          />
         </Link>
         {userId && (
           <NotificationBell initialCount={notificationCount} userId={userId} />

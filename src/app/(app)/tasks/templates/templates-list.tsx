@@ -9,6 +9,23 @@ import {
   type TaskCategoryOption,
 } from "@/lib/task-categories";
 import { t as tr } from "@/lib/i18n";
+import { useEffect } from "react";
+
+function useUnsavedChangesWarning(isDirty: boolean) {
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+}
 
 type Template = {
   id: string;
@@ -33,20 +50,29 @@ type Template = {
   time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
   scheduled_time: string | null;
   allow_repeat: boolean;
+  default_days_of_week?: number[] | null;
+  auto_add_to_matching_shifts?: boolean;
+  auto_add_start_date?: string | null;
+  auto_add_end_date?: string | null;
+  applies_to_all_clients?: boolean;
+  client_id?: string | null;
 };
 
 type Caregiver = { id: string; full_name: string };
+type Client = { id: string; full_name: string };
 type TaskType = "required" | "optional" | "prn";
 
 export default function TemplatesList({
   templates,
   caregivers,
+  clients,
   organizationId,
   categories,
   lang,
 }: {
   templates: Template[];
   caregivers: Caregiver[];
+  clients: Client[];
   organizationId: string;
   categories: TaskCategoryOption[];
   lang: "en" | "es";
@@ -69,11 +95,150 @@ export default function TemplatesList({
   const [filter, setFilter] = useState<string>("all");
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
 
+  const [newDaysOfWeek, setNewDaysOfWeek] = useState<boolean[]>([true, true, true, true, true, true, true]);
+  const [newAutoAdd, setNewAutoAdd] = useState(true);
+  const [newStartDate, setNewStartDate] = useState("");
+  const [newEndDate, setNewEndDate] = useState("");
+  const [newAppliesAll, setNewAppliesAll] = useState(true);
+  const [newClientId, setNewClientId] = useState("");
+
+  useUnsavedChangesWarning(adding && (newName.trim().length > 0 || newDescription.trim().length > 0));
+
   const caregiverNameById = useMemo(() => {
     const m = new Map<string, string>();
     caregivers.forEach((c) => m.set(c.id, c.full_name));
     return m;
   }, [caregivers]);
+
+  async function applyDefaultsToFutureShifts() {
+    if (!confirm("Apply default tasks to all future shifts? This will inspect all future shifts and add missing default tasks matching their days/clients. Existing manually added tasks won't be deleted.")) {
+      return;
+    }
+
+    const supabase = createClient();
+    
+    // 1. Fetch all future shifts
+    const todayStr = new Date().toISOString().split("T")[0];
+    const { data: futureShifts, error: shiftsError } = await supabase
+      .from("shifts")
+      .select("id, scheduled_start, client_id, caregiver_id")
+      .gte("scheduled_start", todayStr + "T00:00:00Z");
+
+    if (shiftsError || !futureShifts) {
+      alert("Error fetching future shifts: " + (shiftsError?.message ?? "unknown"));
+      return;
+    }
+
+    if (futureShifts.length === 0) {
+      alert("No future shifts found to apply default tasks to.");
+      return;
+    }
+
+    // 2. Fetch all existing todos for those future shifts
+    const futureShiftIds = futureShifts.map((s) => s.id);
+    const { data: existingTodos, error: todosError } = await supabase
+      .from("shift_todos")
+      .select("shift_id, template_id, task_name")
+      .in("shift_id", futureShiftIds);
+
+    if (todosError) {
+      alert("Error fetching existing tasks: " + todosError.message);
+      return;
+    }
+
+    const existingMap = new Map<string, Set<string>>();
+    if (existingTodos) {
+      for (const todo of existingTodos) {
+        if (!existingMap.has(todo.shift_id)) {
+          existingMap.set(todo.shift_id, new Set());
+        }
+        existingMap.get(todo.shift_id)!.add(todo.task_name.toLowerCase());
+        if (todo.template_id) {
+          existingMap.get(todo.shift_id)!.add(todo.template_id);
+        }
+      }
+    }
+
+    // 3. For each shift, find matching templates that are default and match criteria
+    const defaultTemplates = templates.filter((t) => t.default_for_new_shifts && t.is_active);
+    const toInsert: any[] = [];
+
+    for (const shift of futureShifts) {
+      const shiftDate = shift.scheduled_start.split("T")[0];
+      const parts = shiftDate.split("-").map(Number);
+      const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+
+      const shiftExisting = existingMap.get(shift.id) ?? new Set<string>();
+
+      for (const template of defaultTemplates) {
+        // Caregiver check
+        if (template.caregiver_id && template.caregiver_id !== shift.caregiver_id) continue;
+
+        // Client check
+        if (template.applies_to_all_clients === false) {
+          if (template.client_id && template.client_id !== shift.client_id) continue;
+        }
+
+        // Date range check
+        if (template.auto_add_start_date) {
+          if (shiftDate < template.auto_add_start_date) continue;
+        }
+        if (template.auto_add_end_date) {
+          if (shiftDate > template.auto_add_end_date) continue;
+        }
+
+        // Days of week check
+        if (template.default_days_of_week && template.default_days_of_week.length > 0) {
+          if (!template.default_days_of_week.includes(dayOfWeek)) continue;
+        }
+
+        // Check if already exists on shift
+        const alreadyExists = shiftExisting.has(template.id) || shiftExisting.has(template.task_name.toLowerCase());
+        if (!alreadyExists) {
+          toInsert.push({
+            shift_id: shift.id,
+            template_id: template.id,
+            task_name: template.task_name,
+            description: template.description,
+            is_optional: template.is_optional,
+            is_prn: template.is_prn,
+            importance: template.importance,
+            time_mode: template.time_mode,
+            time_of_day: template.time_of_day,
+            scheduled_time: template.scheduled_time,
+            sort_order: template.sort_order,
+            allow_repeat: template.allow_repeat,
+            category: template.category,
+            status: "pending",
+          });
+        }
+      }
+    }
+
+    if (toInsert.length === 0) {
+      alert("All future shifts are already up to date with matching default tasks.");
+      return;
+    }
+
+    if (!confirm(`Found ${toInsert.length} missing task(s) across ${futureShifts.length} future shift(s). Apply them now?`)) {
+      return;
+    }
+
+    const chunkSize = 100;
+    let insertedCount = 0;
+    for (let i = 0; i < toInsert.length; i += chunkSize) {
+      const chunk = toInsert.slice(i, i + chunkSize);
+      const { error: insertError } = await supabase.from("shift_todos").insert(chunk);
+      if (insertError) {
+        alert("Error applying default tasks chunk: " + insertError.message);
+        return;
+      }
+      insertedCount += chunk.length;
+    }
+
+    alert(`Successfully applied ${insertedCount} default task(s) to future shifts.`);
+    router.refresh();
+  }
 
   const filtered = useMemo(() => {
     if (filter === "all") return templates;
@@ -86,6 +251,11 @@ export default function TemplatesList({
     if (!newName.trim()) return;
     const supabase = createClient();
     const maxSort = Math.max(0, ...templates.map((t) => t.sort_order ?? 0));
+
+    const selectedDaysArr = newDaysOfWeek
+      .map((selected, idx) => (selected ? idx : null))
+      .filter((idx): idx is number => idx !== null);
+
     const { error } = await supabase.from("todo_templates").insert({
       organization_id: organizationId,
       task_name: newName.trim(),
@@ -101,6 +271,12 @@ export default function TemplatesList({
       time_of_day: newTimeMode === "time_of_day" ? newTimeOfDay : null,
       scheduled_time: newTimeMode === "exact_time" ? newScheduledTime : null,
       allow_repeat: newAllowRepeat,
+      default_days_of_week: newIsDefault ? selectedDaysArr : null,
+      auto_add_to_matching_shifts: newIsDefault ? newAutoAdd : false,
+      auto_add_start_date: newIsDefault && newStartDate ? newStartDate : null,
+      auto_add_end_date: newIsDefault && newEndDate ? newEndDate : null,
+      applies_to_all_clients: newIsDefault ? newAppliesAll : true,
+      client_id: newIsDefault && !newAppliesAll && newClientId ? newClientId : null,
     });
     if (error) {
       alert(error.message);
@@ -118,6 +294,12 @@ export default function TemplatesList({
     setNewScheduledTime("12:00");
     setNewSortOrder(maxSort + 10);
     setNewAllowRepeat(true);
+    setNewDaysOfWeek([true, true, true, true, true, true, true]);
+    setNewAutoAdd(true);
+    setNewStartDate("");
+    setNewEndDate("");
+    setNewAppliesAll(true);
+    setNewClientId("");
     setAdding(false);
     router.refresh();
   }
@@ -169,6 +351,20 @@ export default function TemplatesList({
 
   return (
     <div>
+      <div className="mb-5 flex justify-between items-center bg-cream-50 p-4 rounded-2xl border border-cream-200">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-ink-500 font-semibold mb-1">Admin actions</p>
+          <p className="text-xs text-ink-600">Backfill default tasks to future shifts based on current settings.</p>
+        </div>
+        <button
+          type="button"
+          onClick={applyDefaultsToFutureShifts}
+          className="bg-forest-600 hover:bg-forest-700 text-cream-50 px-3 py-2 rounded-xl text-xs font-semibold transition"
+        >
+          Apply Defaults to Existing Shifts
+        </button>
+      </div>
+
       {caregivers.length > 0 && (
         <div className="mb-4 flex items-center gap-2 flex-wrap">
           <span className="text-xs uppercase tracking-[0.18em] text-ink-500 mr-1">
@@ -250,6 +446,7 @@ export default function TemplatesList({
                     onReassign={(cid) => reassignTemplate(t.id, cid)}
                     onChangeCategory={(c) => changeCategory(t.id, c)}
                     categories={categories}
+                    clients={clients}
                   />
                 </li>
               ))}
@@ -388,6 +585,80 @@ export default function TemplatesList({
             />
             Add to every new shift by default
           </label>
+          {newIsDefault && (
+            <div className="bg-cream-50 p-3.5 rounded-2xl border border-cream-200 space-y-3 mt-1.5 text-xs text-ink-700">
+              <p className="font-semibold text-ink-800">Days of the week to auto-add:</p>
+              <div className="grid grid-cols-7 gap-1.5">
+                {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => {
+                  const active = newDaysOfWeek[idx];
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        const next = [...newDaysOfWeek];
+                        next[idx] = !next[idx];
+                        setNewDaysOfWeek(next);
+                      }}
+                      className={`aspect-square rounded-xl text-sm font-semibold transition ${
+                        active
+                          ? "bg-forest-600 text-cream-50"
+                          : "bg-cream-100 text-ink-500 hover:bg-cream-200"
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <Field label="Active from">
+                  <input
+                    type="date"
+                    value={newStartDate}
+                    onChange={(e) => setNewStartDate(e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Active until">
+                  <input
+                    type="date"
+                    value={newEndDate}
+                    onChange={(e) => setNewEndDate(e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+              <label className="flex items-center gap-2 mt-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newAppliesAll}
+                  onChange={(e) => setNewAppliesAll(e.target.checked)}
+                  className="w-4 h-4 accent-forest-600"
+                />
+                Applies to all clients
+              </label>
+              {!newAppliesAll && (
+                <Field label="Client specific">
+                  <select
+                    value={newClientId}
+                    onChange={(e) => setNewClientId(e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">Select a client...</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              <p className="text-[10px] text-ink-400 mt-1 leading-tight">
+                * Default tasks are automatically added to new matching shifts based on the selected days and ranges.
+              </p>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -444,6 +715,7 @@ function TemplateRow({
   onReassign,
   onChangeCategory,
   categories,
+  clients,
   lang,
 }: {
   template: Template;
@@ -459,6 +731,7 @@ function TemplateRow({
   onReassign: (caregiverId: string | null) => void;
   onChangeCategory: (category: TaskCategory) => void;
   categories: TaskCategoryOption[];
+  clients: Client[];
 }) {
   const [name, setName] = useState(template.task_name);
   const [description, setDescription] = useState(template.description ?? "");
@@ -474,11 +747,41 @@ function TemplateRow({
   const [sortOrder, setSortOrder] = useState(template.sort_order);
   const [allowRepeat, setAllowRepeat] = useState(template.allow_repeat);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState(template.client_id ?? "");
+
+  const [daysOfWeek, setDaysOfWeek] = useState<boolean[]>(() => {
+    if (template.default_days_of_week && template.default_days_of_week.length > 0) {
+      const arr = Array(7).fill(false);
+      template.default_days_of_week.forEach((idx) => {
+        if (idx >= 0 && idx < 7) arr[idx] = true;
+      });
+      return arr;
+    }
+    return Array(7).fill(true);
+  });
+  const [autoAdd, setAutoAdd] = useState(template.auto_add_to_matching_shifts ?? true);
+  const [startDate, setStartDate] = useState(template.auto_add_start_date ?? "");
+  const [endDate, setEndDate] = useState(template.auto_add_end_date ?? "");
+  const [appliesAll, setAppliesAll] = useState(template.applies_to_all_clients ?? true);
+
+  const isDirty = name !== template.task_name || 
+                  description !== (template.description ?? "") ||
+                  autoAdd !== (template.auto_add_to_matching_shifts ?? true) ||
+                  startDate !== (template.auto_add_start_date ?? "") ||
+                  endDate !== (template.auto_add_end_date ?? "") ||
+                  appliesAll !== (template.applies_to_all_clients ?? true) ||
+                  selectedClientId !== (template.client_id ?? "");
+
+  useUnsavedChangesWarning(isEditing && isDirty);
 
   async function saveEdit() {
     if (!name.trim()) return;
     setSavingEdit(true);
     const supabase = createClient();
+    const selectedDaysArr = daysOfWeek
+      .map((selected, idx) => (selected ? idx : null))
+      .filter((idx): idx is number => idx !== null);
+
     const { error } = await supabase
       .from("todo_templates")
       .update({
@@ -492,6 +795,12 @@ function TemplateRow({
         scheduled_time: timeMode === "exact_time" ? scheduledTime : null,
         sort_order: sortOrder,
         allow_repeat: allowRepeat,
+        default_days_of_week: template.default_for_new_shifts ? selectedDaysArr : null,
+        auto_add_to_matching_shifts: template.default_for_new_shifts ? autoAdd : false,
+        auto_add_start_date: template.default_for_new_shifts && startDate ? startDate : null,
+        auto_add_end_date: template.default_for_new_shifts && endDate ? endDate : null,
+        applies_to_all_clients: template.default_for_new_shifts ? appliesAll : true,
+        client_id: template.default_for_new_shifts && !appliesAll && selectedClientId ? selectedClientId : null,
       })
       .eq("id", template.id);
     setSavingEdit(false);
@@ -584,6 +893,77 @@ function TemplateRow({
             ))}
           </select>
         </Field>
+        {template.default_for_new_shifts && (
+          <div className="bg-cream-50 p-3.5 rounded-2xl border border-cream-200 space-y-3 text-xs text-ink-700">
+            <p className="font-semibold text-ink-800">Days of the week to auto-add:</p>
+            <div className="grid grid-cols-7 gap-1.5">
+              {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => {
+                const active = daysOfWeek[idx];
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      const next = [...daysOfWeek];
+                      next[idx] = !next[idx];
+                      setDaysOfWeek(next);
+                    }}
+                    className={`aspect-square rounded-xl text-sm font-semibold transition ${
+                      active
+                        ? "bg-forest-600 text-cream-50"
+                        : "bg-cream-100 text-ink-500 hover:bg-cream-200"
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <Field label="Active from">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Active until">
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+            <label className="flex items-center gap-2 mt-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={appliesAll}
+                onChange={(e) => setAppliesAll(e.target.checked)}
+                className="w-4 h-4 accent-forest-600"
+              />
+              Applies to all clients
+            </label>
+            {!appliesAll && (
+              <Field label="Client specific">
+                <select
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Select a client...</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.full_name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+          </div>
+        )}
         <div className="flex gap-2">
           <button
             onClick={onCancelEdit}
@@ -604,6 +984,11 @@ function TemplateRow({
     );
   }
 
+  const daysShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const daysLabel = template.default_days_of_week && template.default_days_of_week.length > 0
+    ? ` (${template.default_days_of_week.map(d => daysShort[d]).join(", ")})`
+    : "";
+
   return (
     <div className="bg-white rounded-2xl shadow-soft p-4 flex items-start gap-3">
       <label className="flex items-center cursor-pointer pt-0.5">
@@ -619,7 +1004,7 @@ function TemplateRow({
           {template.task_name}
           {template.default_for_new_shifts && (
             <span className="text-[10px] uppercase tracking-wider bg-forest-600 text-cream-50 px-1.5 py-0.5 rounded font-medium">
-              Default
+              Default{daysLabel}
             </span>
           )}
           {caregiverName && (

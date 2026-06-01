@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { StarOfLifeIcon } from "./icons";
 
@@ -56,8 +57,14 @@ export default function UrgentIncidentBanner({ organizationId }: { organizationI
         href={`/incidents?incident=${incident.id}`}
         className="flex items-center gap-3 bg-red-600 text-cream-50 p-4 rounded-2xl shadow-soft animate-pulse transition active:scale-[0.98]"
       >
-        <div className="shrink-0 w-10 h-10 rounded-xl bg-white/20 grid place-items-center">
-          <StarOfLifeIcon size={20} />
+        <div className="shrink-0 w-10 h-10 rounded-xl overflow-hidden grid place-items-center">
+          <Image
+            src="/icons/emergency.png"
+            alt="Emergency"
+            width={40}
+            height={40}
+            className="object-contain"
+          />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] uppercase tracking-wider font-bold opacity-80">Urgent Alert</p>

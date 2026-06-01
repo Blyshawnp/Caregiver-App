@@ -79,6 +79,7 @@
   pointer-events: none;
   background-image: radial-gradient(rgba(0, 64, 112, 0.025) 1px, transparent 1px);
   background-size: 3px 3px;
+  background-size: 3px 3px;
   border-radius: inherit;
   opacity: 0.5;
 }
@@ -90,4 +91,102 @@
 }
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ====================================================
+   APP COLOR SCHEME / THEME PREFERENCES
+   ==================================================== */
+.theme-teal {
+  --cream-50: #f0fdfa;
+  --cream-100: #f0fdfa;
+  --cream-200: #ccfbf1;
+  --forest-50: #f0fdfa;
+  --forest-100: #ccfbf1;
+  --forest-400: #14b8a6;
+  --forest-500: #0d9488;
+  --forest-600: #0f766e;
+  --forest-700: #115e59;
+  --terracotta-400: #2dd4bf;
+  --terracotta-500: #0d9488;
+  --terracotta-600: #0f766e;
+}
+
+.theme-blue {
+  --cream-50: #f8fafc;
+  --cream-100: #f8fafc;
+  --cream-200: #e2e8f0;
+  --forest-50: #eff6ff;
+  --forest-100: #dbeafe;
+  --forest-400: #60a5fa;
+  --forest-500: #3b82f6;
+  --forest-600: #2563eb;
+  --forest-700: #1d4ed8;
+  --terracotta-400: #93c5fd;
+  --terracotta-500: #3b82f6;
+  --terracotta-600: #2563eb;
+}
+
+.theme-green {
+  --cream-50: #f4fbf7;
+  --cream-100: #f4fbf7;
+  --cream-200: #d1eae0;
+  --forest-50: #f0fdf4;
+  --forest-100: #dcfce7;
+  --forest-400: #4ade80;
+  --forest-500: #22c55e;
+  --forest-600: #16a34a;
+  --forest-700: #15803d;
+  --terracotta-400: #86efac;
+  --terracotta-500: #22c55e;
+  --terracotta-600: #16a34a;
+}
+
+.theme-purple {
+  --cream-50: #faf8ff;
+  --cream-100: #faf8ff;
+  --cream-200: #eae6f8;
+  --forest-50: #faf5ff;
+  --forest-100: #f3e8ff;
+  --forest-400: #a78bfa;
+  --forest-500: #8b5cf6;
+  --forest-600: #7c3aed;
+  --forest-700: #6d28d9;
+  --terracotta-400: #c084fc;
+  --terracotta-500: #8b5cf6;
+  --terracotta-600: #7c3aed;
+}
+
+.theme-rose {
+  --cream-50: #fff5f5;
+  --cream-100: #fff5f5;
+  --cream-200: #ffd6d6;
+  --forest-50: #fff1f2;
+  --forest-100: #ffe4e6;
+  --forest-400: #fb7185;
+  --forest-500: #f43f5e;
+  --forest-600: #e11d48;
+  --forest-700: #be123c;
+  --terracotta-400: #fda4af;
+  --terracotta-500: #f43f5e;
+  --terracotta-600: #e11d48;
+}
+
+.theme-high-contrast {
+  --cream-50: #ffffff;
+  --cream-100: #ffffff;
+  --cream-200: #e5e7eb;
+  --forest-50: #ffffff;
+  --forest-100: #f3f4f6;
+  --forest-400: #000000;
+  --forest-500: #000000;
+  --forest-600: #000000;
+  --forest-700: #000000;
+  --forest-800: #000000;
+  --terracotta-400: #000000;
+  --terracotta-500: #000000;
+  --terracotta-600: #000000;
+  --ink-900: #000000;
+  --ink-700: #000000;
+  --ink-500: #111827;
+  --ink-300: #4b5563;
 }

@@ -189,6 +189,38 @@ export default async function HelpPage() {
           </ul>
         </Section>
 
+        <Section title="Schedule Multi-Select & Bulk Actions">
+          <p className="text-sm text-ink-700 mb-2">
+            Administrators and clients can perform bulk actions on multiple shifts at once:
+          </p>
+          <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
+            <li><strong>Bulk Delete / Cancel:</strong> Select multiple shifts on the schedule page (via 'Bulk actions') and delete them together. This will show a strong warning if any shift contains check-ins, completed tasks, or notes.</li>
+            <li><strong>Bulk Add Tasks:</strong> Assign library task templates to all selected shifts in one go, with duplication-skipping controls to avoid duplicate tasks.</li>
+          </ul>
+        </Section>
+
+        <Section title="Default Tasks by Day of Week">
+          <p className="text-sm text-ink-700 mb-2">
+            Default task library settings permit granular automatic task scheduling:
+          </p>
+          <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
+            <li><strong>Weekly Schedule:</strong> Default tasks can be set to only auto-add to shifts on specific days of the week (e.g. Monday, Wednesday, Friday).</li>
+            <li><strong>Date Ranges:</strong> You can define optional start and end dates for task auto-scheduling.</li>
+            <li><strong>Backfilling:</strong> Use the "Apply default tasks to future shifts" action in the library to backfill matching default tasks on existing future shifts.</li>
+          </ul>
+        </Section>
+
+        <Section title="Account Settings & PWA Installation">
+          <p className="text-sm text-ink-700 mb-2">
+            Manage your credentials and offline standalone experience in <strong>Account & Settings</strong>:
+          </p>
+          <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
+            <li><strong>Theme Preference:</strong> Choose a curated primary color scheme (Teal, Blue, Green, Purple, Rose, High Contrast) that overrides default styles safely.</li>
+            <li><strong>Email & Password changes:</strong> Change your signed-in email address or password securely.</li>
+            <li><strong>PWA Banners & Prompts:</strong> Control progressive web app banners. You can dismiss them for 24 hours, suppress them permanently, or access manual device installation guides.</li>
+          </ul>
+        </Section>
+
         <Section title="Trouble?">
           <p className="text-sm text-ink-700">
             If something looks wrong (a time is off, a shift didn't update, etc), try a hard refresh first. If it persists, message your admin from the Messages tab.

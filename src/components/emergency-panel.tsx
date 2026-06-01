@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { StarOfLifeIcon } from "./icons";
 
 type Allergy = {
@@ -83,8 +84,14 @@ export default function EmergencyPanel({
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center gap-3 p-5 hover:bg-red-50 transition text-left"
       >
-        <span className="w-10 h-10 rounded-xl bg-red-600 text-cream-50 grid place-items-center shrink-0">
-          <StarOfLifeIcon size={20} />
+        <span className="relative w-10 h-10 rounded-xl grid place-items-center shrink-0 overflow-hidden shadow-[0_0_12px_rgba(220,38,38,0.25)] bg-red-600">
+          <Image
+            src="/icons/emergency.png"
+            alt="Emergency information"
+            width={40}
+            height={40}
+            className="object-contain"
+          />
         </span>
         <div className="flex-1 min-w-0">
           <p className="font-display text-lg text-ink-900">Emergency info</p>

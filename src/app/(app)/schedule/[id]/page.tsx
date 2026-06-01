@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import {
   ClockIcon,
@@ -604,8 +605,14 @@ export default async function ShiftDetailPage({
           className="flex items-center justify-between bg-white hover:bg-red-50 px-5 py-4 rounded-2xl shadow-soft transition"
         >
           <span className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-red-600 text-cream-50 grid place-items-center shrink-0">
-              <StarOfLifeIcon size={20} />
+            <span className="relative w-10 h-10 rounded-xl overflow-hidden grid place-items-center shrink-0">
+              <Image
+                src="/icons/emergency.png"
+                alt="Emergency information"
+                width={40}
+                height={40}
+                className="object-contain"
+              />
             </span>
             <span>
               <span className="block font-medium text-ink-900">

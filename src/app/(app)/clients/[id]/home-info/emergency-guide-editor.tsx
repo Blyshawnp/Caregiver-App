@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type GuideData = {
   enabled: boolean;
@@ -23,12 +24,20 @@ type GuideData = {
   other_instructions: string | null;
 };
 
+type ClientType = {
+  preferred_hospital_name: string | null;
+  preferred_hospital_address: string | null;
+  preferred_hospital_phone: string | null;
+};
+
 export default function EmergencyGuideEditor({
   clientId,
   initialGuide,
+  client,
 }: {
   clientId: string;
   initialGuide: GuideData | null;
+  client: ClientType;
 }) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(initialGuide?.enabled ?? false);
@@ -309,7 +318,7 @@ export default function EmergencyGuideEditor({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Door / Lockbox / Access Notes</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Door / Lockbox / Access Notes (Emergency Only)</label>
                   <input
                     type="text"
                     value={access}
@@ -317,17 +326,23 @@ export default function EmergencyGuideEditor({
                     placeholder="e.g. Lockbox code is 4321, key inside opens side kitchen door"
                     className={inputCls}
                   />
+                  <p className="text-[10px] text-ink-500 mt-1">⚠️ Enter emergency-specific entry instructions here. For non-emergency/standard parking or entry notes, please add them in General Info.</p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Preferred Hospital</label>
-                  <input
-                    type="text"
-                    value={hospital}
-                    onChange={(e) => handleFieldChange(setHospital, e.target.value)}
-                    placeholder="e.g. Lehigh Valley Cedar Crest"
-                    className={inputCls}
-                  />
+                <div className="bg-cream-50 border border-cream-200 rounded-2xl p-4 text-xs space-y-1">
+                  <span className="font-semibold block text-ink-500 uppercase tracking-wide text-[10px]">Preferred Hospital (Managed in General Info)</span>
+                  {client.preferred_hospital_name ? (
+                    <div>
+                      <p className="text-ink-900 font-bold">{client.preferred_hospital_name}</p>
+                      {client.preferred_hospital_address && <p className="text-ink-600">{client.preferred_hospital_address}</p>}
+                      {client.preferred_hospital_phone && <p className="text-ink-600 font-mono">{client.preferred_hospital_phone}</p>}
+                    </div>
+                  ) : (
+                    <p className="text-ink-400 italic">No preferred hospital configured under General & Home Info.</p>
+                  )}
+                  <Link href="?tab=info" className="text-forest-600 hover:underline font-semibold block mt-1.5">
+                    ← Edit under General & Home Info
+                  </Link>
                 </div>
               </div>
 

@@ -429,11 +429,11 @@ export default async function ShiftDetailPage({
               backgroundColor: shift.shift_types?.color ?? "#0D6587",
             }}
           />
-          <p className="text-xs uppercase tracking-[0.18em] text-ink-500">
+          <p className="text-xs uppercase tracking-wider text-ink-500">
             {shift.shift_types?.name ?? "Shift"}
           </p>
         </div>
-        <h1 className="font-display text-3xl text-ink-900 leading-tight">
+        <h1 className="font-sans font-bold text-3xl text-ink-900 leading-tight">
           {formatDateInTz(start)}
         </h1>
         <p className="text-ink-500 text-sm">
@@ -449,7 +449,7 @@ export default async function ShiftDetailPage({
             className="absolute -top-12 -right-10 w-32 h-32 rounded-full bg-cream-50/10 blur-2xl"
           />
           <div className="relative">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-cream-50/70 mb-0.5">
+            <p className="text-[10px] uppercase tracking-wider text-cream-50/70 mb-0.5">
               Available
             </p>
             <p className="font-display text-xl leading-tight mb-0.5">
@@ -504,7 +504,7 @@ export default async function ShiftDetailPage({
 
       {isOpenShift && (
         <div className="bg-forest-100 border border-forest-200 rounded-2xl px-4 py-3 mt-3">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-forest-700 font-medium mb-0.5">
+          <p className="text-[10px] uppercase tracking-wider text-forest-700 font-medium mb-0.5">
             Open shift
           </p>
           <p className="text-sm text-ink-900">
@@ -518,7 +518,7 @@ export default async function ShiftDetailPage({
       {/* Flagged-check-in/out reason banner */}
       {checkIn?.flagged_outside_geofence && checkIn?.flag_reason && (
         <div className="bg-terracotta-400/10 border border-terracotta-400/30 rounded-2xl px-4 py-3 mt-3">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-terracotta-600 font-medium mb-0.5">
+          <p className="text-[10px] uppercase tracking-wider text-terracotta-600 font-medium mb-0.5">
             Flagged
           </p>
           <p className="text-sm text-ink-900">{checkIn.flag_reason}</p>
@@ -527,7 +527,7 @@ export default async function ShiftDetailPage({
 
       {checkIn?.check_out_method === "auto_geofence_after_checkout_reminder" && (
         <div className="bg-forest-100 border border-forest-200 rounded-2xl px-4 py-3 mt-3">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-forest-700 font-medium mb-0.5">
+          <p className="text-[10px] uppercase tracking-wider text-forest-700 font-medium mb-0.5">
             Auto checkout
           </p>
           <p className="text-sm text-ink-900">
@@ -876,7 +876,7 @@ function StatusBanner({
       />
       <div>
         <p
-          className={`text-[10px] uppercase tracking-[0.18em] ${
+          className={`text-[10px] uppercase tracking-wider ${
             tone === "muted" ? "text-ink-500" : "text-cream-50/70"
           }`}
         >

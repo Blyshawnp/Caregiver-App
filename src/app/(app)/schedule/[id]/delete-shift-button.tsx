@@ -11,18 +11,30 @@ export default function DeleteShiftButton({ shiftId }: { shiftId: string }) {
 
   async function handleDelete() {
     setDeleting(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("shifts").delete().eq("id", shiftId);
+    try {
+      const res = await fetch("/api/schedule/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ shiftId }),
+      });
+      const data = await res.json().catch(() => null);
 
-    if (error) {
-      alert(error.message);
+      if (!res.ok || !data?.ok) {
+        alert(data?.error || "Failed to delete shift.");
+        setDeleting(false);
+        setConfirming(false);
+        return;
+      }
+
+      router.push("/schedule");
+      router.refresh();
+    } catch (err: any) {
+      alert(err.message || "An error occurred while deleting the shift.");
       setDeleting(false);
       setConfirming(false);
-      return;
     }
-
-    router.push("/schedule");
-    router.refresh();
   }
 
   if (!confirming) {

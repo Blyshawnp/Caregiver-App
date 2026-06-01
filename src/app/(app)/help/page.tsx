@@ -139,8 +139,9 @@ export default async function HelpPage() {
 
         {role !== "caregiver" && (
           <Section title="Home info & emergency">
-            <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
+            <ul className="text-sm text-ink-750 space-y-1.5 list-disc pl-5">
               <li>Visit <strong>Me → Clients → Edit home info</strong> to manage everything caregivers see on the shift detail page.</li>
+              <li>Stable profile, contact, Wi-Fi, and preferred hospital details reside in <strong>General & Home Info</strong>, whereas emergency evacuation action plans are managed separately under the <strong>Emergency Guide</strong> to prevent duplicate entries and keep care circles aligned.</li>
               <li>Add <strong>allergies</strong> with severity (critical, mild, minor) so caregivers can see them at a glance.</li>
               <li>Set the <strong>preferred hospital</strong> and <strong>primary physician</strong> for emergencies.</li>
               <li>Toggle on <strong>panic buttons</strong> or <strong>medical alerts</strong> and tell caregivers where they are.</li>

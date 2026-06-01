@@ -325,7 +325,7 @@ function ListView({
     <div className="space-y-6">
       {grouped.map(({ dateKey, label, items }) => (
         <section key={dateKey}>
-          <h2 className="font-display text-sm uppercase tracking-[0.18em] text-ink-500 mb-2 px-1">
+          <h2 className="font-sans text-sm font-bold text-ink-700 mb-2 px-1">
             {label}
           </h2>
           <ul className="space-y-2">
@@ -651,7 +651,7 @@ function CalendarView({
 
       {/* Selected day shifts */}
       <div>
-        <h3 className="font-display text-sm uppercase tracking-[0.18em] text-ink-500 mb-2 px-1">
+        <h3 className="font-sans text-sm font-bold text-ink-700 mb-2 px-1">
           {formatLongDate(parseKey(selectedKey))}
         </h3>
         {selectedShifts.length === 0 ? (

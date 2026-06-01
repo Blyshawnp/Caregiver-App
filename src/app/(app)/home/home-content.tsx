@@ -113,7 +113,7 @@ export default function HomeContent({
           href="/schedule"
           className="block bg-terracotta-500 hover:bg-terracotta-600 text-cream-50 rounded-2xl px-5 py-4 mb-4 transition active:scale-[0.99]"
         >
-          <p className="text-xs uppercase tracking-[0.18em] text-cream-50/70 mb-0.5">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-cream-50/70 mb-0.5">
             Action needed
           </p>
           <p className="font-medium">
@@ -195,13 +195,13 @@ function CheckedInCard({ shift, now }: { shift: ShiftRow; now: Date }) {
       />
       <div className="relative">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-2 h-2 rounded-full bg-cream-50 animate-pulse" />
-          <p className="text-xs uppercase tracking-[0.2em] text-cream-50/70">
+          <span className="w-2.5 h-2.5 rounded-full bg-cream-50 animate-pulse shrink-0" />
+          <p className="text-[10px] font-bold uppercase tracking-wider text-cream-50/70">
             On shift right now
           </p>
         </div>
 
-        <p className="font-display text-5xl leading-none mb-1">
+        <p className="font-sans font-bold text-5xl leading-none mb-1">
           {hours > 0 ? `${hours}h ${mins}m` : `${mins} min`}
         </p>
         <p className="text-cream-50/80 text-sm mb-6">
@@ -258,10 +258,10 @@ function StartingSoonCard({
   return (
     <article className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
       <div className="relative">
-        <p className="text-xs uppercase tracking-[0.2em] text-terracotta-600 mb-2 font-medium">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-terracotta-600 mb-2">
           {startedAlready ? "Shift started" : "Starting soon"}
         </p>
-        <h2 className="font-display text-3xl text-ink-900 leading-tight mb-1">
+        <h2 className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
           {startedAlready
             ? "It's time"
             : minsUntil < 60
@@ -314,10 +314,10 @@ function UpcomingCard({
   return (
     <article className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
       <div className="relative">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-500 mb-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
           Next shift
         </p>
-        <h2 className="font-display text-3xl text-ink-900 leading-tight mb-1">
+        <h2 className="font-sans font-bold text-3xl text-ink-900 leading-tight mb-1">
           {formatRelativeDay(startsAt, now)}
         </h2>
         <p className="text-ink-500 text-sm mb-5">
@@ -478,7 +478,7 @@ function ActivePanel({
         className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-cream-50/10 blur-2xl"
       />
       <div className="relative">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-cream-50/70 mb-2 flex items-center gap-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-cream-50/70 mb-2 flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-cream-50 animate-pulse" />
           On shift right now
         </p>

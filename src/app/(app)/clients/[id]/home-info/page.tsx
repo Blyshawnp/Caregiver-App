@@ -236,7 +236,7 @@ export default async function HomeInfoPage({
       )}
 
       {currentTab === "guide" && (
-        <EmergencyGuideEditor clientId={client.id} initialGuide={guide} />
+        <EmergencyGuideEditor clientId={client.id} initialGuide={guide} client={client} />
       )}
 
       {currentTab === "pets" && (

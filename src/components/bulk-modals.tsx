@@ -111,26 +111,18 @@ export function BulkDeleteModal({
         throw new Error("You do not have permission to perform bulk actions.");
       }
 
-      // Hard delete the shifts
-      const { error: deleteError } = await supabase
-        .from("shifts")
-        .delete()
-        .in("id", shiftIds);
-
-      if (deleteError) throw deleteError;
-
-      // Log bulk action to activity_logs
-      const { error: logError } = await supabase.from("activity_logs").insert({
-        organization_id: profile.organization_id,
-        actor_id: user.id,
-        action_type: "bulk_delete_shifts",
-        shift_count: shiftIds.length,
-        reason: reason || null,
-        metadata: { shift_ids: shiftIds },
+      // Hard delete the shifts via secure backend API
+      const res = await fetch("/api/schedule/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ shiftIds, reason }),
       });
+      const data = await res.json().catch(() => null);
 
-      if (logError) {
-        console.error("Failed to log activity:", logError);
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to delete shifts.");
       }
 
       onDeleted();

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { playNotificationSound } from "@/lib/notification-sounds";
 
 type ThemeOption = {
   key: string;
@@ -35,6 +36,10 @@ export default function AccountSettingsPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [themePref, setThemePref] = useState("default");
+
+  // Sound states
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundVolume, setSoundVolume] = useState(0.8);
 
   // Statuses
   const [emailSuccess, setEmailSuccess] = useState("");
@@ -87,6 +92,13 @@ export default function AccountSettingsPage() {
         if (prof) {
           setProfile(prof);
           setThemePref(prof.theme_preference ?? "default");
+        }
+
+        if (typeof window !== "undefined") {
+          const storedEnabled = localStorage.getItem("notification_sound_enabled");
+          setSoundEnabled(storedEnabled !== "false");
+          const storedVolume = localStorage.getItem("notification_sound_volume");
+          setSoundVolume(storedVolume !== null ? parseFloat(storedVolume) : 0.8);
         }
       } catch (err) {
         console.error(err);
@@ -170,6 +182,20 @@ export default function AccountSettingsPage() {
       setThemeError(err.message || "Failed to save theme preference.");
     } finally {
       setThemeUpdating(false);
+    }
+  }
+
+  function handleUpdateSoundSettings(enabled: boolean, volume: number) {
+    setSoundEnabled(enabled);
+    setSoundVolume(volume);
+    localStorage.setItem("notification_sound_enabled", enabled ? "true" : "false");
+    localStorage.setItem("notification_sound_volume", volume.toString());
+  }
+
+  async function handlePlayTestSound() {
+    const success = await playNotificationSound("message");
+    if (!success) {
+      alert("Autoplay restrictions or browser settings may have blocked the test sound. Please interact with the page first or ensure audio is enabled in your browser permissions.");
     }
   }
 
@@ -299,6 +325,60 @@ export default function AccountSettingsPage() {
               {passUpdating ? "Updating..." : "Update Password"}
             </button>
           </form>
+        </section>
+
+        {/* Notification Sound Settings */}
+        <section className="bg-white rounded-3xl p-6 shadow-soft border border-cream-150">
+          <h2 className="font-display text-lg text-ink-900 mb-1">Notification Sounds</h2>
+          <p className="text-xs text-ink-500 mb-4">Customize your alerts, messages, and reminders playback volume settings.</p>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-xs font-semibold text-ink-900">Enable Notification Sounds</label>
+                <p className="text-[10px] text-ink-500">Play synthesized audio alerts for messages, check-ins, and reminders.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={soundEnabled}
+                onChange={(e) => handleUpdateSoundSettings(e.target.checked, soundVolume)}
+                className="w-4 h-4 text-forest-600 focus:ring-forest-500 border-cream-300 rounded"
+              />
+            </div>
+
+            {soundEnabled && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="block text-xs font-semibold text-ink-700">Notification Volume ({Math.round(soundVolume * 100)}%)</label>
+                  <span className="text-[10px] text-ink-500 font-mono">Suggested Default: 80%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={soundVolume}
+                  onChange={(e) => handleUpdateSoundSettings(soundEnabled, parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-cream-200 rounded-lg appearance-none cursor-pointer accent-forest-600"
+                />
+              </div>
+            )}
+
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handlePlayTestSound}
+                className="bg-forest-600 hover:bg-forest-700 text-cream-50 px-4 py-2 rounded-xl text-xs font-semibold transition"
+              >
+                Play test sound
+              </button>
+            </div>
+
+            <div className="bg-cream-50 border border-cream-200 rounded-xl p-3 text-[11px] text-ink-600 leading-normal">
+              <p className="font-semibold mb-1 text-ink-850">Browser Autoplay Note:</p>
+              Modern web browsers restrict automatic sound playback until you interact with the page (by clicking or tapping). If you do not hear any sounds, please click anywhere on the page and test again.
+            </div>
+          </div>
         </section>
 
         {/* PWA Manual Install Instructions */}

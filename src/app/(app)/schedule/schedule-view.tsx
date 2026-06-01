@@ -442,7 +442,7 @@ function ShiftCard({
                     : "text-ink-900"
               }`}
             >
-              {shift.shift_type_name ?? "Shift"}
+              {shift.shift_type_name ?? "Shift"} #{shift.id.slice(0, 8).toUpperCase()}
             </p>
             {status.kind === "completed" && (
               <span className="text-[10px] uppercase tracking-wider text-forest-600 font-medium bg-forest-100 px-1.5 py-0.5 rounded">

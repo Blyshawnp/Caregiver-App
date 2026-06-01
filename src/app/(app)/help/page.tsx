@@ -89,6 +89,7 @@ export default async function HelpPage() {
               <li>Your <strong>Me</strong> tab shows your running pay for the current period.</li>
               <li>Pay periods run <strong>Friday 9 PM to Friday 9 PM</strong> (Eastern). Each period locks automatically at the end.</li>
               <li>Once locked, the invoice can't change. Older invoices are paginated under <strong>Me → My invoices</strong>.</li>
+              <li>If you forgot to check out or need to correct your hours, tap <strong>Request Time Correction</strong> on the shift details page to submit corrected check-in/out times. Approved corrections will reflect on the next invoice.</li>
               <li>All amounts are <strong>rounded up to the nearest $0.25</strong>.</li>
             </ul>
           ) : (
@@ -96,6 +97,7 @@ export default async function HelpPage() {
               <li>The <strong>Payroll</strong> page shows live current-period totals per caregiver.</li>
               <li>Pay periods auto-release at <strong>Friday 9 PM Eastern</strong>. Once released, invoices are locked.</li>
               <li>Adjust a specific shift's pay (hours, rate, or fixed amount) using <strong>Adjust pay for this shift</strong> on the shift detail page. Changes are logged with a reason.</li>
+              <li>Review caregiver time corrections directly from the shift details page. Approved corrections update check-in details and automatically reflect on the next invoice.</li>
               <li>All amounts round up to the nearest $0.25.</li>
             </ul>
           )}

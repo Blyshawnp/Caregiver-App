@@ -9,6 +9,8 @@ import {
   StarOfLifeIcon,
 } from "@/components/icons";
 import DeleteShiftButton from "./delete-shift-button";
+import RequestCorrectionButton from "./request-correction-button";
+import AdminCorrectionReview from "./admin-correction-review";
 import AcceptDeclineButtons from "./accept-decline-buttons";
 import LiveOnShiftCard from "./live-on-shift-card";
 import TopShiftActionArea from "./top-shift-action-area";
@@ -318,6 +320,17 @@ export default async function ShiftDetailPage({
     }
   }
 
+  // Check if a time correction request already exists
+  let existingCorrectionRequest = null;
+  if (profile?.role === "caregiver" || profile?.role === "admin") {
+    const { data: corrReq } = await supabase
+      .from("shift_time_change_requests")
+      .select("*")
+      .eq("shift_id", id)
+      .maybeSingle();
+    existingCorrectionRequest = corrReq;
+  }
+
   const todos = shift.shift_todos ?? [];
   const { data: categoryRows } = await supabase
     .from("task_categories")
@@ -430,7 +443,7 @@ export default async function ShiftDetailPage({
             }}
           />
           <p className="text-xs uppercase tracking-wider text-ink-500">
-            {shift.shift_types?.name ?? "Shift"}
+            {shift.shift_types?.name ?? "Shift"} · #{id.slice(0, 8).toUpperCase()}
           </p>
         </div>
         <h1 className="font-sans font-bold text-3xl text-ink-900 leading-tight">
@@ -835,6 +848,23 @@ export default async function ShiftDetailPage({
             computedHours={computedPay.hours}
             computedRate={computedPay.rate}
             isLocked={isPayLocked}
+          />
+        )}
+        {isAssignedCaregiver && (
+          <RequestCorrectionButton
+            shiftId={id}
+            scheduledStart={shift.scheduled_start}
+            scheduledEnd={shift.scheduled_end}
+            existingCheckIn={checkIn?.check_in_time}
+            existingCheckOut={checkIn?.check_out_time}
+            existingRequest={existingCorrectionRequest}
+          />
+        )}
+        {profile?.role === "admin" && existingCorrectionRequest && (
+          <AdminCorrectionReview
+            request={existingCorrectionRequest}
+            shiftId={id}
+            actorId={profile.id}
           />
         )}
         {canEdit && (

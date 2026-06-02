@@ -16,7 +16,7 @@ export default function PrivacyPage() {
           To coordinate care, we collect and store information entered by the administrator, family members, or caregivers:
         </p>
         <ul className="list-disc pl-5 space-y-1.5 text-sm text-ink-700">
-          <li><strong>Account Details:</strong> Name, email address, password hashes, profile settings, and theme color scheme preferences.</li>
+          <li><strong>Account Details:</strong> Name, email address, password hashes, profile settings, language preferences, and theme color scheme preferences.</li>
           <li><strong>Care Circle Profiles:</strong> User roles (admin, caregiver, client, family), caregiver profile photos, and profile settings.</li>
           <li><strong>Client & Home Info:</strong> Name, address, care recipient photos, entry notes, Wi-Fi details, and home notes.</li>
           <li><strong>Emergency & Health Logs:</strong> Emergency contacts, allergy records, medication instructions, and home safety device locations.</li>
@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <li><strong>Task Logs:</strong> Checkboxes, PRN statuses, notes, and task completion records.</li>
           <li><strong>Communications:</strong> Internal messages, notifications, incident notes, and commendations or feedback.</li>
           <li><strong>Invoices & Payments:</strong> Estimative caregiver pay rates, payment logs, and year-end summaries.</li>
-          <li><strong>System Data:</strong> Browser type, device settings, operating system, and security logs.</li>
+          <li><strong>System Data:</strong> Browser type, device settings, operating system, push notification subscriptions, device metadata, and security logs.</li>
         </ul>
       </Section>
 

@@ -214,42 +214,82 @@ export function formatPayPeriod(p: PayPeriod): string {
   return `${fmt(p.start)} – ${fmt(p.end)}`;
 }
 
-export function formatEnumLabel(val: string | null | undefined): string {
+export function formatEnumLabel(val: string | null | undefined, lang: string = "en"): string {
   if (!val) return "";
-  const mapping: Record<string, string> = {
-    early_afternoon: "Early Afternoon",
-    late_afternoon: "Late Afternoon",
-    not_needed: "Not needed this shift",
-    needs_follow_up: "Needs follow-up",
-    client_declined: "Client declined",
-    admin_forced: "Admin assigned",
-    agency_company: "Agency / Company",
-    personal_family: "Personal / Family Care",
-    solo_caregiver: "Solo Caregiver",
-    client_directed_care: "Client-Directed Care",
-    pending: "Pending",
-    completed: "Completed",
-    skipped: "Skipped",
-    low: "Low",
-    medium: "Medium",
-    high: "High",
-    critical: "Critical",
-    unscheduled: "Unscheduled",
-    time_of_day: "Time of day",
-    exact_time: "Exact time",
-    morning: "Morning",
-    evening: "Evening",
-    bedtime: "Bedtime",
-    admin: "Admin",
-    client: "Client",
-    caregiver: "Caregiver",
-    family: "Family",
+  const l = lang === "es" ? "es" : "en";
+  const mapping: Record<string, Record<string, string>> = {
+    en: {
+      early_afternoon: "Early Afternoon",
+      late_afternoon: "Late Afternoon",
+      not_needed: "Not needed this shift",
+      needs_follow_up: "Needs follow-up",
+      client_declined: "Client declined",
+      admin_forced: "Admin assigned",
+      agency_company: "Agency / Company",
+      personal_family: "Personal / Family Care",
+      solo_caregiver: "Solo Caregiver",
+      client_directed_care: "Client-Directed Care",
+      pending: "Pending",
+      completed: "Completed",
+      skipped: "Skipped",
+      low: "Low",
+      medium: "Medium",
+      high: "High",
+      critical: "Critical",
+      unscheduled: "Unscheduled",
+      time_of_day: "Time of day",
+      exact_time: "Exact time",
+      morning: "Morning",
+      evening: "Evening",
+      bedtime: "Bedtime",
+      admin: "Admin",
+      client: "Client",
+      caregiver: "Caregiver",
+      family: "Family",
+      full_day: "Full day",
+      next_shift: "Next shift",
+      view_pets: "View pets",
+      pets_in_home: "Pets in home"
+    },
+    es: {
+      early_afternoon: "Primera hora de la tarde",
+      late_afternoon: "Última hora de la tarde",
+      not_needed: "No fue necesario en este turno",
+      needs_follow_up: "Necesita seguimiento",
+      client_declined: "El cliente lo rechazó",
+      admin_forced: "Asignado por el administrador",
+      agency_company: "Agencia / Empresa",
+      personal_family: "Cuidado Personal / Familiar",
+      solo_caregiver: "Cuidador Solo",
+      client_directed_care: "Cuidado Dirigido por el Cliente",
+      pending: "Pendiente",
+      completed: "Completado",
+      skipped: "Omitido",
+      low: "Baja",
+      medium: "Media",
+      high: "Alta",
+      critical: "Crítica",
+      unscheduled: "Sin horario",
+      time_of_day: "Momento del día",
+      exact_time: "Hora exacta",
+      morning: "Mañana",
+      evening: "Noche",
+      bedtime: "Hora de dormir",
+      admin: "Administrador",
+      client: "Cliente",
+      caregiver: "Cuidador",
+      family: "Familia",
+      full_day: "Día completo",
+      next_shift: "Próximo turno",
+      view_pets: "Ver mascotas",
+      pets_in_home: "Mascotas en el hogar"
+    }
   };
-  
-  if (mapping[val]) return mapping[val];
-  if (mapping[val.toLowerCase()]) return mapping[val.toLowerCase()];
-  
-  // fallback: replace underscores with spaces and capitalize words
+
+  const currentMap = mapping[l];
+  if (currentMap[val]) return currentMap[val];
+  if (currentMap[val.toLowerCase()]) return currentMap[val.toLowerCase()];
+
   return val
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());

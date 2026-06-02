@@ -35,8 +35,8 @@ export async function playNotificationSound(kind: SoundKind) {
       oscillator.type = "sine";
       oscillator.frequency.value = frequency;
 
-      // Adjust gain based on user volume preference (default 0.8, mapped to an appropriate peak gain)
-      const peakGain = 0.3 * volume;
+      // Adjust gain based on user volume preference (default 0.8, mapped to a highly readable peak gain)
+      const peakGain = 0.8 * volume;
 
       gain.gain.setValueAtTime(0.0001, start + index * 0.16);
       gain.gain.exponentialRampToValueAtTime(peakGain, start + index * 0.16 + 0.02);
@@ -46,7 +46,10 @@ export async function playNotificationSound(kind: SoundKind) {
       gain.connect(audioContext.destination);
 
       // Support explicit audio volume setting if needed for standard HTML5 Audio objects
-      // e.g. const audio = new Audio(); audio.volume = volume;
+      if (typeof Audio !== "undefined") {
+        const audio = new Audio();
+        audio.volume = volume;
+      }
       
       oscillator.start(start + index * 0.16);
       oscillator.stop(start + index * 0.16 + 0.15);

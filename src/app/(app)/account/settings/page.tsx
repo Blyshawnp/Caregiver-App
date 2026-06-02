@@ -13,13 +13,14 @@ type ThemeOption = {
 };
 
 const THEME_OPTIONS: ThemeOption[] = [
-  { key: "default", label: "Caregiver App Default (Tealish Blue)", primaryBg: "bg-[#0D6587]" },
-  { key: "teal", label: "Teal Theme", primaryBg: "bg-teal-600" },
-  { key: "blue", label: "Clean Blue Theme", primaryBg: "bg-blue-600" },
-  { key: "green", label: "Natural Forest Green", primaryBg: "bg-green-600" },
-  { key: "purple", label: "Regal Purple Theme", primaryBg: "bg-purple-600" },
-  { key: "rose", label: "Premium Rose Theme", primaryBg: "bg-rose-600" },
-  { key: "high-contrast", label: "High Contrast", primaryBg: "bg-black" },
+  { key: "system", label: "System default", primaryBg: "bg-slate-450" },
+  { key: "default", label: "Caregiver App default", primaryBg: "bg-[#0D6587]" },
+  { key: "teal", label: "Teal", primaryBg: "bg-teal-600" },
+  { key: "blue", label: "Blue", primaryBg: "bg-blue-600" },
+  { key: "green", label: "Green", primaryBg: "bg-green-600" },
+  { key: "purple", label: "Purple", primaryBg: "bg-purple-600" },
+  { key: "rose", label: "Rose", primaryBg: "bg-rose-600" },
+  { key: "high-contrast", label: "High contrast", primaryBg: "bg-black" },
 ];
 
 export default function AccountSettingsPage() {
@@ -40,6 +41,30 @@ export default function AccountSettingsPage() {
   // Sound states
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [soundVolume, setSoundVolume] = useState(0.8);
+
+  // PWA deferred install prompt support
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+  }, []);
+
+  async function handleManualInstall() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") {
+        setDeferredPrompt(null);
+      }
+    } else {
+      alert("Direct installation is not supported by your current browser or browser version, or the app is already installed. iPhone/iPad users should use Safari's 'Add to Home Screen' option. Chrome/Android users can find 'Install app' in the browser menu.");
+    }
+  }
 
   // Statuses
   const [emailSuccess, setEmailSuccess] = useState("");
@@ -218,7 +243,13 @@ export default function AccountSettingsPage() {
         {/* Color Scheme preferences */}
         <section className="bg-white rounded-3xl p-6 shadow-soft border border-cream-150">
           <h2 className="font-display text-lg text-ink-900 mb-1">Color Scheme & Theme</h2>
-          <p className="text-xs text-ink-500 mb-4">Choose a curated primary color scheme across all app headers, cards, and buttons.</p>
+          <p className="text-xs text-ink-500 mb-3">Choose a curated primary color scheme across all app headers, cards, and buttons.</p>
+
+          <div className="bg-cream-50/50 border border-cream-200/50 rounded-2xl p-3.5 text-xs text-ink-600 mb-4 leading-relaxed">
+            💡 <strong>Theme Guide:</strong> Select a color scheme that matches your preference or visual comfort. 
+            The <em>High contrast</em> option provides maximum legibility with strong dark outlines, perfect for bright sunlight or accessibility needs. 
+            The <em>System default</em> option uses your browser or operating system's default colors.
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {THEME_OPTIONS.map((opt) => (
@@ -406,6 +437,13 @@ export default function AccountSettingsPage() {
             </div>
 
             <div className="flex flex-wrap gap-2 pt-1.5">
+              <button
+                type="button"
+                onClick={handleManualInstall}
+                className="bg-forest-600 hover:bg-forest-700 text-cream-50 px-4 py-2.5 rounded-xl font-semibold transition"
+              >
+                Install app
+              </button>
               <button
                 type="button"
                 onClick={() => {

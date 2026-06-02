@@ -7,6 +7,7 @@ import ShiftWatcher, {
 } from "@/components/shift-watcher";
 import InstallPrompt from "@/components/install-prompt";
 import PushPermissionPrompt from "@/components/push-permission-prompt";
+import PwaHealthCheck from "@/components/pwa-health-check";
 import type { Role } from "@/lib/db-types";
 import type { Lang } from "@/lib/i18n";
 
@@ -167,6 +168,7 @@ export default async function AppLayout({
       />
       <InstallPrompt />
       <PushPermissionPrompt />
+      <PwaHealthCheck />
     </div>
   );
 }

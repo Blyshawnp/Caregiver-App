@@ -75,6 +75,68 @@ export default function NotificationSettings({
     }
   }
 
+  const [testLoading, setTestLoading] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [lastCheck, setLastCheck] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("pwa_last_subscription_check");
+      if (stored) {
+        setLastCheck(new Date(stored).toLocaleString());
+      }
+    }
+  }, [deviceEnabled]);
+
+  async function handleSendTest() {
+    setTestLoading(true);
+    setTestMessage(null);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      if (res.ok) {
+        setTestMessage("✅ Test push notification dispatched! Please check your device.");
+      } else {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error || "Failed to send test push.");
+      }
+    } catch (err: any) {
+      setTestMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setTestLoading(false);
+    }
+  }
+
+  async function handleManualCheck() {
+    setLoading(true);
+    setError(null);
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        const sub = await registration.pushManager.getSubscription();
+        if (sub) {
+          await fetch("/api/push/subscriptions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sub.toJSON()),
+          });
+          const nowStr = new Date().toISOString();
+          localStorage.setItem("pwa_last_subscription_check", nowStr);
+          setLastCheck(new Date(nowStr).toLocaleString());
+          setDeviceEnabled(true);
+        } else {
+          setDeviceEnabled(false);
+          setError("No active browser push subscription found. Click Enable below.");
+        }
+      } else {
+        setError("Service Worker not ready.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to refresh subscription.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto space-y-6">
       <header>
@@ -87,25 +149,67 @@ export default function NotificationSettings({
         <p className="text-xs text-ink-500 mb-4">
           Enable native notifications on this device to stay updated instantly.
         </p>
+
+        <div className="bg-cream-50 p-4 rounded-2xl text-xs space-y-2 mb-4 border border-cream-200">
+          <p className="font-medium text-ink-700">
+            <strong>Notification status:</strong>{" "}
+            {!supported ? (
+              <span className="text-terracotta-600 font-semibold">Unsupported on this device</span>
+            ) : deviceEnabled ? (
+              <span className="text-forest-700 font-semibold">🟢 Active & Registered on this device</span>
+            ) : (
+              <span className="text-ink-500 font-semibold">⚪ Not active on this device</span>
+            )}
+          </p>
+          {lastCheck && (
+            <p className="text-ink-500">
+              <strong>Last subscription check:</strong> {lastCheck}
+            </p>
+          )}
+        </div>
+
         {loading && <p className="text-xs text-ink-500 mb-3">Checking this device...</p>}
         {error && <p className="text-xs text-terracotta-600 mb-3">{error}</p>}
+        {testMessage && <p className="text-xs text-ink-700 font-semibold mb-3">{testMessage}</p>}
 
         {!supported ? (
           <div className="bg-cream-50 p-4 rounded-2xl text-sm text-ink-700">
             Push notifications are not supported in this browser or device.
           </div>
         ) : (
-          <button
-            onClick={toggleDevice}
-            disabled={saving}
-            className={`w-full py-3.5 rounded-2xl font-medium transition active:scale-[0.98] ${
-              deviceEnabled
-                ? "bg-cream-200 text-ink-700 hover:bg-cream-300"
-                : "bg-forest-600 text-cream-50 hover:bg-forest-700 shadow-soft"
-            }`}
-          >
-            {saving ? "Updating..." : deviceEnabled ? "Disable on this device" : "Enable on this device"}
-          </button>
+          <div className="space-y-2.5">
+            <button
+              onClick={toggleDevice}
+              disabled={saving}
+              className={`w-full py-3.5 rounded-2xl font-medium transition active:scale-[0.98] ${
+                deviceEnabled
+                  ? "bg-cream-200 text-ink-700 hover:bg-cream-300"
+                  : "bg-forest-600 text-cream-50 hover:bg-forest-700 shadow-soft"
+              }`}
+            >
+              {saving ? "Updating..." : deviceEnabled ? "Disable on this device" : "Enable on this device"}
+            </button>
+
+            {deviceEnabled && (
+              <div className="flex gap-2 pt-1.5">
+                <button
+                  type="button"
+                  onClick={handleSendTest}
+                  disabled={testLoading}
+                  className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+                >
+                  {testLoading ? "Sending test..." : "Send test notification"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleManualCheck}
+                  className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-4 py-2.5 rounded-xl text-xs font-semibold transition"
+                >
+                  Refresh subscription
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </section>
 

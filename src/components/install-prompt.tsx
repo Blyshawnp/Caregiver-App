@@ -160,7 +160,7 @@ export default function InstallPrompt() {
                 onClick={handleInstallClick}
                 className="flex-1 bg-cream-50 hover:bg-cream-100 text-forest-700 py-2 rounded-xl text-xs font-semibold transition active:scale-95 text-center"
               >
-                Install App
+                Install app
               </button>
               <button
                 onClick={handleNotNow}
@@ -172,7 +172,7 @@ export default function InstallPrompt() {
 
             <div className="flex justify-between items-center border-t border-cream-50/10 pt-2 text-[10px] text-cream-50/60 font-medium">
               <button onClick={handleRemindTomorrow} className="hover:text-cream-50 hover:underline">
-                Remind in 24h
+                Don't show for 24 hours
               </button>
               <button onClick={handleNeverShow} className="hover:text-cream-50 hover:underline">
                 Don't show again
@@ -225,13 +225,13 @@ export default function InstallPrompt() {
                   onClick={handleRemindTomorrow}
                   className="bg-cream-200 hover:bg-cream-300 text-ink-700 px-4 py-3 rounded-2xl text-xs font-semibold transition"
                 >
-                  Remind tomorrow
+                  Don't show for 24 hours
                 </button>
                 <button
                   onClick={handleNeverShow}
                   className="bg-cream-100 hover:bg-cream-200 text-ink-500 px-4 py-3 rounded-2xl text-xs font-medium transition"
                 >
-                  Never
+                  Don't show again
                 </button>
               </div>
             </div>

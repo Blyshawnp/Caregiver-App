@@ -608,21 +608,21 @@ function TaskRow({
               onClick={() => onUpdateStatus('not_needed')}
               className="text-[11px] bg-cream-200 hover:bg-cream-300 text-ink-700 px-2.5 py-1 rounded-lg font-medium transition"
             >
-              Not needed this shift
+              {lang === "es" ? "No fue necesario en este turno" : "Not needed this shift"}
             </button>
             <button
               type="button"
               onClick={() => onUpdateStatus('client_declined')}
               className="text-[11px] bg-cream-200 hover:bg-cream-300 text-ink-700 px-2.5 py-1 rounded-lg font-medium transition"
             >
-              Client declined
+              {lang === "es" ? "El cliente lo rechazó" : "Client declined"}
             </button>
             <button
               type="button"
               onClick={() => onUpdateStatus('needs_follow_up')}
               className="text-[11px] bg-terracotta-400/15 hover:bg-terracotta-400/25 text-terracotta-700 px-2.5 py-1 rounded-lg font-medium transition"
             >
-              Needs follow-up
+              {lang === "es" ? "Necesita seguimiento" : "Needs follow-up"}
             </button>
           </div>
         )}
@@ -632,7 +632,7 @@ function TaskRow({
               ? 'bg-terracotta-400/15 text-terracotta-700'
               : 'bg-cream-200 text-ink-600'
           }`}>
-            {formatEnumLabel(todo.status)}
+            {formatEnumLabel(todo.status, lang)}
           </span>
         )}
         {isComplete && todo.completed_at && (

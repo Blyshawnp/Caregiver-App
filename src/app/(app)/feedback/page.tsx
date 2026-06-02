@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatEnumLabel } from "@/lib/pay";
+import { getUserLanguage } from "@/lib/get-user-language";
 import FeedbackRowActions from "./feedback-row-actions";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function FeedbackPage({
 }: {
   searchParams?: Promise<{ tab?: string }>;
 }) {
+  const lang = await getUserLanguage();
   const { tab } = (await searchParams) ?? {};
   const currentTab = tab === "history" ? "history" : "active";
 
@@ -136,7 +138,7 @@ export default async function FeedbackPage({
                         : "bg-forest-100 text-forest-800"
                     }`}
                   >
-                    {formatEnumLabel(item.feedback_type)}
+                    {formatEnumLabel(item.feedback_type, lang)}
                   </span>
                   {item.rating && (
                     <span className="inline-block text-xs text-amber-500 font-medium ml-2">
@@ -145,7 +147,7 @@ export default async function FeedbackPage({
                   )}
                 </div>
                 <span className="text-[10px] uppercase tracking-wider bg-cream-100 text-ink-600 px-2 py-0.5 rounded-lg">
-                  {formatEnumLabel(item.status)}
+                  {formatEnumLabel(item.status, lang)}
                 </span>
               </div>
 

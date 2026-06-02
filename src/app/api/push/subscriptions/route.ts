@@ -75,6 +75,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
   }
 
+  const userAgent = request.headers.get("user-agent") || "";
+  const uaLower = userAgent.toLowerCase();
+  let platform = "desktop";
+  if (uaLower.includes("iphone") || uaLower.includes("ipad") || uaLower.includes("ipod")) {
+    platform = "ios";
+  } else if (uaLower.includes("android")) {
+    platform = "android";
+  }
+
   const admin = createAdminClient();
   const { error } = await admin.from("push_subscriptions").upsert(
     {
@@ -83,7 +92,8 @@ export async function POST(request: Request) {
       endpoint: payload.endpoint,
       p256dh: payload.keys.p256dh,
       auth: payload.keys.auth,
-      user_agent: request.headers.get("user-agent"),
+      user_agent: userAgent,
+      platform,
       is_active: true,
       disabled_at: null,
       last_seen_at: new Date().toISOString(),

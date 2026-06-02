@@ -123,6 +123,16 @@ type ShiftEventRow = {
   metadata: Record<string, unknown> | null;
 };
 
+type ShiftPetSummary = {
+  id: string;
+  name: string;
+  pet_type: string;
+  medication_instructions: string | null;
+  behavior_notes: string | null;
+  emergency_notes: string | null;
+  show_to_caregivers: boolean;
+};
+
 export default async function ShiftDetailPage({
   params,
 }: {
@@ -381,18 +391,28 @@ export default async function ShiftDetailPage({
     !checkIn?.check_in_time &&
     !isReleased &&
     !shiftStatus.isExpired;
-  let visiblePetCount = 0;
+  let visiblePets: ShiftPetSummary[] = [];
   if (shift.client_id && canShowClientDetails) {
-    let petCountQuery = supabase
+    let petsQuery = supabase
       .from("client_pets")
-      .select("id", { count: "exact", head: true })
-      .eq("client_id", shift.client_id);
+      .select("id, name, pet_type, medication_instructions, behavior_notes, emergency_notes, show_to_caregivers")
+      .eq("client_id", shift.client_id)
+      .order("created_at", { ascending: true });
     if (isCaregiver) {
-      petCountQuery = petCountQuery.eq("show_to_caregivers", true);
+      petsQuery = petsQuery.eq("show_to_caregivers", true);
     }
-    const { count } = await petCountQuery;
-    visiblePetCount = count ?? 0;
+    const { data } = await petsQuery;
+    visiblePets = (data ?? []) as ShiftPetSummary[];
   }
+  const visiblePetCount = visiblePets.length;
+  const petTypeSummary = formatPetTypeSummary(visiblePets);
+  const petCautions = visiblePets
+    .filter((pet) => pet.medication_instructions || pet.behavior_notes || pet.emergency_notes)
+    .slice(0, 3);
+  const shouldShowPetOfferSummary =
+    !!shift.client_id &&
+    canShowClientDetails &&
+    (isAssignedCaregiver || visiblePetCount > 0);
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -562,6 +582,53 @@ export default async function ShiftDetailPage({
             <p className="text-xs text-ink-500 mt-1">{checkIn.check_out_reason}</p>
           )}
         </div>
+      )}
+
+      {shouldShowPetOfferSummary && (
+        <section className="bg-white border border-cream-200 rounded-2xl shadow-soft p-4 mt-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-ink-500 font-medium">
+                Pets in home
+              </p>
+              <p className="text-sm font-semibold text-ink-900">
+                {visiblePetCount > 0 ? `Yes · ${visiblePetCount}` : "No"}
+              </p>
+              {visiblePetCount > 0 && (
+                <p className="text-xs text-ink-500 mt-0.5">{petTypeSummary}</p>
+              )}
+            </div>
+            {visiblePetCount > 0 && shift.client_id && (
+              <Link
+                href={`/clients/${shift.client_id}/home-info?tab=pets`}
+                className="shrink-0 text-sm text-forest-600 font-medium hover:underline"
+              >
+                View pets
+              </Link>
+            )}
+          </div>
+          {visiblePetCount > 0 && (
+            <>
+              <p className="text-xs text-terracotta-600 mt-3">
+                This client has pets listed. Review pet details before accepting if you have allergies or safety concerns.
+              </p>
+              {petCautions.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {petCautions.map((pet) => (
+                    <p key={pet.id} className="text-xs text-ink-600">
+                      <span className="font-medium">{pet.name}:</span>{" "}
+                      {[
+                        pet.medication_instructions ? "needs medication" : null,
+                        pet.emergency_notes ? "emergency notes" : null,
+                        pet.behavior_notes ? "behavior caution" : null,
+                      ].filter(Boolean).join(", ")}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
       )}
 
       {/* Details */}
@@ -1047,6 +1114,24 @@ function formatEventMetadata(metadata: Record<string, unknown> | null) {
 function normalizeRows<T>(value: T[] | T | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   return value ? [value] : [];
+}
+
+function formatPetTypeSummary(pets: ShiftPetSummary[]) {
+  if (pets.length === 0) return "No pets listed";
+  const counts = new Map<string, number>();
+  for (const pet of pets) {
+    const label = (pet.pet_type || "pet").trim().toLowerCase();
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([type, count]) => `${count} ${count === 1 ? type : pluralizePetType(type)}`)
+    .join(", ");
+}
+
+function pluralizePetType(type: string) {
+  if (type.endsWith("s")) return type;
+  if (type.endsWith("y")) return `${type.slice(0, -1)}ies`;
+  return `${type}s`;
 }
 
 function formatShiftTypeName(name: string | null | undefined): string {

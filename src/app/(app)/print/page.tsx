@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatPay, roundUpToQuarter } from "@/lib/pay";
 import { formatShortDateInTz, formatTimeInTz } from "@/lib/datetime";
+import { withPetPhotoDisplayUrls } from "@/lib/pet-photos";
 import { StarOfLifeIcon } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
@@ -348,7 +349,7 @@ export default async function PrintViewPage({
               .from("client_pets")
               .select("*")
               .order("created_at", { ascending: true });
-            allPets = data ?? [];
+            allPets = await withPetPhotoDisplayUrls(supabase, (data ?? []) as any[]);
           } catch {
             allPets = [];
           }
@@ -499,9 +500,9 @@ export default async function PrintViewPage({
                                     Sex: {pet.sex || "—"} | Spayed/Neutered: {pet.spayed_neutered || "—"}
                                   </span>
                                 </div>
-                                {pet.photo_url && (
+                                {(pet.photo_display_url ?? pet.photo_url) && (
                                   <div className="w-16 h-16 rounded-xl overflow-hidden border border-cream-200 bg-white">
-                                    <img src={pet.photo_url} alt={pet.name} className="w-full h-full object-cover" />
+                                    <img src={pet.photo_display_url ?? pet.photo_url} alt={pet.name} className="w-full h-full object-cover" />
                                   </div>
                                 )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-ink-700 text-[11px]">

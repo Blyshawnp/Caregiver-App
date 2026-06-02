@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import UserAvatar from "@/components/user-avatar";
 import { formatCurrency } from "@/lib/pay";
+import TeamAvatarUploader from "./team-avatar-uploader";
 
 type Person = {
   id: string;
@@ -184,6 +185,9 @@ export default function TeamMemberDetail({
               {roleCopy[person.role]}
               {!person.is_active && " · Inactive"}
             </p>
+            {person.role === "caregiver" && (
+              <TeamAvatarUploader personId={person.id} personName={person.full_name} />
+            )}
           </div>
         </div>
 

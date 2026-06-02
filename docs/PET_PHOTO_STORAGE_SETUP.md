@@ -29,10 +29,13 @@ The app stores the storage object path in `client_pets.photo_url` for new upload
 3. Upload a pet photo as an admin/client user.
 4. Confirm the object appears under `<organization_id>/<client_id>/`.
 5. Confirm `client_pets.photo_url` stores the object path, not a signed URL.
-6. Open the client profile and shift home-access view as a permitted user and confirm the photo renders.
+6. Open the client profile, pet list, pet detail modal, shift home-access view, and emergency print page as a permitted user and confirm the photo renders.
+7. Open a pending shift for an assigned caregiver and confirm the pet summary and `View pets` shortcut appear before accepting.
 
 ## Troubleshooting
 
 - Upload fails: confirm the user is `admin` or `client`, the client belongs to the same organization, and the file is an allowed image under 10 MB.
 - Image does not render: confirm the object path in `client_pets.photo_url` matches the storage object path and that the viewer has row access to the pet.
 - Caregiver cannot view: confirm `show_to_caregivers` is enabled for the pet.
+- Public URL renders fail on private buckets. Use the signed URL helpers in `src/lib/pet-photos.ts` instead of `getPublicUrl`.
+- If production behaves differently from local, confirm Vercel is pointed at the Supabase project that contains the `pet-photos` bucket and policies.

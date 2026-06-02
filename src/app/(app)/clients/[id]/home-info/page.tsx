@@ -5,7 +5,10 @@ import HomeInfoEditor from "./home-info-editor";
 import EmergencyGuideEditor from "./emergency-guide-editor";
 import PetsEditor from "./pets-editor";
 import ClientChecklist from "./checklist";
+import ClientPhotoUploader from "./client-photo-uploader";
+import ClientPhoto from "@/components/client-photo";
 import PetsList from "@/components/pets-list";
+import { withClientPhotoDisplayUrl } from "@/lib/client-photos";
 import { withPetPhotoDisplayUrls } from "@/lib/pet-photos";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +18,8 @@ type ClientHomeInfo = {
   id: string;
   full_name: string;
   organization_id: string;
+  photo_url: string | null;
+  photo_display_url?: string | null;
   address: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -114,7 +119,7 @@ export default async function HomeInfoPage({
   const { data: client, error: clientError } = await supabase
     .from("clients")
     .select(
-      "id, full_name, organization_id, address, latitude, longitude, geofence_radius_meters, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes, preferred_hospital_name, preferred_hospital_address, preferred_hospital_phone, primary_physician_name, primary_physician_address, primary_physician_phone, has_panic_button, panic_button_location, has_medical_alert, medical_alert_location, first_aid_location, hypoglycemia_kit_location, fire_extinguisher_location, aed_location"
+      "id, full_name, organization_id, photo_url, address, latitude, longitude, geofence_radius_meters, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes, preferred_hospital_name, preferred_hospital_address, preferred_hospital_phone, primary_physician_name, primary_physician_address, primary_physician_phone, has_panic_button, panic_button_location, has_medical_alert, medical_alert_location, first_aid_location, hypoglycemia_kit_location, fire_extinguisher_location, aed_location"
     )
     .eq("id", id)
     .single<ClientHomeInfo>();
@@ -137,6 +142,7 @@ export default async function HomeInfoPage({
   }
 
   if (!client) notFound();
+  const clientWithPhoto = await withClientPhotoDisplayUrl(supabase, client);
 
   // 1. Fetch allergies
   let allergies: Allergy[] = [];
@@ -277,7 +283,7 @@ export default async function HomeInfoPage({
       {/* Tab content */}
       {(currentTab === "view" || (!canManage && currentTab === "edit")) && (
         <ClientProfileView
-          client={client}
+          client={clientWithPhoto}
           allergies={allergies}
           documents={documents}
           pets={pets}
@@ -288,7 +294,7 @@ export default async function HomeInfoPage({
 
       {canManage && currentTab === "edit" && (
         <HomeInfoEditor
-          client={client}
+          client={clientWithPhoto}
           allergies={allergies}
           documents={documents}
           canEditWifi={profile.role === "admin"}
@@ -297,7 +303,7 @@ export default async function HomeInfoPage({
 
       {currentTab === "guide" && (
         canManage ? (
-          <EmergencyGuideEditor clientId={client.id} initialGuide={guide} client={client} />
+          <EmergencyGuideEditor clientId={client.id} initialGuide={guide} client={clientWithPhoto} />
         ) : (
           <ReadOnlyEmergencyGuide guide={guide} client={client} />
         )
@@ -334,7 +340,29 @@ function ClientProfileView({
   return (
     <div className="space-y-4">
       <section className="bg-white rounded-3xl shadow-soft p-5 grain-overlay">
-        <h2 className="font-display text-base text-ink-900 mb-3">Basic info</h2>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="font-display text-base text-ink-900">Basic info</h2>
+            <p className="text-xs text-ink-500">Client profile and home summary</p>
+          </div>
+          {!canManage && (
+            <ClientPhoto
+              name={client.full_name}
+              photoUrl={client.photo_display_url ?? client.photo_url}
+              size="md"
+            />
+          )}
+        </div>
+        {canManage && (
+          <div className="mb-4">
+            <ClientPhotoUploader
+              clientId={client.id}
+              orgId={client.organization_id}
+              clientName={client.full_name}
+              currentPhotoUrl={client.photo_display_url ?? client.photo_url}
+            />
+          </div>
+        )}
         <ReadOnly label="Address" value={client.address || "Location not set"} />
         <ReadOnly
           label="Geofence"

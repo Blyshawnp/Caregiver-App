@@ -10,6 +10,8 @@ import {
   PET_PHOTO_UPLOAD_ERROR,
 } from "@/lib/pet-photos";
 
+const PET_AVATAR_PRESETS = ["cat", "dog", "lion", "squirrel", "bunny", "bird"] as const;
+
 export default function PetsEditor({
   clientId,
   initialPets,
@@ -393,6 +395,22 @@ export default function PetsEditor({
                   disabled={uploading}
                   className="w-full text-xs text-ink-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-bold file:bg-forest-50 file:text-forest-700 hover:file:bg-forest-100 cursor-pointer"
                 />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {PET_AVATAR_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={uploading}
+                      onClick={() => {
+                        updateModalPetField("photo_url", `/avatar-presets/${preset}.svg`);
+                        updateModalPetField("photo_display_url", `/avatar-presets/${preset}.svg`);
+                      }}
+                      className="capitalize text-[10px] bg-cream-100 hover:bg-cream-200 text-ink-700 px-2 py-1 rounded-lg transition disabled:opacity-60"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
                 {uploading && <p className="text-[10px] text-forest-700 mt-1">Uploading image...</p>}
               </div>
 

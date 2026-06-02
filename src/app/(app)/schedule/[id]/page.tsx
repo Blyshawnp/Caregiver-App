@@ -15,6 +15,7 @@ import AcceptDeclineButtons from "./accept-decline-buttons";
 import LiveOnShiftCard from "./live-on-shift-card";
 import TopShiftActionArea from "./top-shift-action-area";
 import ForceCheckOutButton from "./force-check-out-button";
+import ForceAssignButton from "./force-assign-button";
 import AdminTimeAdjuster from "./admin-time-adjuster";
 import ReleaseShiftButton from "./release-shift-button";
 import ClaimShiftButton from "./claim-shift-button";
@@ -364,6 +365,17 @@ export default async function ShiftDetailPage({
   );
 
   const canEdit = profile?.role === "admin" || profile?.role === "client";
+  let caregiverOptions: Array<{ id: string; full_name: string | null }> = [];
+  if (canEdit) {
+    const { data: caregivers } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("organization_id", shift.organization_id)
+      .eq("role", "caregiver")
+      .neq("is_active", false)
+      .order("full_name", { ascending: true });
+    caregiverOptions = (caregivers ?? []) as Array<{ id: string; full_name: string | null }>;
+  }
   const isAssignedCaregiver =
     profile?.role === "caregiver" && profile.id === shift.caregiver_id;
   const isCaregiver = profile?.role === "caregiver";
@@ -840,6 +852,13 @@ export default async function ShiftDetailPage({
 
       {/* Actions */}
       <div className="space-y-2 mt-6">
+        {canEdit && caregiverOptions.length > 0 && (
+          <ForceAssignButton
+            shiftId={id}
+            caregivers={caregiverOptions}
+            currentCaregiverId={shift.caregiver_id}
+          />
+        )}
         {/* Released-shift actions: claim or take back */}
         {canClaim && profile?.id && profile.role === "caregiver" && (
           <ClaimShiftButton

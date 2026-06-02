@@ -391,16 +391,32 @@ function ClientProfileView({
         {pets.length === 0 ? (
           <p className="text-sm text-ink-500">No pets listed</p>
         ) : (
-          <div className="flex -space-x-2">
-            {pets.slice(0, 5).map((pet) => (
-              <div key={pet.id ?? pet.name} className="w-11 h-11 rounded-full border-2 border-white bg-cream-100 overflow-hidden grid place-items-center text-xs font-semibold text-forest-700">
-                {pet.photo_display_url ?? pet.photo_url ? (
-                  <img src={pet.photo_display_url ?? pet.photo_url!} alt={pet.name} className="w-full h-full object-cover" />
-                ) : (
-                  pet.name.slice(0, 1).toUpperCase()
-                )}
-              </div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {pets.slice(0, 4).map((pet) => {
+              const photoUrl = pet.photo_display_url ?? pet.photo_url;
+              return (
+                <Link
+                  key={pet.id ?? pet.name}
+                  href={`/clients/${client.id}/home-info?tab=pets`}
+                  className="flex items-center gap-3 rounded-2xl border border-cream-200 bg-cream-50/50 hover:bg-cream-100 p-3 transition"
+                >
+                  <span className="w-20 h-20 rounded-2xl bg-white overflow-hidden grid place-items-center text-lg font-semibold text-forest-700 shrink-0 border border-cream-200">
+                    {photoUrl ? (
+                      <img src={photoUrl} alt={pet.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <img src={petPresetForType(pet.pet_type)} alt={`${pet.name} preset avatar`} className="w-full h-full object-cover" />
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-ink-900 truncate">{pet.name}</span>
+                    <span className="block text-xs text-ink-500 capitalize">{pet.pet_type || "Pet"}</span>
+                    {(pet.medication_instructions || pet.emergency_notes || pet.behavior_notes) && (
+                      <span className="block text-[10px] text-terracotta-600 mt-1">Medication, emergency, or caution notes</span>
+                    )}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>
@@ -429,6 +445,15 @@ function ClientProfileView({
       </section>
     </div>
   );
+}
+
+function petPresetForType(type?: string | null) {
+  const normalized = (type ?? "").toLowerCase();
+  if (normalized.includes("cat")) return "/avatar-presets/cat.svg";
+  if (normalized.includes("dog")) return "/avatar-presets/dog.svg";
+  if (normalized.includes("bird")) return "/avatar-presets/bird.svg";
+  if (normalized.includes("rabbit") || normalized.includes("bunny")) return "/avatar-presets/bunny.svg";
+  return "/avatar-presets/dog.svg";
 }
 
 function ReadOnlyEmergencyGuide({

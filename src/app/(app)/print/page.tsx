@@ -177,7 +177,13 @@ export default async function PrintViewPage({
             }
           }
 
-          const fileUrl = `https://xunvxasgoxhujshmhkqy.supabase.co/storage/v1/object/authenticated/client-documents/${doc.storage_path}`;
+          const { data: signedFile, error: signedFileError } = await supabase.storage
+            .from("client-documents")
+            .createSignedUrl(doc.storage_path, 60 * 5);
+
+          if (signedFileError || !signedFile?.signedUrl) {
+            return <p className="text-sm text-terracotta-600">Could not open this private document for printing.</p>;
+          }
 
           return (
             <div className="space-y-4">
@@ -194,7 +200,7 @@ export default async function PrintViewPage({
               </div>
 
               <iframe
-                src={fileUrl}
+                src={signedFile.signedUrl}
                 title={doc.title}
                 className="w-full h-[600px] border border-cream-200 rounded-2xl shadow-soft bg-cream-50"
               />

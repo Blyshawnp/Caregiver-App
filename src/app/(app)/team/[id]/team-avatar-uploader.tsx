@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const AVATAR_UPLOAD_ERROR = "Profile photo could not be uploaded. Please try again.";
+const AVATAR_PRESETS = ["cat", "dog", "lion", "squirrel", "bunny", "bird"] as const;
 
 export default function TeamAvatarUploader({
   personId,
@@ -39,13 +40,9 @@ export default function TeamAvatarUploader({
       return;
     }
 
-    const { data: publicUrl } = supabase.storage
-      .from("avatars")
-      .getPublicUrl(data.path);
-
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ avatar_url: publicUrl.publicUrl })
+      .update({ avatar_url: data.path })
       .eq("id", personId);
 
     if (updateError) {
@@ -54,6 +51,25 @@ export default function TeamAvatarUploader({
         path: data.path,
         error: updateError.message,
       });
+      setError(AVATAR_UPLOAD_ERROR);
+      setUploading(false);
+      return;
+    }
+
+    setUploading(false);
+    router.refresh();
+  }
+
+  async function selectPreset(preset: (typeof AVATAR_PRESETS)[number]) {
+    setError(null);
+    setUploading(true);
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: `/avatar-presets/${preset}.svg` })
+      .eq("id", personId);
+
+    if (updateError) {
       setError(AVATAR_UPLOAD_ERROR);
       setUploading(false);
       return;
@@ -84,6 +100,19 @@ export default function TeamAvatarUploader({
       >
         {uploading ? "Uploading photo..." : `Upload photo for ${personName}`}
       </button>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {AVATAR_PRESETS.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            disabled={uploading}
+            onClick={() => void selectPreset(preset)}
+            className="capitalize text-[10px] bg-cream-100 hover:bg-cream-200 text-ink-700 px-2 py-1 rounded-lg transition disabled:opacity-60"
+          >
+            {preset}
+          </button>
+        ))}
+      </div>
       {error && <p className="text-xs text-terracotta-600 mt-1">{error}</p>}
     </div>
   );

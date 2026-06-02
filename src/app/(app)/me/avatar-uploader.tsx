@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import UserAvatar from "@/components/user-avatar";
 
+const AVATAR_PRESETS = ["cat", "dog", "lion", "squirrel", "bunny", "bird"] as const;
+
 export default function AvatarUploader({
   userId,
   fullName,
@@ -52,10 +54,28 @@ export default function AvatarUploader({
       return;
     }
 
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ avatar_url: data.publicUrl })
+      .update({ avatar_url: path })
+      .eq("id", userId);
+
+    if (updateError) {
+      setError(updateError.message);
+      setUploading(false);
+      return;
+    }
+
+    setUploading(false);
+    router.refresh();
+  }
+
+  async function selectPreset(preset: (typeof AVATAR_PRESETS)[number]) {
+    setError(null);
+    setUploading(true);
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: `/avatar-presets/${preset}.svg` })
       .eq("id", userId);
 
     if (updateError) {
@@ -87,6 +107,19 @@ export default function AvatarUploader({
         >
           {uploading ? "Uploading..." : avatarUrl ? "Change photo" : "Add photo"}
         </button>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {AVATAR_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              disabled={uploading}
+              onClick={() => void selectPreset(preset)}
+              className="capitalize text-[10px] bg-cream-100 hover:bg-cream-200 text-ink-700 px-2 py-1 rounded-lg transition disabled:opacity-60"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
         {error && <p className="text-xs text-terracotta-600 mt-1">{error}</p>}
       </div>
       <input

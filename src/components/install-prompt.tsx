@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-const DISMISS_UNTIL_KEY = "pwa_install_dismissed_until";
-const NEVER_SHOW_KEY = "pwa_install_never_show";
-const LAST_PROMPTED_KEY = "pwa_install_last_prompted_at";
+export const PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver_app_pwa_install_dismissed_until";
+export const PWA_INSTALL_NEVER_SHOW_KEY = "caregiver_app_pwa_install_never_show";
+export const PWA_INSTALL_LAST_PROMPTED_KEY = "caregiver_app_pwa_install_last_prompted_at";
 
 type Platform = "ios" | "android" | "desktop" | "unsupported";
 
@@ -31,17 +31,17 @@ function isStandalone(): boolean {
 function isPromptSuppressed(): boolean {
   if (typeof window === "undefined") return true;
   try {
-    const neverShow = localStorage.getItem(NEVER_SHOW_KEY);
+    const neverShow = localStorage.getItem(PWA_INSTALL_NEVER_SHOW_KEY);
     if (neverShow === "true") return true;
 
-    const dismissedUntil = localStorage.getItem(DISMISS_UNTIL_KEY);
+    const dismissedUntil = localStorage.getItem(PWA_INSTALL_DISMISS_UNTIL_KEY);
     if (dismissedUntil) {
       const until = parseInt(dismissedUntil, 10);
       if (!isNaN(until) && Date.now() < until) return true;
     }
 
     // Avoid prompting repeatedly on every single page load
-    const lastPrompt = localStorage.getItem(LAST_PROMPTED_KEY);
+    const lastPrompt = localStorage.getItem(PWA_INSTALL_LAST_PROMPTED_KEY);
     if (lastPrompt) {
       const last = parseInt(lastPrompt, 10);
       // Wait at least 15 minutes between page load auto-prompts
@@ -71,7 +71,7 @@ export default function InstallPrompt() {
       const t = setTimeout(() => {
         setShow(true);
         try {
-          localStorage.setItem(LAST_PROMPTED_KEY, String(Date.now()));
+          localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
         } catch {}
       }, 5000);
       return () => clearTimeout(t);
@@ -83,7 +83,7 @@ export default function InstallPrompt() {
         setDeferredPrompt(e as BeforeInstallPromptEvent);
         setShow(true);
         try {
-          localStorage.setItem(LAST_PROMPTED_KEY, String(Date.now()));
+          localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
         } catch {}
       };
       window.addEventListener("beforeinstallprompt", handler);
@@ -95,7 +95,7 @@ export default function InstallPrompt() {
     setShow(false);
     // Suppress for 1 hour
     try {
-      localStorage.setItem(DISMISS_UNTIL_KEY, String(Date.now() + 3600_000));
+      localStorage.setItem(PWA_INSTALL_DISMISS_UNTIL_KEY, String(Date.now() + 3600_000));
     } catch {}
   }
 
@@ -104,7 +104,7 @@ export default function InstallPrompt() {
     setShowIosSheet(false);
     // Suppress for 24 hours
     try {
-      localStorage.setItem(DISMISS_UNTIL_KEY, String(Date.now() + 24 * 3600_000));
+      localStorage.setItem(PWA_INSTALL_DISMISS_UNTIL_KEY, String(Date.now() + 24 * 3600_000));
     } catch {}
   }
 
@@ -112,7 +112,7 @@ export default function InstallPrompt() {
     setShow(false);
     setShowIosSheet(false);
     try {
-      localStorage.setItem(NEVER_SHOW_KEY, "true");
+      localStorage.setItem(PWA_INSTALL_NEVER_SHOW_KEY, "true");
     } catch {}
   }
 

@@ -20,6 +20,13 @@ export function isPushSupported() {
   );
 }
 
+function isSecurePushContext() {
+  return (
+    typeof window !== "undefined" &&
+    (window.isSecureContext || window.location.hostname === "localhost")
+  );
+}
+
 export async function enablePushNotifications() {
   const logStep = (step: string, detail?: unknown) => {
     if (detail) {
@@ -31,7 +38,11 @@ export async function enablePushNotifications() {
 
   if (!isPushSupported()) {
     console.error("[push-enable] unsupported browser APIs");
-    throw new Error("Push notifications are not supported in this browser.");
+    throw new Error("Push notifications are not supported on this device/browser.");
+  }
+
+  if (!isSecurePushContext()) {
+    throw new Error("Push notifications require HTTPS. Open the secure app link and try again.");
   }
 
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -171,14 +182,32 @@ async function ensureServiceWorkerRegistration() {
 
   try {
     const existing = await navigator.serviceWorker.getRegistration("/");
-    if (existing) return existing;
-    return await withTimeout(
-      navigator.serviceWorker.register("/sw.js"),
-      15_000,
-      "Service worker registration timed out."
+    if (!existing) {
+      await withTimeout(
+        navigator.serviceWorker.register("/sw.js"),
+        15_000,
+        "Service worker registration timed out."
+      );
+    } else if (existing.installing || existing.waiting) {
+      existing.update().catch(() => {});
+    }
+
+    const readyRegistration = await withTimeout(
+      navigator.serviceWorker.ready,
+      20_000,
+      "Service worker not ready yet. Please try again."
     );
+
+    if (!readyRegistration.active) {
+      throw new Error("Service worker not ready yet. Please try again.");
+    }
+
+    return readyRegistration;
   } catch (error) {
     console.error("[push-enable] service worker registration failed", error);
+    if (error instanceof Error && error.message.includes("not ready")) {
+      throw error;
+    }
     throw new Error("Service worker registration failed. Refresh the app and try again.");
   }
 }

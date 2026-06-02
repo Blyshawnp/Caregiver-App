@@ -97,9 +97,8 @@ export default function DocumentItem({
   const docTypeName = documentTypesMap[doc.document_type] || doc.document_type;
   const canPrint = !doc.requires_print_approval || isAdmin || printRequest?.status === "approved";
 
-  // PDF Viewer link: Supabase public url or direct pdf asset viewer.
-  // We can view it directly in our print-friendly viewer `/print/document/[id]`.
-  const printUrl = `/print/document/${doc.id}`;
+  const printUrl = `/print?type=document&id=${doc.id}`;
+  const viewUrl = `/print?type=document&id=${doc.id}`;
 
   return (
     <li className={`bg-white rounded-3xl shadow-soft p-5 border border-cream-200/50 ${isExpired ? "bg-red-50/10" : ""}`}>
@@ -166,14 +165,12 @@ export default function DocumentItem({
           )}
 
           {/* Normal View/Download is always permitted */}
-          <a
-            href={`https://xunvxasgoxhujshmhkqy.supabase.co/storage/v1/object/authenticated/client-documents/${doc.storage_path}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href={viewUrl}
             className="text-xs border border-cream-300 hover:bg-cream-50 text-ink-700 px-3.5 py-2 rounded-xl font-medium transition flex items-center gap-1"
           >
             🖻 View PDF
-          </a>
+          </Link>
 
           {/* Print Approval workflows */}
           {doc.requires_print_approval && !isAdmin && (

@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 export type AvatarProfile = {
   full_name: string | null;
@@ -20,6 +22,48 @@ export default function UserAvatar({
   linkToProfile?: boolean;
   className?: string;
 }) {
+  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveAvatarUrl() {
+      setFailed(false);
+      const avatarUrl = person.avatar_url;
+      if (!avatarUrl) {
+        setDisplayUrl(null);
+        return;
+      }
+
+      if (avatarUrl.startsWith("/avatar-presets/")) {
+        setDisplayUrl(avatarUrl);
+        return;
+      }
+
+      const path = getAvatarStoragePath(avatarUrl);
+      if (!path) {
+        setDisplayUrl(avatarUrl);
+        return;
+      }
+
+      const supabase = createClient();
+      const { data, error } = await supabase.storage
+        .from("avatars")
+        .createSignedUrl(path, 60 * 60);
+
+      if (!cancelled) {
+        setDisplayUrl(error ? null : data?.signedUrl ?? null);
+      }
+    }
+
+    void resolveAvatarUrl();
+    return () => {
+      cancelled = true;
+    };
+  }, [person.avatar_url]);
+
   const initials = person.full_name
     ? person.full_name
         .split(" ")
@@ -46,17 +90,72 @@ export default function UserAvatar({
         color: "#fff",
       }}
     >
-      {person.avatar_url ? (
+      {displayUrl && !failed ? (
         <img
-          src={person.avatar_url}
+          src={displayUrl}
           alt={person.full_name || "User"}
           className="w-full h-full object-cover"
+          onError={() => setFailed(true)}
         />
       ) : (
         <span className="font-display font-bold">{initials}</span>
       )}
     </div>
   );
+
+  const preview = previewOpen && displayUrl && !failed && (
+    <div
+      className="fixed inset-0 z-50 bg-ink-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={() => setPreviewOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${person.full_name || "User"} profile photo preview`}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-lifted max-w-sm w-full p-4"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <img
+          src={displayUrl}
+          alt={`${person.full_name || "User"} profile photo`}
+          className="w-full aspect-square object-cover rounded-2xl bg-cream-100"
+        />
+        <div className="flex gap-2 mt-3">
+          {person.id && (
+            <Link
+              href={`/profiles/${person.id}`}
+              className="flex-1 text-center bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
+            >
+              View profile
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(false)}
+            className="flex-1 bg-cream-100 hover:bg-cream-200 text-ink-800 py-2.5 rounded-xl text-sm font-medium transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (displayUrl && !failed) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setPreviewOpen(true)}
+          className="transition active:scale-95 rounded-full"
+          aria-label={`Preview ${person.full_name || "user"} photo`}
+        >
+          {content}
+        </button>
+        {preview}
+      </>
+    );
+  }
 
   if (linkToProfile && person.id) {
     return (
@@ -67,4 +166,16 @@ export default function UserAvatar({
   }
 
   return content;
+}
+
+function getAvatarStoragePath(value: string) {
+  if (!value) return null;
+  if (value.startsWith("http")) {
+    const marker = "/avatars/";
+    const index = value.indexOf(marker);
+    if (index === -1) return null;
+    return decodeURIComponent(value.slice(index + marker.length).split("?")[0]);
+  }
+  if (value.startsWith("/") || value.startsWith("data:")) return null;
+  return value;
 }

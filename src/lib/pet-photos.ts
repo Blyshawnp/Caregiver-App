@@ -25,6 +25,9 @@ export function buildPetPhotoPath(orgId: string, clientId: string, file: File) {
 
 export function parsePetPhotoReference(value: string | null) {
   if (!value) return null;
+  if (value.startsWith("/avatar-presets/")) {
+    return { url: value };
+  }
   if (!value.startsWith("http")) {
     return { bucket: PET_PHOTO_BUCKET, path: value };
   }

@@ -5,6 +5,8 @@ import HomeInfoEditor from "./home-info-editor";
 import EmergencyGuideEditor from "./emergency-guide-editor";
 import PetsEditor from "./pets-editor";
 import ClientChecklist from "./checklist";
+import PetsList from "@/components/pets-list";
+import { withPetPhotoDisplayUrls } from "@/lib/pet-photos";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,6 +18,7 @@ type ClientHomeInfo = {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  geofence_radius_meters: number | null;
   wifi_ssid: string | null;
   wifi_password: string | null;
   emergency_contact_1_name: string | null;
@@ -57,6 +60,28 @@ type Document = {
   mime_type: string | null;
   file_size_bytes: number | null;
   created_at: string;
+  signedUrl?: string | null;
+};
+
+type Pet = {
+  id?: string;
+  name: string;
+  pet_type: string;
+  sex: "Male" | "Female" | "Unknown" | null;
+  spayed_neutered: "Yes" | "No" | "Unknown" | null;
+  photo_url: string | null;
+  photo_display_url?: string | null;
+  feeding_instructions: string | null;
+  medication_instructions: string | null;
+  behavior_notes: string | null;
+  emergency_notes: string | null;
+  supplies_location: string | null;
+  vet_name: string | null;
+  vet_phone: string | null;
+  emergency_vet_phone: string | null;
+  microchip_number: string | null;
+  vaccine_info: string | null;
+  show_to_caregivers: boolean;
 };
 
 export default async function HomeInfoPage({
@@ -68,7 +93,8 @@ export default async function HomeInfoPage({
 }) {
   const { id } = await params;
   const { tab } = (await searchParams) ?? {};
-  const currentTab = tab === "guide" ? "guide" : tab === "pets" ? "pets" : "info";
+  const currentTab =
+    tab === "edit" ? "edit" : tab === "guide" ? "guide" : tab === "pets" ? "pets" : "view";
 
   const supabase = await createClient();
   const {
@@ -82,12 +108,13 @@ export default async function HomeInfoPage({
     .eq("id", user.id)
     .single<{ role: "admin" | "client" | "caregiver" | "family"; organization_id: string }>();
 
-  if (!profile || (profile.role === "caregiver" || profile.role === "family")) redirect("/me");
+  if (!profile) redirect("/me");
+  const canManage = profile.role === "admin" || profile.role === "client";
 
   const { data: client, error: clientError } = await supabase
     .from("clients")
     .select(
-      "id, full_name, organization_id, address, latitude, longitude, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes, preferred_hospital_name, preferred_hospital_address, preferred_hospital_phone, primary_physician_name, primary_physician_address, primary_physician_phone, has_panic_button, panic_button_location, has_medical_alert, medical_alert_location, first_aid_location, hypoglycemia_kit_location, fire_extinguisher_location, aed_location"
+      "id, full_name, organization_id, address, latitude, longitude, geofence_radius_meters, wifi_ssid, wifi_password, emergency_contact_1_name, emergency_contact_1_phone, emergency_contact_1_relationship, emergency_contact_2_name, emergency_contact_2_phone, emergency_contact_2_relationship, home_notes, preferred_hospital_name, preferred_hospital_address, preferred_hospital_phone, primary_physician_name, primary_physician_address, primary_physician_phone, has_panic_button, panic_button_location, has_medical_alert, medical_alert_location, first_aid_location, hypoglycemia_kit_location, fire_extinguisher_location, aed_location"
     )
     .eq("id", id)
     .single<ClientHomeInfo>();
@@ -135,7 +162,14 @@ export default async function HomeInfoPage({
       )
       .eq("client_id", client.id)
       .order("created_at", { ascending: false });
-    documents = (data ?? []) as Document[];
+    documents = await Promise.all(
+      ((data ?? []) as Document[]).map(async (doc) => {
+        const { data: signed } = await supabase.storage
+          .from("client-documents")
+          .createSignedUrl(doc.storage_path, 60 * 5);
+        return { ...doc, signedUrl: signed?.signedUrl ?? null };
+      })
+    );
   } catch {
     documents = [];
   }
@@ -154,7 +188,7 @@ export default async function HomeInfoPage({
     .eq("client_id", client.id)
     .order("created_at", { ascending: true });
 
-  const pets = petsData ?? [];
+  const pets = await withPetPhotoDisplayUrls(supabase, (petsData ?? []) as Pet[]);
 
   // Compute checklist metrics
   const isGeofenceSet = !!(client.address && client.latitude && client.longitude);
@@ -177,32 +211,47 @@ export default async function HomeInfoPage({
           {client.full_name}
         </h1>
         <p className="text-ink-500 text-sm">
-          Manage emergency plans, care circle instructions, and pet information.
+          {canManage
+            ? "View profile details, pets, documents, and emergency plans."
+            : "Client details, pets, and emergency information."}
         </p>
       </header>
 
-      {/* Completion Checklist */}
-      <ClientChecklist
-        isGeofenceSet={isGeofenceSet}
-        isContactsAdded={isContactsAdded}
-        isPetsConfigured={isPetsConfigured}
-        isGuideConfigured={isGuideConfigured}
-        isNotesAdded={isNotesAdded}
-        isAllergiesConfigured={isAllergiesConfigured}
-      />
+      {canManage && (
+        <ClientChecklist
+          isGeofenceSet={isGeofenceSet}
+          isContactsAdded={isContactsAdded}
+          isPetsConfigured={isPetsConfigured}
+          isGuideConfigured={isGuideConfigured}
+          isNotesAdded={isNotesAdded}
+          isAllergiesConfigured={isAllergiesConfigured}
+        />
+      )}
 
       {/* Navigation tabs */}
       <div className="flex gap-1.5 p-1 bg-cream-50 rounded-2xl border border-cream-200/80 mb-5 text-center no-print">
         <Link
-          href={`/clients/${client.id}/home-info?tab=info`}
+          href={`/clients/${client.id}/home-info`}
           className={`flex-1 text-xs py-2.5 rounded-xl font-medium transition ${
-            currentTab === "info"
+            currentTab === "view"
               ? "bg-white text-forest-700 shadow-sm"
               : "text-ink-500 hover:text-ink-900"
           }`}
         >
-          General & Home Info
+          View
         </Link>
+        {canManage && (
+          <Link
+            href={`/clients/${client.id}/home-info?tab=edit`}
+            className={`flex-1 text-xs py-2.5 rounded-xl font-medium transition ${
+              currentTab === "edit"
+                ? "bg-white text-forest-700 shadow-sm"
+                : "text-ink-500 hover:text-ink-900"
+            }`}
+          >
+            Edit Info
+          </Link>
+        )}
         <Link
           href={`/clients/${client.id}/home-info?tab=guide`}
           className={`flex-1 text-xs py-2.5 rounded-xl font-medium transition ${
@@ -226,7 +275,18 @@ export default async function HomeInfoPage({
       </div>
 
       {/* Tab content */}
-      {currentTab === "info" && (
+      {(currentTab === "view" || (!canManage && currentTab === "edit")) && (
+        <ClientProfileView
+          client={client}
+          allergies={allergies}
+          documents={documents}
+          pets={pets}
+          canManage={canManage}
+          guideEnabled={!!guide?.enabled}
+        />
+      )}
+
+      {canManage && currentTab === "edit" && (
         <HomeInfoEditor
           client={client}
           allergies={allergies}
@@ -236,12 +296,168 @@ export default async function HomeInfoPage({
       )}
 
       {currentTab === "guide" && (
-        <EmergencyGuideEditor clientId={client.id} initialGuide={guide} client={client} />
+        canManage ? (
+          <EmergencyGuideEditor clientId={client.id} initialGuide={guide} client={client} />
+        ) : (
+          <ReadOnlyEmergencyGuide guide={guide} client={client} />
+        )
       )}
 
       {currentTab === "pets" && (
-        <PetsEditor clientId={client.id} initialPets={pets} orgId={profile.organization_id} />
+        canManage ? (
+          <PetsEditor clientId={client.id} initialPets={pets} orgId={profile.organization_id} />
+        ) : (
+          <section className="bg-white rounded-3xl shadow-soft p-5 grain-overlay">
+            <PetsList pets={pets} readOnly={true} />
+          </section>
+        )
       )}
     </main>
+  );
+}
+
+function ClientProfileView({
+  client,
+  allergies,
+  documents,
+  pets,
+  canManage,
+  guideEnabled,
+}: {
+  client: ClientHomeInfo;
+  allergies: Allergy[];
+  documents: Document[];
+  pets: Pet[];
+  canManage: boolean;
+  guideEnabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <section className="bg-white rounded-3xl shadow-soft p-5 grain-overlay">
+        <h2 className="font-display text-base text-ink-900 mb-3">Basic info</h2>
+        <ReadOnly label="Address" value={client.address || "Location not set"} />
+        <ReadOnly
+          label="Geofence"
+          value={
+            client.latitude != null && client.longitude != null
+              ? `${client.geofence_radius_meters ?? 150}m radius`
+              : "Not set"
+          }
+        />
+        <ReadOnly label="Preferred hospital" value={client.preferred_hospital_name || "Not set"} />
+        <ReadOnly label="Primary physician" value={client.primary_physician_name || "Not set"} />
+        {client.home_notes ? (
+          <p className="text-sm text-ink-700 whitespace-pre-wrap mt-3">{client.home_notes}</p>
+        ) : (
+          <p className="text-sm text-ink-500 mt-3">No home notes listed.</p>
+        )}
+      </section>
+
+      <section className="bg-white rounded-3xl shadow-soft p-5 grain-overlay">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="font-display text-base text-ink-900">Pets ({pets.length})</h2>
+          <Link href={`/clients/${client.id}/home-info?tab=pets`} className="text-sm text-forest-600 font-medium hover:underline">
+            View pets
+          </Link>
+        </div>
+        {pets.length === 0 ? (
+          <p className="text-sm text-ink-500">No pets listed</p>
+        ) : (
+          <div className="flex -space-x-2">
+            {pets.slice(0, 5).map((pet) => (
+              <div key={pet.id ?? pet.name} className="w-11 h-11 rounded-full border-2 border-white bg-cream-100 overflow-hidden grid place-items-center text-xs font-semibold text-forest-700">
+                {pet.photo_display_url ?? pet.photo_url ? (
+                  <img src={pet.photo_display_url ?? pet.photo_url!} alt={pet.name} className="w-full h-full object-cover" />
+                ) : (
+                  pet.name.slice(0, 1).toUpperCase()
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-2">
+        <Link href={`/clients/${client.id}/home-info?tab=guide`} className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition">
+          <span>
+            <span className="block font-medium text-ink-900">Emergency guide</span>
+            <span className="block text-xs text-ink-500">{guideEnabled ? "Preparedness instructions available" : "No emergency guide enabled"}</span>
+          </span>
+          <span className="text-ink-300">→</span>
+        </Link>
+        <Link href="/documents" className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition">
+          <span>
+            <span className="block font-medium text-ink-900">Documents ({documents.length})</span>
+            <span className="block text-xs text-ink-500">Care documents and instructions</span>
+          </span>
+          <span className="text-ink-300">→</span>
+        </Link>
+        {canManage && (
+          <Link href={`/clients/${client.id}/home-info?tab=edit`} className="flex items-center justify-between bg-forest-600 hover:bg-forest-700 text-cream-50 px-5 py-4 rounded-2xl shadow-soft transition">
+            <span className="font-medium">Edit client info</span>
+            <span>→</span>
+          </Link>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ReadOnlyEmergencyGuide({
+  guide,
+  client,
+}: {
+  guide: any;
+  client: ClientHomeInfo;
+}) {
+  if (!guide?.enabled) {
+    return (
+      <section className="bg-white rounded-3xl shadow-soft p-5 grain-overlay">
+        <p className="text-sm text-ink-500">No emergency guide is enabled for this client.</p>
+      </section>
+    );
+  }
+
+  const items = [
+    ["Medical emergency", guide.medical_emergency_plan],
+    ["Fall plan", guide.fall_plan],
+    ["Fire evacuation", guide.fire_evacuation_plan],
+    ["Severe weather", guide.severe_weather_plan],
+    ["Power outage", guide.power_outage_plan],
+    ["Pet evacuation", guide.pet_evacuation_plan],
+    ["Supplies", guide.supplies_location],
+    ["Backup contact", guide.backup_contact_instructions],
+    ["Mobility equipment", guide.mobility_equipment],
+    ["Oxygen / fire risk", guide.oxygen_fire_risk],
+    ["Emergency access", guide.access_notes],
+    ["Other", guide.other_instructions],
+  ].filter(([, value]) => typeof value === "string" && value.trim());
+
+  return (
+    <section className="bg-white rounded-3xl shadow-soft p-5 grain-overlay">
+      <h2 className="font-display text-base text-ink-900 mb-3">Emergency guide</h2>
+      <ReadOnly label="Preferred hospital" value={client.preferred_hospital_name || guide.hospital_preference || "Not set"} />
+      <div className="space-y-3 mt-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-ink-500">No guide details listed.</p>
+        ) : (
+          items.map(([label, value]) => (
+            <div key={label} className="rounded-2xl bg-cream-50 border border-cream-200 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-ink-500">{label}</p>
+              <p className="text-sm text-ink-900 whitespace-pre-wrap">{value}</p>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ReadOnly({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center py-2 border-b border-cream-200 last:border-b-0">
+      <span className="text-xs uppercase tracking-wide text-ink-500">{label}</span>
+      <span className="text-sm text-ink-900 text-right">{value}</span>
+    </div>
   );
 }

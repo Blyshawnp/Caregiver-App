@@ -4,6 +4,11 @@ import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import PetsList, { type Pet } from "@/components/pets-list";
+import {
+  buildPetPhotoPath,
+  PET_PHOTO_BUCKET,
+  PET_PHOTO_UPLOAD_ERROR,
+} from "@/lib/pet-photos";
 
 export default function PetsEditor({
   clientId,
@@ -112,28 +117,43 @@ export default function PetsEditor({
 
     try {
       const supabase = createClient();
-      const ext = file.name.split(".").pop();
-      const path = `${orgId}/pets/${crypto.randomUUID()}.${ext}`;
+      const path = buildPetPhotoPath(orgId, clientId, file);
 
       const { data, error: uploadError } = await supabase.storage
-        .from("client-documents")
-        .upload(path, file);
+        .from(PET_PHOTO_BUCKET)
+        .upload(path, file, {
+          cacheControl: "3600",
+          contentType: file.type,
+          upsert: false,
+        });
 
       if (uploadError || !data) {
         throw new Error(uploadError?.message ?? "Photo upload failed.");
       }
 
       const { data: signedData, error: signedError } = await supabase.storage
-        .from("client-documents")
+        .from(PET_PHOTO_BUCKET)
         .createSignedUrl(data.path, 315360000);
 
       if (signedError || !signedData?.signedUrl) {
         throw new Error(signedError?.message ?? "Failed to generate signed URL.");
       }
 
-      updateModalPetField("photo_url", signedData.signedUrl);
+      setModalState((prev) => ({
+        ...prev,
+        pet: {
+          ...prev.pet,
+          photo_url: data.path,
+          photo_display_url: signedData.signedUrl,
+        },
+      }));
     } catch (err: any) {
-      setModalError(err.message ?? "Failed to upload photo.");
+      console.error("Pet photo upload failed", {
+        clientId,
+        orgId,
+        error: err?.message ?? err,
+      });
+      setModalError(PET_PHOTO_UPLOAD_ERROR);
     } finally {
       setUploading(false);
     }
@@ -347,16 +367,19 @@ export default function PetsEditor({
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-1.5">
                   Pet Photo
                 </label>
-                {modalPet.photo_url && (
+                {(modalPet.photo_display_url ?? modalPet.photo_url) && (
                   <div className="relative w-28 h-28 rounded-2xl overflow-hidden border border-cream-200 shadow-sm mb-2 bg-cream-50">
                     <img
-                      src={modalPet.photo_url}
+                      src={modalPet.photo_display_url ?? modalPet.photo_url!}
                       alt={modalPet.name}
                       className="w-full h-full object-cover"
                     />
                     <button
                       type="button"
-                      onClick={() => updateModalPetField("photo_url", null)}
+                      onClick={() => {
+                        updateModalPetField("photo_url", null);
+                        updateModalPetField("photo_display_url", null);
+                      }}
                       className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center text-[10px]"
                     >
                       ✕

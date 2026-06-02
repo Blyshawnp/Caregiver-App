@@ -10,6 +10,7 @@ export type Pet = {
   sex: "Male" | "Female" | "Unknown" | null;
   spayed_neutered: "Yes" | "No" | "Unknown" | null;
   photo_url: string | null;
+  photo_display_url?: string | null;
   feeding_instructions: string | null;
   medication_instructions: string | null;
   behavior_notes: string | null;
@@ -93,6 +94,8 @@ export default function PetsList({
           {pets.map((pet, idx) => {
             const hasMeds = !!pet.medication_instructions?.trim();
             const hasEmerg = !!pet.emergency_notes?.trim();
+            const hasBehavior = !!pet.behavior_notes?.trim();
+            const photoUrl = pet.photo_display_url ?? pet.photo_url;
 
             return (
               <article
@@ -102,9 +105,9 @@ export default function PetsList({
               >
                 {/* Photo Header */}
                 <div className="relative h-44 w-full bg-cream-100 shrink-0 overflow-hidden">
-                  {pet.photo_url ? (
+                  {photoUrl ? (
                     <img
-                      src={pet.photo_url}
+                      src={photoUrl}
                       alt={pet.name}
                       className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
                     />
@@ -137,7 +140,7 @@ export default function PetsList({
                   </div>
 
                   {/* Warning / indicator badges */}
-                  {(hasMeds || hasEmerg) && (
+                  {(hasMeds || hasEmerg || hasBehavior) && (
                     <div className="flex flex-wrap gap-1.5 mt-3.5 pt-3 border-t border-cream-100/60">
                       {hasMeds && (
                         <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-100 text-[9px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-lg">
@@ -147,6 +150,11 @@ export default function PetsList({
                       {hasEmerg && (
                         <span className="inline-flex items-center gap-1 bg-terracotta-500/10 text-terracotta-700 border border-terracotta-450/15 text-[9px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-lg">
                           ⚠️ Emerg Notes
+                        </span>
+                      )}
+                      {hasBehavior && (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-100 text-[9px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-lg">
+                          ⚠️ Caution
                         </span>
                       )}
                     </div>
@@ -164,9 +172,9 @@ export default function PetsList({
           <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-lifted border border-cream-200/50 flex flex-col animate-scale-in">
             {/* Modal Photo Header */}
             <div className="relative h-60 w-full bg-cream-200 shrink-0">
-              {selectedPet.photo_url ? (
+              {selectedPet.photo_display_url ?? selectedPet.photo_url ? (
                 <img
-                  src={selectedPet.photo_url}
+                  src={selectedPet.photo_display_url ?? selectedPet.photo_url!}
                   alt={selectedPet.name}
                   className="w-full h-full object-cover"
                 />

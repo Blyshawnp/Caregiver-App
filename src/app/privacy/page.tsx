@@ -20,6 +20,7 @@ export default function PrivacyPage() {
           <li><strong>Care Circle Profiles:</strong> User roles (admin, caregiver, client, family).</li>
           <li><strong>Client & Home Info:</strong> Name, address, entry notes, Wi-Fi details, and home notes.</li>
           <li><strong>Emergency & Health Logs:</strong> Emergency contacts, allergy records, medication instructions, and home safety device locations.</li>
+          <li><strong>Pets:</strong> Pet profiles, care instructions, emergency notes, and pet photos uploaded by authorized users.</li>
           <li><strong>Schedules & Check-ins:</strong> Shift history, timestamps, geofence verification details, and check-in coordinates.</li>
           <li><strong>Task Logs:</strong> Checkboxes, PRN statuses, notes, and task completion records.</li>
           <li><strong>Communications:</strong> Internal messages, notifications, incident notes, and commendations or feedback.</li>
@@ -44,7 +45,7 @@ export default function PrivacyPage() {
 
       <Section title="Information Sharing">
         <p>
-          Data is shared strictly within your private care circle. Caregivers see home access notes, medications, allergies, and checklists. Caregivers cannot see sensitive billing matrices or other caregiver pay rates.
+          Data is shared strictly within your private care circle. Caregivers see home access notes, medications, allergies, pet information/photos permitted for their work, and checklists. Caregivers cannot see sensitive billing matrices or other caregiver pay rates.
         </p>
         <p className="mt-2">
           We do not sell user data. Information is shared with third-party service providers (such as hosting, database, and email delivery platforms) only as required to run the application, or when legally compelled.

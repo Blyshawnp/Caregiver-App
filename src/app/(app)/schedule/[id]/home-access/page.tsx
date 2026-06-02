@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import HomeInfoCard from "@/components/home-info-card";
 import type { Role } from "@/lib/db-types";
 import PetsList from "@/components/pets-list";
+import { withPetPhotoDisplayUrls } from "@/lib/pet-photos";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -82,7 +83,7 @@ export default async function ShiftHomeAccessPage({
     .eq("show_to_caregivers", true)
     .order("created_at", { ascending: true });
 
-  const pets = petsRows ?? [];
+  const pets = await withPetPhotoDisplayUrls(supabase, petsRows ?? []);
 
   const documents = await Promise.all(
     ((documentRows ?? []) as Omit<ClientDocument, "signedUrl">[]).map(
@@ -144,7 +145,7 @@ export default async function ShiftHomeAccessPage({
           href={`/clients/${shift.client_id}/home-info`}
           className="mt-4 flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-3.5 rounded-2xl shadow-soft text-ink-900 font-medium transition"
         >
-          Edit home info
+          View client profile
           <span className="text-ink-300">→</span>
         </Link>
       )}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentPosition } from "@/lib/geo";
 import { MapPinIcon } from "@/components/icons";
@@ -15,7 +16,13 @@ type Client = {
   geofence_radius_meters: number;
 };
 
-export default function ClientsList({ clients }: { clients: Client[] }) {
+export default function ClientsList({
+  clients,
+  canManage,
+}: {
+  clients: Client[];
+  canManage: boolean;
+}) {
   if (clients.length === 0) {
     return (
       <div className="bg-white rounded-3xl p-10 shadow-soft text-center grain-overlay">
@@ -31,14 +38,20 @@ export default function ClientsList({ clients }: { clients: Client[] }) {
     <ul className="space-y-3">
       {clients.map((c) => (
         <li key={c.id}>
-          <ClientCard client={c} />
+          <ClientCard client={c} canManage={canManage} />
         </li>
       ))}
     </ul>
   );
 }
 
-function ClientCard({ client }: { client: Client }) {
+function ClientCard({
+  client,
+  canManage,
+}: {
+  client: Client;
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [address, setAddress] = useState(client.address ?? "");
@@ -125,12 +138,14 @@ function ClientCard({ client }: { client: Client }) {
                 <p className="text-sm text-ink-500 mt-0.5">{client.address}</p>
               )}
             </div>
-            <button
-              onClick={() => setEditing(true)}
-              className="text-sm text-forest-600 font-medium hover:underline shrink-0"
-            >
-              Edit
-            </button>
+            {canManage && (
+              <button
+                onClick={() => setEditing(true)}
+                className="text-sm text-forest-600 font-medium hover:underline shrink-0"
+              >
+                Edit
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-sm">
@@ -149,12 +164,12 @@ function ClientCard({ client }: { client: Client }) {
             </span>
           </div>
 
-          <a
+          <Link
             href={`/clients/${client.id}/home-info`}
             className="block mt-4 bg-cream-50 hover:bg-cream-100 text-forest-600 border border-forest-500/20 px-4 py-2.5 rounded-xl text-sm font-medium text-center transition"
           >
-            Edit home info (wifi, contacts, notes) →
-          </a>
+            View client profile →
+          </Link>
         </div>
       </div>
     );

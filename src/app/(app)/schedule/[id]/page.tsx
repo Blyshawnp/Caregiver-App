@@ -381,6 +381,18 @@ export default async function ShiftDetailPage({
     !checkIn?.check_in_time &&
     !isReleased &&
     !shiftStatus.isExpired;
+  let visiblePetCount = 0;
+  if (shift.client_id && canShowClientDetails) {
+    let petCountQuery = supabase
+      .from("client_pets")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", shift.client_id);
+    if (isCaregiver) {
+      petCountQuery = petCountQuery.eq("show_to_caregivers", true);
+    }
+    const { count } = await petCountQuery;
+    visiblePetCount = count ?? 0;
+  }
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -650,6 +662,23 @@ export default async function ShiftDetailPage({
               </span>
               <span className="block text-xs text-ink-500">
                 Wi-Fi and house notes
+              </span>
+            </span>
+            <ArrowRightIcon size={16} className="text-ink-300" />
+          </Link>
+        )}
+
+        {shift.client_id && visiblePetCount > 0 && canShowClientDetails && (
+          <Link
+            href={`/clients/${shift.client_id}/home-info?tab=pets`}
+            className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition"
+          >
+            <span>
+              <span className="block font-medium text-ink-900">
+                Pets ({visiblePetCount})
+              </span>
+              <span className="block text-xs text-ink-500">
+                Photos, feeding, medication, behavior, and emergency notes
               </span>
             </span>
             <ArrowRightIcon size={16} className="text-ink-300" />

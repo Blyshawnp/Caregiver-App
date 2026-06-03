@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AvatarPresetGrid } from "@/components/avatar-preset-picker";
 import { createClient } from "@/lib/supabase/client";
 import PetsList, { type Pet } from "@/components/pets-list";
 import {
@@ -9,8 +10,7 @@ import {
   PET_PHOTO_BUCKET,
   PET_PHOTO_UPLOAD_ERROR,
 } from "@/lib/pet-photos";
-
-const PET_AVATAR_PRESETS = ["cat", "dog", "lion", "squirrel", "bunny", "bird"] as const;
+import { useTranslation } from "@/lib/use-translation";
 
 export default function PetsEditor({
   clientId,
@@ -22,6 +22,7 @@ export default function PetsEditor({
   orgId: string;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [isPending, startTransition] = useTransition();
   const [pets, setPets] = useState<Pet[]>(initialPets.length > 0 ? initialPets : []);
   const [saving, setSaving] = useState(false);
@@ -395,21 +396,29 @@ export default function PetsEditor({
                   disabled={uploading}
                   className="w-full text-xs text-ink-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-bold file:bg-forest-50 file:text-forest-700 hover:file:bg-forest-100 cursor-pointer"
                 />
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {PET_AVATAR_PRESETS.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      disabled={uploading}
-                      onClick={() => {
-                        updateModalPetField("photo_url", `/avatar-presets/${preset}.svg`);
-                        updateModalPetField("photo_display_url", `/avatar-presets/${preset}.svg`);
-                      }}
-                      className="capitalize text-[10px] bg-cream-100 hover:bg-cream-200 text-ink-700 px-2 py-1 rounded-lg transition disabled:opacity-60"
+                <div className="mt-3 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">
+                    {t("avatar.animalAvatars")}
+                  </p>
+                  <AvatarPresetGrid
+                    selectedPath={modalPet.photo_url}
+                    disabled={uploading}
+                    selectedLabel={t("avatar.avatarSelected")}
+                    onSelect={(preset) => {
+                      updateModalPetField("photo_url", preset.path);
+                      updateModalPetField("photo_display_url", preset.path);
+                    }}
+                  />
+                  <p className="text-[11px] text-ink-500">
+                    <a
+                      href="https://www.vecteezy.com/free-png/animal-icons"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-forest-700 hover:underline"
                     >
-                      {preset}
-                    </button>
-                  ))}
+                      {t("avatar.vecteezyAttribution")}
+                    </a>
+                  </p>
                 </div>
                 {uploading && <p className="text-[10px] text-forest-700 mt-1">Uploading image...</p>}
               </div>

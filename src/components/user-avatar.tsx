@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { resolveAvatarPresetPath } from "@/lib/avatar-presets";
 
 export type AvatarProfile = {
   full_name: string | null;
@@ -37,8 +38,9 @@ export default function UserAvatar({
         return;
       }
 
-      if (avatarUrl.startsWith("/avatar-presets/")) {
-        setDisplayUrl(avatarUrl);
+      const presetPath = resolveAvatarPresetPath(avatarUrl);
+      if (presetPath?.startsWith("/avatar-presets/")) {
+        setDisplayUrl(presetPath);
         return;
       }
 

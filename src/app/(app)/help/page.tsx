@@ -165,6 +165,19 @@ export default async function HelpPage() {
           </ul>
         </Section>
 
+        <Section title="Credits">
+          <p className="text-sm text-ink-700">
+            <a
+              href="https://www.vecteezy.com/free-png/animal-icons"
+              target="_blank"
+              rel="noreferrer"
+              className="text-forest-700 hover:underline"
+            >
+              Animal Icons PNGs by Vecteezy
+            </a>
+          </p>
+        </Section>
+
         <Section title="Feedback & Commendations">
           <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
             <li>Clients and families can submit positive commendations, thank you notes, concerns, or complaints about caregivers via <strong>Me &rarr; Submit caregiver feedback</strong>.</li>

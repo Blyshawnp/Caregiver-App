@@ -449,11 +449,13 @@ function ClientProfileView({
 
 function petPresetForType(type?: string | null) {
   const normalized = (type ?? "").toLowerCase();
-  if (normalized.includes("cat")) return "/avatar-presets/cat.svg";
-  if (normalized.includes("dog")) return "/avatar-presets/dog.svg";
-  if (normalized.includes("bird")) return "/avatar-presets/bird.svg";
-  if (normalized.includes("rabbit") || normalized.includes("bunny")) return "/avatar-presets/bunny.svg";
-  return "/avatar-presets/dog.svg";
+  if (normalized.includes("cat")) return "/avatar-presets/cat.png";
+  if (normalized.includes("dog")) return "/avatar-presets/dog.png";
+  if (normalized.includes("bird")) return "/avatar-presets/paw.png";
+  if (normalized.includes("fish")) return "/avatar-presets/fish.png";
+  if (normalized.includes("reptile")) return "/avatar-presets/dinosaur.png";
+  if (normalized.includes("rabbit") || normalized.includes("bunny")) return "/avatar-presets/paw.png";
+  return "/avatar-presets/paw.png";
 }
 
 function ReadOnlyEmergencyGuide({

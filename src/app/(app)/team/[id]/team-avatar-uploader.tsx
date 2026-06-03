@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import AvatarPickerModal from "@/components/avatar-preset-picker";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/lib/use-translation";
 
 const AVATAR_UPLOAD_ERROR = "Profile photo could not be uploaded. Please try again.";
-const AVATAR_PRESETS = ["cat", "dog", "lion", "squirrel", "bunny", "bird"] as const;
 
 export default function TeamAvatarUploader({
   personId,
@@ -15,9 +16,10 @@ export default function TeamAvatarUploader({
   personName: string;
 }) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   async function uploadAvatar(file: File) {
     setError(null);
@@ -37,7 +39,7 @@ export default function TeamAvatarUploader({
       });
       setError(AVATAR_UPLOAD_ERROR);
       setUploading(false);
-      return;
+      return false;
     }
 
     const { error: updateError } = await supabase
@@ -53,67 +55,82 @@ export default function TeamAvatarUploader({
       });
       setError(AVATAR_UPLOAD_ERROR);
       setUploading(false);
-      return;
+      return false;
     }
 
     setUploading(false);
     router.refresh();
+    return true;
   }
 
-  async function selectPreset(preset: (typeof AVATAR_PRESETS)[number]) {
+  async function savePreset(path: string) {
     setError(null);
     setUploading(true);
     const supabase = createClient();
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ avatar_url: `/avatar-presets/${preset}.svg` })
+      .update({ avatar_url: path })
       .eq("id", personId);
 
     if (updateError) {
       setError(AVATAR_UPLOAD_ERROR);
       setUploading(false);
-      return;
+      return false;
     }
 
     setUploading(false);
     router.refresh();
+    return true;
+  }
+
+  async function removePhoto() {
+    setError(null);
+    setUploading(true);
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_url: null })
+      .eq("id", personId);
+
+    if (updateError) {
+      setError(AVATAR_UPLOAD_ERROR);
+      setUploading(false);
+      return false;
+    }
+
+    setUploading(false);
+    router.refresh();
+    return true;
   }
 
   return (
     <div className="mt-3">
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) void uploadAvatar(file);
-          event.currentTarget.value = "";
-        }}
-      />
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => setPickerOpen(true)}
         disabled={uploading}
         className="text-sm text-forest-600 font-medium hover:underline disabled:opacity-50"
       >
-        {uploading ? "Uploading photo..." : `Upload photo for ${personName}`}
+        {uploading ? "Uploading photo..." : t("avatar.chooseProfilePicture")}
       </button>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {AVATAR_PRESETS.map((preset) => (
-          <button
-            key={preset}
-            type="button"
-            disabled={uploading}
-            onClick={() => void selectPreset(preset)}
-            className="capitalize text-[10px] bg-cream-100 hover:bg-cream-200 text-ink-700 px-2 py-1 rounded-lg transition disabled:opacity-60"
-          >
-            {preset}
-          </button>
-        ))}
-      </div>
       {error && <p className="text-xs text-terracotta-600 mt-1">{error}</p>}
+      <AvatarPickerModal
+        open={pickerOpen}
+        title={`${t("avatar.chooseProfilePicture")} - ${personName}`}
+        uploadLabel={t("avatar.uploadImage")}
+        chooseAvatarLabel={t("avatar.chooseAvatar")}
+        animalAvatarsLabel={t("avatar.animalAvatars")}
+        saveAvatarLabel={t("avatar.saveAvatar")}
+        removePhotoLabel={t("avatar.removePhoto")}
+        avatarSelectedLabel={t("avatar.avatarSelected")}
+        attributionLabel={t("avatar.vecteezyAttribution")}
+        saving={uploading}
+        error={error}
+        onClose={() => setPickerOpen(false)}
+        onUpload={uploadAvatar}
+        onSavePreset={savePreset}
+        onRemove={removePhoto}
+      />
     </div>
   );
 }

@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Dog avatar">
-  <rect width="128" height="128" rx="28" fill="#7cc4a4"/>
-  <path d="M36 38c-13 8-17 30-7 43 8 11 22 17 35 17s27-6 35-17c10-13 6-35-7-43-9-6-18 4-28 4s-19-10-28-4Z" fill="#fff4e8"/>
-  <path d="M34 42c-13 12-13 34-1 43 9-10 13-26 8-42-2-4-4-4-7-1Zm60 0c13 12 13 34 1 43-9-10-13-26-8-42 2-4 4-4 7-1Z" fill="#6b4f3a"/>
-  <circle cx="51" cy="67" r="5" fill="#1f2933"/><circle cx="77" cy="67" r="5" fill="#1f2933"/>
-  <path d="M64 75c5 0 8 3 8 6s-3 6-8 6-8-3-8-6 3-6 8-6Z" fill="#1f2933"/>
-</svg>

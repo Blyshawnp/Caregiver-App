@@ -1,3 +1,5 @@
+import { resolveAvatarPresetPath } from "@/lib/avatar-presets";
+
 export const PET_PHOTO_BUCKET = "pet-photos";
 export const PET_PHOTO_UPLOAD_ERROR =
   "Pet photo could not be uploaded. Please try again.";
@@ -25,8 +27,9 @@ export function buildPetPhotoPath(orgId: string, clientId: string, file: File) {
 
 export function parsePetPhotoReference(value: string | null) {
   if (!value) return null;
-  if (value.startsWith("/avatar-presets/")) {
-    return { url: value };
+  const presetPath = resolveAvatarPresetPath(value);
+  if (presetPath?.startsWith("/avatar-presets/")) {
+    return { url: presetPath };
   }
   if (!value.startsWith("http")) {
     return { bucket: PET_PHOTO_BUCKET, path: value };

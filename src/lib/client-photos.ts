@@ -1,3 +1,5 @@
+import { resolveAvatarPresetPath } from "@/lib/avatar-presets";
+
 export const CLIENT_PHOTO_BUCKET = "client-photos";
 export const CLIENT_PHOTO_UPLOAD_ERROR =
   "Client photo could not be uploaded. Please try again.";
@@ -20,6 +22,10 @@ export function buildClientPhotoPath(orgId: string, clientId: string, file: File
 
 function parseClientPhotoReference(value: string | null) {
   if (!value) return null;
+  const presetPath = resolveAvatarPresetPath(value);
+  if (presetPath?.startsWith("/avatar-presets/")) {
+    return { url: presetPath };
+  }
   if (!value.startsWith("http")) {
     return { bucket: CLIENT_PHOTO_BUCKET, path: value };
   }

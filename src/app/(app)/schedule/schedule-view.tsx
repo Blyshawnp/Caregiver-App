@@ -785,13 +785,15 @@ function MiniShiftAvatar({
 
   if (shift.caregiver_avatar_url) {
     return (
-      <img
-        src={shift.caregiver_avatar_url}
-        alt=""
-        className={`h-4 w-4 rounded-full object-cover ring-1 ${
-          selected ? "ring-cream-50/70" : "ring-black/10"
-        }`}
-        loading="lazy"
+      <UserAvatar
+        person={{
+          full_name: shift.caregiver_name,
+          avatar_url: shift.caregiver_avatar_url,
+          avatar_color: shift.caregiver_avatar_color,
+        }}
+        size="xs"
+        linkToProfile={false}
+        className={`!h-4 !w-4 !text-[7px] ring-1 ${selected ? "ring-cream-50/70" : "ring-black/10"}`}
       />
     );
   }

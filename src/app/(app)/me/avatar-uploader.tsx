@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import UserAvatar from "@/components/user-avatar";
 
 const AVATAR_PRESETS = ["cat", "dog", "lion", "squirrel", "bunny", "bird"] as const;
+const PROFILE_PHOTO_UPLOAD_ERROR = "Profile photo could not be uploaded. Please try again.";
 
 export default function AvatarUploader({
   userId,
@@ -49,7 +50,11 @@ export default function AvatarUploader({
       });
 
     if (uploadError) {
-      setError(uploadError.message);
+      console.error("Profile photo upload failed", {
+        userId,
+        error: uploadError.message,
+      });
+      setError(PROFILE_PHOTO_UPLOAD_ERROR);
       setUploading(false);
       return;
     }
@@ -60,7 +65,12 @@ export default function AvatarUploader({
       .eq("id", userId);
 
     if (updateError) {
-      setError(updateError.message);
+      console.error("Profile photo record update failed", {
+        userId,
+        path,
+        error: updateError.message,
+      });
+      setError(PROFILE_PHOTO_UPLOAD_ERROR);
       setUploading(false);
       return;
     }

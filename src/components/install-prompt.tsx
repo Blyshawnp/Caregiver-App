@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-export const PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver_app_pwa_install_dismissed_until";
-export const PWA_INSTALL_NEVER_SHOW_KEY = "caregiver_app_pwa_install_never_show";
-export const PWA_INSTALL_LAST_PROMPTED_KEY = "caregiver_app_pwa_install_last_prompted_at";
+export const PWA_INSTALL_NEVER_SHOW_KEY = "caregiver-app:pwa-install-never-show";
+export const PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver-app:pwa-install-dismissed-until";
+export const PWA_INSTALL_DISMISSED_SESSION_KEY = "caregiver-app:pwa-install-dismissed-session";
+export const PWA_INSTALL_LAST_PROMPTED_KEY = "caregiver-app:pwa-install-last-prompted-at";
+
+const LEGACY_PWA_INSTALL_NEVER_SHOW_KEY = "caregiver_app_pwa_install_never_show";
+const LEGACY_PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver_app_pwa_install_dismissed_until";
+const LEGACY_PWA_INSTALL_LAST_PROMPTED_KEY = "caregiver_app_pwa_install_last_prompted_at";
 
 type Platform = "ios" | "android" | "desktop" | "unsupported";
 
@@ -31,17 +36,26 @@ function isStandalone(): boolean {
 function isPromptSuppressed(): boolean {
   if (typeof window === "undefined") return true;
   try {
-    const neverShow = localStorage.getItem(PWA_INSTALL_NEVER_SHOW_KEY);
+    const neverShow =
+      localStorage.getItem(PWA_INSTALL_NEVER_SHOW_KEY) ??
+      localStorage.getItem(LEGACY_PWA_INSTALL_NEVER_SHOW_KEY);
     if (neverShow === "true") return true;
 
-    const dismissedUntil = localStorage.getItem(PWA_INSTALL_DISMISS_UNTIL_KEY);
+    const sessionDismissed = sessionStorage.getItem(PWA_INSTALL_DISMISSED_SESSION_KEY);
+    if (sessionDismissed === "true") return true;
+
+    const dismissedUntil =
+      localStorage.getItem(PWA_INSTALL_DISMISS_UNTIL_KEY) ??
+      localStorage.getItem(LEGACY_PWA_INSTALL_DISMISS_UNTIL_KEY);
     if (dismissedUntil) {
       const until = parseInt(dismissedUntil, 10);
       if (!isNaN(until) && Date.now() < until) return true;
     }
 
     // Avoid prompting repeatedly on every single page load
-    const lastPrompt = localStorage.getItem(PWA_INSTALL_LAST_PROMPTED_KEY);
+    const lastPrompt =
+      localStorage.getItem(PWA_INSTALL_LAST_PROMPTED_KEY) ??
+      localStorage.getItem(LEGACY_PWA_INSTALL_LAST_PROMPTED_KEY);
     if (lastPrompt) {
       const last = parseInt(lastPrompt, 10);
       // Wait at least 15 minutes between page load auto-prompts
@@ -93,9 +107,8 @@ export default function InstallPrompt() {
 
   function handleNotNow() {
     setShow(false);
-    // Suppress for 1 hour
     try {
-      localStorage.setItem(PWA_INSTALL_DISMISS_UNTIL_KEY, String(Date.now() + 3600_000));
+      sessionStorage.setItem(PWA_INSTALL_DISMISSED_SESSION_KEY, "true");
     } catch {}
   }
 

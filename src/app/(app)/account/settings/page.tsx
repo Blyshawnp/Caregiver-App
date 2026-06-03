@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { playNotificationSound } from "@/lib/notification-sounds";
 import {
+  PWA_INSTALL_DISMISSED_SESSION_KEY,
   PWA_INSTALL_DISMISS_UNTIL_KEY,
   PWA_INSTALL_LAST_PROMPTED_KEY,
   PWA_INSTALL_NEVER_SHOW_KEY,
@@ -456,9 +457,13 @@ export default function AccountSettingsPage() {
                     localStorage.removeItem("pwa_install_never_show");
                     localStorage.removeItem("pwa_install_dismissed_until");
                     localStorage.removeItem("pwa_install_last_prompted_at");
+                    localStorage.removeItem("caregiver_app_pwa_install_never_show");
+                    localStorage.removeItem("caregiver_app_pwa_install_dismissed_until");
+                    localStorage.removeItem("caregiver_app_pwa_install_last_prompted_at");
                     localStorage.removeItem(PWA_INSTALL_NEVER_SHOW_KEY);
                     localStorage.removeItem(PWA_INSTALL_DISMISS_UNTIL_KEY);
                     localStorage.removeItem(PWA_INSTALL_LAST_PROMPTED_KEY);
+                    sessionStorage.removeItem(PWA_INSTALL_DISMISSED_SESSION_KEY);
                     alert("PWA automatic install banners reset. Banners will show on next reload if applicable.");
                     window.location.reload();
                   } catch {}

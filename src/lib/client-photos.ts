@@ -18,20 +18,43 @@ export function buildClientPhotoPath(orgId: string, clientId: string, file: File
   return `${orgId}/${clientId}/${crypto.randomUUID()}.${ext}`;
 }
 
+function parseClientPhotoReference(value: string | null) {
+  if (!value) return null;
+  if (!value.startsWith("http")) {
+    return { bucket: CLIENT_PHOTO_BUCKET, path: value };
+  }
+
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(
+      /\/storage\/v1\/object\/(?:sign|public|authenticated)\/([^/]+)\/(.+)$/
+    );
+    if (!match) return { url: value };
+    return {
+      bucket: decodeURIComponent(match[1]),
+      path: decodeURIComponent(match[2]),
+    };
+  } catch {
+    return { url: value };
+  }
+}
+
 export async function getClientPhotoDisplayUrl(
   supabase: SupabaseStorageClient,
   photoUrl: string | null
 ) {
-  if (!photoUrl) return null;
-  if (photoUrl.startsWith("http")) return photoUrl;
+  const ref = parseClientPhotoReference(photoUrl);
+  if (!ref) return null;
+  if ("url" in ref) return ref.url;
 
   const { data, error } = await supabase.storage
-    .from(CLIENT_PHOTO_BUCKET)
-    .createSignedUrl(photoUrl, 60 * 60);
+    .from(ref.bucket)
+    .createSignedUrl(ref.path, 60 * 60);
 
   if (error || !data?.signedUrl) {
     console.error("Unable to sign client photo URL", {
-      path: photoUrl,
+      bucket: ref.bucket,
+      path: ref.path,
       error: error?.message,
     });
     return null;

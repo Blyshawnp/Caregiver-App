@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 type ClientPhotoProps = {
   name: string;
   photoUrl?: string | null;
@@ -15,6 +19,12 @@ export default function ClientPhoto({
   photoUrl,
   size = "md",
 }: ClientPhotoProps) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [photoUrl]);
+
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -27,8 +37,13 @@ export default function ClientPhoto({
     <div
       className={`${sizeClasses[size]} rounded-2xl bg-forest-100 text-forest-700 overflow-hidden grid place-items-center font-display font-semibold shrink-0 border border-cream-200`}
     >
-      {photoUrl ? (
-        <img src={photoUrl} alt={name} className="w-full h-full object-cover" />
+      {photoUrl && !failed ? (
+        <img
+          src={photoUrl}
+          alt={name}
+          className="w-full h-full object-cover"
+          onError={() => setFailed(true)}
+        />
       ) : (
         initials || "?"
       )}

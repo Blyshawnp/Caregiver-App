@@ -20,6 +20,16 @@ export function isPushSupported() {
   );
 }
 
+function isStandalonePwa() {
+  if (typeof window === "undefined") return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return nav.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+}
+
+function isIOSBrowser() {
+  return typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
 function isSecurePushContext() {
   return (
     typeof window !== "undefined" &&
@@ -38,7 +48,10 @@ export async function enablePushNotifications() {
 
   if (!isPushSupported()) {
     console.error("[push-enable] unsupported browser APIs");
-    throw new Error("Push notifications are not supported on this device/browser.");
+    if (isIOSBrowser() && !isStandalonePwa()) {
+      throw new Error("On iPhone or iPad, install the app to your Home Screen, open it from the Home Screen, then enable notifications.");
+    }
+    throw new Error("Push notifications are not supported on this device or browser.");
   }
 
   if (!isSecurePushContext()) {
@@ -70,7 +83,7 @@ export async function enablePushNotifications() {
       console.error("[push-enable] permission not granted", permission);
       throw new Error(
         permission === "denied"
-          ? "Notifications are blocked for this browser. Enable them in browser settings and try again."
+          ? "Notifications are blocked in your browser settings."
           : "Notification permission was dismissed."
       );
     }
@@ -181,35 +194,55 @@ async function ensureServiceWorkerRegistration() {
   }
 
   try {
-    const existing = await navigator.serviceWorker.getRegistration("/");
-    if (!existing) {
-      await withTimeout(
+    let registration = await navigator.serviceWorker.getRegistration("/");
+    if (!registration) {
+      registration = await withTimeout(
         navigator.serviceWorker.register("/sw.js"),
         15_000,
         "Service worker registration timed out."
       );
-    } else if (existing.installing || existing.waiting) {
-      existing.update().catch(() => {});
+    } else if (registration.installing || registration.waiting) {
+      registration.update().catch(() => {});
+    }
+
+    if (registration.installing) {
+      await waitForServiceWorkerActivation(registration.installing);
+    } else if (registration.waiting && !registration.active) {
+      await waitForServiceWorkerActivation(registration.waiting);
     }
 
     const readyRegistration = await withTimeout(
       navigator.serviceWorker.ready,
       20_000,
-      "Service worker not ready yet. Please try again."
+      "Service worker is still starting. Please try again in a moment."
     );
 
     if (!readyRegistration.active) {
-      throw new Error("Service worker not ready yet. Please try again.");
+      throw new Error("Service worker is still starting. Please try again in a moment.");
     }
 
     return readyRegistration;
   } catch (error) {
     console.error("[push-enable] service worker registration failed", error);
-    if (error instanceof Error && error.message.includes("not ready")) {
+    if (error instanceof Error && error.message.includes("still starting")) {
       throw error;
     }
     throw new Error("Service worker registration failed. Refresh the app and try again.");
   }
+}
+
+function waitForServiceWorkerActivation(worker: ServiceWorker) {
+  if (worker.state === "activated") return Promise.resolve();
+
+  return withTimeout(
+    new Promise<void>((resolve) => {
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "activated") resolve();
+      });
+    }),
+    20_000,
+    "Service worker is still starting. Please try again in a moment."
+  );
 }
 
 export async function getPushPreferences() {

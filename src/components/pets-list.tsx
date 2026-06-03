@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import { useEffect, useState } from "react";
 
 export type Pet = {
   id?: string;
@@ -105,17 +104,12 @@ export default function PetsList({
               >
                 {/* Photo Header */}
                 <div className="relative h-44 w-full bg-cream-100 shrink-0 overflow-hidden">
-                  {photoUrl ? (
-                    <img
-                      src={photoUrl}
-                      alt={pet.name}
-                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full grid place-items-center bg-gradient-to-br from-cream-100 to-cream-200 text-forest-600/30">
-                      <PawPrintIcon className="w-12 h-12 text-forest-600/20 group-hover:scale-[1.05] transition-transform duration-300" />
-                    </div>
-                  )}
+                  <PetPhotoImage
+                    src={photoUrl}
+                    alt={pet.name}
+                    imageClassName="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                    iconClassName="w-12 h-12 text-forest-600/20 group-hover:scale-[1.05] transition-transform duration-300"
+                  />
 
                   {/* Floating type badge */}
                   <span
@@ -172,17 +166,12 @@ export default function PetsList({
           <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-lifted border border-cream-200/50 flex flex-col animate-scale-in">
             {/* Modal Photo Header */}
             <div className="relative h-60 w-full bg-cream-200 shrink-0">
-              {selectedPet.photo_display_url ?? selectedPet.photo_url ? (
-                <img
-                  src={selectedPet.photo_display_url ?? selectedPet.photo_url!}
-                  alt={selectedPet.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full grid place-items-center bg-gradient-to-br from-cream-100 to-cream-200">
-                  <PawPrintIcon className="w-16 h-16 text-forest-600/20" />
-                </div>
-              )}
+              <PetPhotoImage
+                src={selectedPet.photo_display_url ?? selectedPet.photo_url}
+                alt={selectedPet.name}
+                imageClassName="w-full h-full object-cover"
+                iconClassName="w-16 h-16 text-forest-600/20"
+              />
               {/* Close Button */}
               <button
                 type="button"
@@ -359,6 +348,41 @@ export default function PetsList({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PetPhotoImage({
+  src,
+  alt,
+  imageClassName,
+  iconClassName,
+}: {
+  src?: string | null;
+  alt: string;
+  imageClassName: string;
+  iconClassName: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className={imageClassName}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <div className="w-full h-full grid place-items-center bg-gradient-to-br from-cream-100 to-cream-200">
+      <PawPrintIcon className={iconClassName} />
     </div>
   );
 }

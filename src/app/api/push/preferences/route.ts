@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import {
+  DEFAULT_CATEGORY_PREFERENCES,
+  normalizeCategoryPreferences,
+  type NotificationCategoryPreferenceMap,
+} from "@/lib/notification-preferences";
 
 type PreferencesPayload = {
   messages?: boolean;
@@ -10,6 +15,11 @@ type PreferencesPayload = {
   sounds_enabled?: boolean;
   message_sound_enabled?: boolean;
   urgent_incident_sound_enabled?: boolean;
+  category_preferences?: NotificationCategoryPreferenceMap;
+  privacy_safe_bodies?: boolean;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  urgent_override_quiet_hours?: boolean;
 };
 
 const DEFAULT_PREFERENCES = {
@@ -21,7 +31,15 @@ const DEFAULT_PREFERENCES = {
   sounds_enabled: true,
   message_sound_enabled: true,
   urgent_incident_sound_enabled: true,
+  category_preferences: DEFAULT_CATEGORY_PREFERENCES,
+  privacy_safe_bodies: true,
+  quiet_hours_start: null as string | null,
+  quiet_hours_end: null as string | null,
+  urgent_override_quiet_hours: true,
 };
+
+const PREFERENCE_SELECT =
+  "messages, shift_assignments, trades, incidents, general, sounds_enabled, message_sound_enabled, urgent_incident_sound_enabled, category_preferences, privacy_safe_bodies, quiet_hours_start, quiet_hours_end, urgent_override_quiet_hours";
 
 export async function GET() {
   const context = await getContext();
@@ -30,9 +48,7 @@ export async function GET() {
   const { supabase, userId, organizationId } = context;
   const { data, error } = await supabase
     .from("notification_preferences")
-    .select(
-      "messages, shift_assignments, trades, incidents, general, sounds_enabled, message_sound_enabled, urgent_incident_sound_enabled"
-    )
+    .select(PREFERENCE_SELECT)
     .eq("user_id", userId)
     .maybeSingle<typeof DEFAULT_PREFERENCES>();
 
@@ -48,9 +64,7 @@ export async function GET() {
         organization_id: organizationId,
         ...DEFAULT_PREFERENCES,
       })
-      .select(
-        "messages, shift_assignments, trades, incidents, general, sounds_enabled, message_sound_enabled, urgent_incident_sound_enabled"
-      )
+      .select(PREFERENCE_SELECT)
       .single<typeof DEFAULT_PREFERENCES>();
 
     if (insertError) {
@@ -60,7 +74,7 @@ export async function GET() {
     return NextResponse.json(inserted);
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json(normalizePreferences(data));
 }
 
 export async function PATCH(request: Request) {
@@ -69,7 +83,7 @@ export async function PATCH(request: Request) {
 
   const { supabase, userId, organizationId } = context;
   const payload = (await request.json()) as PreferencesPayload;
-  const update = pickBooleanFields(payload);
+  const update = pickPreferenceFields(payload);
 
   const { data, error } = await supabase
     .from("notification_preferences")
@@ -83,16 +97,14 @@ export async function PATCH(request: Request) {
       },
       { onConflict: "user_id" }
     )
-    .select(
-      "messages, shift_assignments, trades, incidents, general, sounds_enabled, message_sound_enabled, urgent_incident_sound_enabled"
-    )
+    .select(PREFERENCE_SELECT)
     .single<typeof DEFAULT_PREFERENCES>();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json(normalizePreferences(data));
 }
 
 async function getContext() {
@@ -122,7 +134,7 @@ async function getContext() {
   };
 }
 
-function pickBooleanFields(payload: PreferencesPayload) {
+function pickPreferenceFields(payload: PreferencesPayload) {
   const update: PreferencesPayload = {};
   const fields = [
     "messages",
@@ -139,5 +151,33 @@ function pickBooleanFields(payload: PreferencesPayload) {
       update[key] = payload[key];
     }
   }
+  if (payload.category_preferences) {
+    update.category_preferences = normalizeCategoryPreferences(payload.category_preferences);
+  }
+  if (typeof payload.privacy_safe_bodies === "boolean") {
+    update.privacy_safe_bodies = payload.privacy_safe_bodies;
+  }
+  if (typeof payload.urgent_override_quiet_hours === "boolean") {
+    update.urgent_override_quiet_hours = payload.urgent_override_quiet_hours;
+  }
+  if (typeof payload.quiet_hours_start === "string" || payload.quiet_hours_start === null) {
+    update.quiet_hours_start = normalizeTime(payload.quiet_hours_start);
+  }
+  if (typeof payload.quiet_hours_end === "string" || payload.quiet_hours_end === null) {
+    update.quiet_hours_end = normalizeTime(payload.quiet_hours_end);
+  }
   return update;
+}
+
+function normalizePreferences(value: typeof DEFAULT_PREFERENCES) {
+  return {
+    ...DEFAULT_PREFERENCES,
+    ...value,
+    category_preferences: normalizeCategoryPreferences(value.category_preferences),
+  };
+}
+
+function normalizeTime(value: string | null | undefined) {
+  if (!value) return null;
+  return /^\d{2}:\d{2}(:\d{2})?$/.test(value) ? value : null;
 }

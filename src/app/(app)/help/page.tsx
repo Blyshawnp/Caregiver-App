@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import RestartTutorialButton from "@/components/restart-tutorial-button";
+import { getSafeIntroVideoEmbedUrl } from "@/lib/intro-video";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +17,21 @@ export default async function HelpPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organizations(intro_video_url, intro_video_enabled)")
     .eq("id", user.id)
-    .single<{ role: Role }>();
+    .single<{
+      role: Role;
+      organizations: {
+        intro_video_url: string | null;
+        intro_video_enabled: boolean | null;
+      } | null;
+    }>();
 
   const role: Role = profile?.role ?? "caregiver";
+  const introVideoUrl =
+    profile?.organizations?.intro_video_enabled
+      ? getSafeIntroVideoEmbedUrl(profile.organizations.intro_video_url)
+      : null;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -136,7 +148,36 @@ export default async function HelpPage() {
             <li>The <strong>Messages</strong> tab supports 1-on-1 conversations between anyone in the org.</li>
             <li>Notifications appear in the bell icon at the top. The badge updates in real time.</li>
             <li>For system-level pop-up notifications, allow notification permission when prompted by your browser. On iOS, you must add the app to your home screen first.</li>
+            <li><strong>Notification categories:</strong> You can enable or disable Messages, Shift updates, Urgent/emergency alerts, Documents and print approvals, Payments and invoices, Schedule requests, Feedback/commendations, and Reminders separately from <strong>Me → Alerts</strong>.</li>
+            <li><strong>In-app tones:</strong> The app can play category-based sounds after you interact with the page. Because this is a PWA, the app cannot guarantee true phone-level custom notification sounds per category.</li>
+            <li>Future native Android or iOS packages can use OS notification channels or categories for deeper phone-level behavior.</li>
           </ul>
+        </Section>
+
+        <Section title="Tutorial, intro video, and checklist">
+          <div className="space-y-3 text-sm text-ink-700">
+            <p>
+              New users see a role-aware first-time tutorial after setup. It can be skipped and restarted from this Help page.
+            </p>
+            <RestartTutorialButton />
+            {introVideoUrl && (
+              <div className="aspect-video overflow-hidden rounded-2xl bg-cream-100 border border-cream-200">
+                <iframe
+                  src={introVideoUrl}
+                  title="Introduction video"
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            )}
+            <p>
+              Admins can add an optional YouTube or Vimeo intro video from Account & Settings. Keep it under two minutes when possible. If no valid video is configured, the tutorial and Help page skip the video area without showing a broken player.
+            </p>
+            <p>
+              The dashboard checklist suggests setup steps such as adding clients, documents, notifications, app install, and first-shift review. You can dismiss it when it is no longer useful.
+            </p>
+          </div>
         </Section>
 
         {role !== "caregiver" && (

@@ -135,8 +135,8 @@ self.addEventListener("push", (event) => {
       icon: "/icon-192.png",
       badge: "/icon-192.png",
       tag: payload.tag || "caregiver-notification",
-      renotify: payload.sound === "urgent",
-      requireInteraction: payload.sound === "urgent",
+      renotify: payload.sound === "urgent" || payload.sound === "urgent_alert",
+      requireInteraction: payload.sound === "urgent" || payload.sound === "urgent_alert",
       data: {
         url: payload.url || "/notifications",
         sound: payload.sound || "normal",

@@ -10,7 +10,14 @@ import {
   savePushPreferences,
   type PushPreferences,
 } from "@/lib/push-client";
-import { playNotificationSound } from "@/lib/notification-sounds";
+import { playNotificationTone } from "@/lib/notification-sounds";
+import {
+  NOTIFICATION_CATEGORY_OPTIONS,
+  TONE_OPTIONS,
+  normalizeCategoryPreferences,
+  type NotificationCategoryPreference,
+  type NotificationPreferenceCategory,
+} from "@/lib/notification-preferences";
 
 type PushDiagnostics = {
   browserPermission: string;
@@ -33,7 +40,7 @@ export default function NotificationSettings({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [prefs, setPrefs] = useState<PushPreferences>(initialPreferences);
+  const [prefs, setPrefs] = useState<PushPreferences>(normalizePrefs(initialPreferences));
   const [diagnostics, setDiagnostics] = useState<PushDiagnostics>({
     browserPermission: "unknown",
     serviceWorkerRegistered: false,
@@ -54,7 +61,7 @@ export default function NotificationSettings({
           getPushPreferences(),
         ]);
         setDeviceEnabled(status.enabled);
-        setPrefs(p);
+        setPrefs(normalizePrefs(p));
         await refreshDiagnostics(status);
       } catch {
         /* ignore */
@@ -96,6 +103,43 @@ export default function NotificationSettings({
     } catch {
       setPrefs(prefs);
     }
+  }
+
+  async function updatePreferencePatch(update: Partial<PushPreferences>) {
+    const next = normalizePrefs({ ...prefs, ...update });
+    setPrefs(next);
+    try {
+      const saved = await savePushPreferences(update);
+      setPrefs(normalizePrefs(saved));
+    } catch {
+      setPrefs(prefs);
+    }
+  }
+
+  async function updateCategoryPreference(
+    category: NotificationPreferenceCategory,
+    patch: Partial<NotificationCategoryPreference>
+  ) {
+    if (
+      category === "urgent_alerts" &&
+      (patch.enabled === false || patch.pushEnabled === false) &&
+      !window.confirm(
+        "Urgent and emergency alerts may include time-sensitive safety information. Disable this only if you have another reliable alert path."
+      )
+    ) {
+      return;
+    }
+
+    const categoryPreferences = normalizeCategoryPreferences(prefs.category_preferences);
+    await updatePreferencePatch({
+      category_preferences: {
+        ...categoryPreferences,
+        [category]: {
+          ...categoryPreferences[category],
+          ...patch,
+        },
+      },
+    });
   }
 
   const [testLoading, setTestLoading] = useState(false);
@@ -284,57 +328,159 @@ export default function NotificationSettings({
       </section>
 
       <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
-        <h2 className="font-display text-xl mb-4">Alert Types</h2>
+        <h2 className="font-display text-xl mb-2">Notification categories</h2>
+        <p className="text-xs text-ink-500 mb-4">
+          PWA push notifications cannot guarantee phone-level custom sounds. Tone choices below are in-app sounds that play after browser audio is allowed.
+        </p>
         <div className="space-y-4">
           <ToggleRow
-            label="Messages"
-            checked={prefs.messages}
-            onChange={(v) => updatePref("messages", v)}
-          />
-          <ToggleRow
-            label="Shift assignments"
-            checked={prefs.shift_assignments}
-            onChange={(v) => updatePref("shift_assignments", v)}
-          />
-          <ToggleRow
-            label="Incidents"
-            checked={prefs.incidents}
-            onChange={(v) => updatePref("incidents", v)}
-          />
-          <ToggleRow
-            label="Shift trades"
-            checked={prefs.trades}
-            onChange={(v) => updatePref("trades", v)}
-          />
-        </div>
-      </section>
-
-      <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
-        <h2 className="font-display text-xl mb-4">Sounds</h2>
-        <div className="space-y-4">
-          <ToggleRow
-            label="Enable notification sounds"
+            label="Enable all in-app sounds"
             checked={prefs.sounds_enabled}
             onChange={(v) => updatePref("sounds_enabled", v)}
           />
-          <div className="pt-2 flex gap-2">
-            <button
-              onClick={() => playNotificationSound("message")}
-              className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
-            >
-              Test Message
-            </button>
-            <button
-              onClick={() => playNotificationSound("urgent")}
-              className="text-[10px] bg-cream-100 text-ink-700 px-3 py-1.5 rounded-full font-medium"
-            >
-              Test Urgent
-            </button>
+          <ToggleRow
+            label="Use privacy-safe push text"
+            checked={prefs.privacy_safe_bodies}
+            onChange={(v) => updatePreferencePatch({ privacy_safe_bodies: v })}
+          />
+          <ToggleRow
+            label="Let urgent alerts bypass quiet hours"
+            checked={prefs.urgent_override_quiet_hours}
+            onChange={(v) => updatePreferencePatch({ urgent_override_quiet_hours: v })}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="text-xs font-semibold text-ink-700">
+              Quiet hours start
+              <input
+                type="time"
+                value={prefs.quiet_hours_start?.slice(0, 5) ?? ""}
+                onChange={(event) =>
+                  updatePreferencePatch({ quiet_hours_start: event.target.value || null })
+                }
+                className="mt-1 w-full bg-cream-50 border border-cream-200 rounded-xl px-3 py-2"
+              />
+            </label>
+            <label className="text-xs font-semibold text-ink-700">
+              Quiet hours end
+              <input
+                type="time"
+                value={prefs.quiet_hours_end?.slice(0, 5) ?? ""}
+                onChange={(event) =>
+                  updatePreferencePatch({ quiet_hours_end: event.target.value || null })
+                }
+                className="mt-1 w-full bg-cream-50 border border-cream-200 rounded-xl px-3 py-2"
+              />
+            </label>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            {NOTIFICATION_CATEGORY_OPTIONS.map((category) => {
+              const categoryPrefs = normalizeCategoryPreferences(prefs.category_preferences);
+              const current = categoryPrefs[category.id];
+              return (
+                <div
+                  key={category.id}
+                  className="rounded-2xl border border-cream-200 bg-cream-50/60 p-4 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink-900">{category.label}</h3>
+                      <p className="text-[11px] text-ink-500">{category.description}</p>
+                    </div>
+                    {category.urgent && (
+                      <span className="rounded-full bg-terracotta-100 text-terracotta-700 px-2 py-1 text-[10px] font-semibold">
+                        Safety
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <ToggleRow
+                      label="Enabled"
+                      checked={current.enabled}
+                      onChange={(v) => updateCategoryPreference(category.id, { enabled: v })}
+                    />
+                    <ToggleRow
+                      label="Push"
+                      checked={current.pushEnabled}
+                      onChange={(v) => updateCategoryPreference(category.id, { pushEnabled: v })}
+                    />
+                    <ToggleRow
+                      label="In-app sound"
+                      checked={current.inAppSoundEnabled}
+                      onChange={(v) =>
+                        updateCategoryPreference(category.id, { inAppSoundEnabled: v })
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                    <label className="text-xs font-semibold text-ink-700">
+                      Tone
+                      <select
+                        value={current.tone}
+                        onChange={(event) =>
+                          updateCategoryPreference(category.id, {
+                            tone: event.target.value as NotificationCategoryPreference["tone"],
+                          })
+                        }
+                        className="mt-1 w-full bg-white border border-cream-200 rounded-xl px-3 py-2"
+                      >
+                        {TONE_OPTIONS.map((tone) => (
+                          <option key={tone.id} value={tone.id}>
+                            {tone.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-ink-700">
+                      Volume ({Math.round(current.volume * 100)}%)
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={current.volume}
+                        onChange={(event) =>
+                          updateCategoryPreference(category.id, {
+                            volume: Number(event.target.value),
+                          })
+                        }
+                        className="mt-3 w-full accent-forest-600"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => playNotificationTone(current.tone, current.volume)}
+                      className="bg-cream-200 hover:bg-cream-300 text-ink-700 px-3 py-2 rounded-xl text-xs font-semibold"
+                    >
+                      Play test
+                    </button>
+                  </div>
+                  <ToggleRow
+                    label="Allow quiet hours for this category"
+                    checked={current.quietHoursAllowed}
+                    onChange={(v) =>
+                      updateCategoryPreference(category.id, { quietHoursAllowed: v })
+                    }
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
     </main>
   );
+}
+
+function normalizePrefs(prefs: PushPreferences): PushPreferences {
+  return {
+    ...prefs,
+    category_preferences: normalizeCategoryPreferences(prefs.category_preferences),
+    privacy_safe_bodies: prefs.privacy_safe_bodies ?? true,
+    quiet_hours_start: prefs.quiet_hours_start ?? null,
+    quiet_hours_end: prefs.quiet_hours_end ?? null,
+    urgent_override_quiet_hours: prefs.urgent_override_quiet_hours ?? true,
+  };
 }
 
 function Diag({ label, value }: { label: string; value: string }) {

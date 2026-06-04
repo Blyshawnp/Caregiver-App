@@ -1,5 +1,9 @@
 "use client";
 
+import type {
+  NotificationCategoryPreferenceMap,
+} from "@/lib/notification-preferences";
+
 export type PushPreferences = {
   messages: boolean;
   shift_assignments: boolean;
@@ -9,6 +13,11 @@ export type PushPreferences = {
   sounds_enabled: boolean;
   message_sound_enabled: boolean;
   urgent_incident_sound_enabled: boolean;
+  category_preferences: NotificationCategoryPreferenceMap;
+  privacy_safe_bodies: boolean;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  urgent_override_quiet_hours: boolean;
 };
 
 export function isPushSupported() {

@@ -1,5 +1,12 @@
 import crypto from "crypto";
 import { categoryForNotificationKind, soundForNotificationKind } from "@/lib/push-categories";
+import {
+  DEFAULT_CATEGORY_PREFERENCES,
+  normalizeCategoryPreferences,
+  preferenceCategoryForNotificationKind,
+  toneForNotificationKind,
+  type NotificationCategoryPreferenceMap,
+} from "@/lib/notification-preferences";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
 type PushSubscriptionRow = {
@@ -15,6 +22,11 @@ type NotificationPreferenceRow = {
   trades: boolean;
   incidents: boolean;
   general: boolean;
+  category_preferences: NotificationCategoryPreferenceMap | null;
+  privacy_safe_bodies: boolean | null;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  urgent_override_quiet_hours: boolean | null;
 };
 
 type NotificationRow = {
@@ -42,6 +54,11 @@ const DEFAULT_PREFS: NotificationPreferenceRow = {
   trades: true,
   incidents: true,
   general: true,
+  category_preferences: DEFAULT_CATEGORY_PREFERENCES,
+  privacy_safe_bodies: true,
+  quiet_hours_start: null,
+  quiet_hours_end: null,
+  urgent_override_quiet_hours: true,
 };
 
 export async function sendPushForNotifications(
@@ -88,7 +105,7 @@ export async function sendPushForNotifications(
 
   const { data: preferenceRows } = await admin
     .from("notification_preferences")
-    .select("user_id, messages, shift_assignments, trades, incidents, general")
+    .select("user_id, messages, shift_assignments, trades, incidents, general, category_preferences, privacy_safe_bodies, quiet_hours_start, quiet_hours_end, urgent_override_quiet_hours")
     .in("user_id", recipientIds);
 
   const prefsByUser = new Map<string, NotificationPreferenceRow>();
@@ -113,18 +130,36 @@ export async function sendPushForNotifications(
       const category = categoryForNotificationKind(notification.kind);
       const prefs = prefsByUser.get(notification.recipient_id) ?? DEFAULT_PREFS;
       if (!prefs[category]) return [];
+      const preferenceCategory = preferenceCategoryForNotificationKind(notification.kind);
+      const categoryPreferences = normalizeCategoryPreferences(prefs.category_preferences);
+      const categoryPref = categoryPreferences[preferenceCategory];
+      if (!categoryPref.enabled || !categoryPref.pushEnabled) return [];
+      if (
+        categoryPref.quietHoursAllowed &&
+        isQuietHoursNow(prefs.quiet_hours_start, prefs.quiet_hours_end) &&
+        !(preferenceCategory === "urgent_alerts" && prefs.urgent_override_quiet_hours !== false)
+      ) {
+        return [];
+      }
 
       const userSubscriptions =
         subscriptionsByUser.get(notification.recipient_id) ?? [];
 
       return userSubscriptions.map(async (subscription) => {
         attempted += 1;
+        const payloadTone = categoryPref.inAppSoundEnabled
+          ? categoryPref.tone
+          : "silent";
         const result = await sendWebPush(subscription, {
           title: notification.title,
-          body: notification.body ?? "",
+          body:
+            prefs.privacy_safe_bodies === false
+              ? notification.body ?? ""
+              : "Open the app to view details.",
           url: notification.link ?? "/notifications",
           tag: notification.kind,
-          sound: soundForNotificationKind(notification.kind),
+          sound: payloadTone === "default" ? toneForNotificationKind(notification.kind) : payloadTone,
+          legacySound: soundForNotificationKind(notification.kind),
           relatedShiftId: notification.related_shift_id ?? null,
         });
 
@@ -164,6 +199,25 @@ export async function sendPushForNotifications(
   };
 }
 
+function isQuietHoursNow(start: string | null, end: string | null) {
+  if (!start || !end) return false;
+  const startMinutes = toMinutes(start);
+  const endMinutes = toMinutes(end);
+  if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) return false;
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  if (startMinutes < endMinutes) {
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+  }
+  return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+}
+
+function toMinutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
 async function sendWebPush(
   subscription: PushSubscriptionRow,
   payload: Record<string, unknown>
@@ -188,7 +242,10 @@ async function sendWebPush(
       "Content-Encoding": "aes128gcm",
       "Content-Type": "application/octet-stream",
       Authorization: `vapid t=${jwt}, k=${vapidPublicKey}`,
-      Urgency: payload.sound === "urgent" ? "high" : "normal",
+      Urgency:
+        payload.sound === "urgent" || payload.sound === "urgent_alert"
+          ? "high"
+          : "normal",
     },
     body,
   });

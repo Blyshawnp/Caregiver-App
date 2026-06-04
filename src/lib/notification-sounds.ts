@@ -1,24 +1,45 @@
 "use client";
 
+import type { NotificationTone } from "@/lib/notification-preferences";
+
 type SoundKind = "message" | "normal" | "urgent";
 
-const FREQUENCIES: Record<SoundKind, number[]> = {
+const FREQUENCIES: Record<SoundKind | NotificationTone, number[]> = {
   message: [660, 880],
   normal: [520],
   urgent: [880, 660, 880],
+  default: [520],
+  soft_chime: [440, 660],
+  bell: [740, 988],
+  bright_alert: [784, 1046],
+  urgent_alert: [880, 660, 880],
+  silent: [],
 };
 
 let audioContext: AudioContext | null = null;
 
 export async function playNotificationSound(kind: SoundKind) {
+  return playNotificationTone(mapLegacySound(kind));
+}
+
+export async function playNotificationTone(
+  tone: NotificationTone,
+  requestedVolume?: number
+) {
   if (typeof window === "undefined") return false;
   try {
+    if (tone === "silent") return false;
     const enabledSetting = localStorage.getItem("notification_sound_enabled");
     if (enabledSetting === "false") {
       return false;
     }
     const volumeStr = localStorage.getItem("notification_sound_volume");
-    const volume = volumeStr !== null ? parseFloat(volumeStr) : 0.8;
+    const volume =
+      typeof requestedVolume === "number"
+        ? requestedVolume
+        : volumeStr !== null
+          ? parseFloat(volumeStr)
+          : 0.8;
 
     const AudioContextClass = window.AudioContext;
     if (!AudioContextClass) return false;
@@ -28,7 +49,7 @@ export async function playNotificationSound(kind: SoundKind) {
     }
 
     const start = audioContext.currentTime;
-    FREQUENCIES[kind].forEach((frequency, index) => {
+    FREQUENCIES[tone].forEach((frequency, index) => {
       if (!audioContext) return;
       const oscillator = audioContext.createOscillator();
       const gain = audioContext.createGain();
@@ -58,4 +79,10 @@ export async function playNotificationSound(kind: SoundKind) {
   } catch {
     return false;
   }
+}
+
+function mapLegacySound(kind: SoundKind): NotificationTone {
+  if (kind === "message") return "bell";
+  if (kind === "urgent") return "urgent_alert";
+  return "default";
 }

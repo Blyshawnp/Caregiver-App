@@ -8,6 +8,7 @@ import ShiftWatcher, {
 import InstallPrompt from "@/components/install-prompt";
 import PushPermissionPrompt from "@/components/push-permission-prompt";
 import PwaHealthCheck from "@/components/pwa-health-check";
+import OnboardingTutorial from "@/components/onboarding-tutorial";
 import type { Role } from "@/lib/db-types";
 import type { Lang } from "@/lib/i18n";
 
@@ -19,7 +20,13 @@ type ProfileWithOrg = {
   language: Lang | null;
   avatar_url: string | null;
   avatar_color: string | null;
-  organizations: { name: string } | null;
+  tutorial_completed: boolean | null;
+  organizations: {
+    name: string;
+    intro_video_url: string | null;
+    intro_video_enabled: boolean | null;
+    show_intro_video_on_first_login: boolean | null;
+  } | null;
 };
 
 type ActiveShiftRow = {
@@ -60,7 +67,7 @@ export default async function AppLayout({
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, organization_id, language, avatar_url, avatar_color, theme_preference, organizations(name)"
+      "id, full_name, role, organization_id, language, avatar_url, avatar_color, theme_preference, tutorial_completed, organizations(name, intro_video_url, intro_video_enabled, show_intro_video_on_first_login)"
     )
     .eq("id", user.id)
     .single<ProfileWithOrg & { theme_preference: string }>();
@@ -169,6 +176,13 @@ export default async function AppLayout({
       <InstallPrompt />
       <PushPermissionPrompt />
       <PwaHealthCheck />
+      <OnboardingTutorial
+        role={profile?.role ?? "caregiver"}
+        completed={!!profile?.tutorial_completed}
+        introVideoUrl={profile?.organizations?.intro_video_url ?? null}
+        introVideoEnabled={!!profile?.organizations?.intro_video_enabled}
+        showIntroVideoOnFirstLogin={!!profile?.organizations?.show_intro_video_on_first_login}
+      />
     </div>
   );
 }

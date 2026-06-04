@@ -1,4 +1,4 @@
-const LAST_UPDATED = "June 2, 2026";
+const LAST_UPDATED = "June 4, 2026";
 
 export default function PrivacyPage() {
   return (
@@ -26,6 +26,7 @@ export default function PrivacyPage() {
           <li><strong>Communications:</strong> Internal messages, notifications, incident notes, and commendations or feedback.</li>
           <li><strong>Invoices & Payments:</strong> Estimative caregiver pay rates, payment logs, and year-end summaries.</li>
           <li><strong>System Data:</strong> Browser type, device settings, operating system, push notification subscriptions, device metadata, and security logs.</li>
+          <li><strong>Notification, Tutorial, and Onboarding Settings:</strong> Notification category preferences, in-app tone and quiet-hour settings, privacy-safe notification body settings, tutorial completion or skip status, onboarding checklist dismissal, and organization intro video settings may be stored.</li>
         </ul>
       </Section>
 
@@ -40,6 +41,7 @@ export default function PrivacyPage() {
           <li>Managing checklist completion, notes, and handoff reports.</li>
           <li>Generating manual recordkeeping estimates for caregiver pay histories and client invoices.</li>
           <li>Logging audits, troubleshooting technical errors, and protecting system security.</li>
+          <li>Remembering notification, tutorial, intro video, and onboarding checklist preferences so they do not repeat unnecessarily.</li>
         </ul>
       </Section>
 

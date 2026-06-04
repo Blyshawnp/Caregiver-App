@@ -11,10 +11,14 @@ set
   is_prn = tt.is_prn,
   category = tt.category
 from public.todo_templates tt
-left join public.shifts s on s.id = st.shift_id
 where st.template_id = tt.id
   and coalesce(st.is_completed, false) = false
-  and (s.scheduled_end is null or s.scheduled_end >= now())
+  and exists (
+    select 1
+    from public.shifts s
+    where s.id = st.shift_id
+      and s.scheduled_end >= now()
+  )
   and (
     st.time_mode is null
     or st.time_mode = 'unscheduled'

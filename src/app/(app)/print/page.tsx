@@ -71,9 +71,9 @@ type SnapRow = {
 export default async function PrintViewPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ type?: string; id?: string; clientId?: string }>;
+  searchParams?: Promise<{ type?: string; id?: string; clientId?: string; mode?: string }>;
 }) {
-  const { type, id, clientId } = (await searchParams) ?? {};
+  const { type, id, clientId, mode } = (await searchParams) ?? {};
 
   if (!type) redirect("/home");
 
@@ -196,6 +196,83 @@ export default async function PrintViewPage({
               <div className="bg-cream-50 p-3 rounded-2xl border border-cream-200/80 mb-3 text-center no-print">
                 <p className="text-xs text-ink-600">
                   PDF preview displayed below. Use the native print button above to trigger your browser's PDF print dialer.
+                </p>
+              </div>
+
+              <iframe
+                src={signedFile.signedUrl}
+                title={doc.title}
+                className="w-full h-[600px] border border-cream-200 rounded-2xl shadow-soft bg-cream-50"
+              />
+            </div>
+          );
+        }
+      )()}
+
+      {/* 1b. Client-scoped PDF document */}
+      {type === "client-document" && id && (
+        async () => {
+          const { data: doc } = await supabase
+            .from("client_documents")
+            .select("id, client_id, title, description, storage_path, requires_print_approval")
+            .eq("id", id)
+            .maybeSingle<{
+              id: string;
+              client_id: string;
+              title: string;
+              description: string | null;
+              storage_path: string;
+              requires_print_approval: boolean;
+            }>();
+
+          if (!doc) return <p className="text-sm text-terracotta-600">Client document not found.</p>;
+
+          const isViewOnly = mode === "view";
+          if (!isViewOnly && doc.requires_print_approval && profile.role !== "admin" && profile.role !== "client") {
+            const { data: request } = await supabase
+              .from("client_document_print_requests")
+              .select("status")
+              .eq("client_document_id", doc.id)
+              .eq("requested_by", profile.id)
+              .maybeSingle();
+
+            if (request?.status !== "approved") {
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-terracotta-600">
+                    You must receive print approval before printing this client document.
+                  </p>
+                  <Link href={`/clients/${doc.client_id}/documents`} className="text-sm text-forest-600 hover:underline">
+                    Request approval from the client documents page
+                  </Link>
+                </div>
+              );
+            }
+          }
+
+          const { data: signedFile, error: signedFileError } = await supabase.storage
+            .from("client-documents")
+            .createSignedUrl(doc.storage_path, 60 * 5);
+
+          if (signedFileError || !signedFile?.signedUrl) {
+            return <p className="text-sm text-terracotta-600">Could not open this private client document.</p>;
+          }
+
+          return (
+            <div className="space-y-4">
+              <header className="border-b border-cream-200 pb-3 mb-4">
+                <h1 className="font-display text-2xl font-bold text-ink-900">{doc.title}</h1>
+                {doc.description && <p className="text-xs text-ink-500 mt-1">{doc.description}</p>}
+                {!isViewOnly && (
+                  <p className="text-[10px] text-ink-400 mt-0.5">Printed by {profile.full_name} on {new Date().toLocaleDateString()}</p>
+                )}
+              </header>
+
+              <div className="bg-cream-50 p-3 rounded-2xl border border-cream-200/80 mb-3 text-center no-print">
+                <p className="text-xs text-ink-600">
+                  {isViewOnly
+                    ? "Private PDF preview displayed below."
+                    : "PDF preview displayed below. Use the native print button above, then choose Save as PDF if needed."}
                 </p>
               </div>
 

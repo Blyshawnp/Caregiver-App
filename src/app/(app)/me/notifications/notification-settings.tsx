@@ -12,6 +12,17 @@ import {
 } from "@/lib/push-client";
 import { playNotificationSound } from "@/lib/notification-sounds";
 
+type PushDiagnostics = {
+  browserPermission: string;
+  serviceWorkerRegistered: boolean;
+  serviceWorkerActive: boolean;
+  subscriptionSaved: boolean;
+  lastSubscriptionUpdate: string | null;
+  platform: string;
+  installedPwa: boolean;
+  browser: string;
+};
+
 export default function NotificationSettings({ 
   initialPreferences 
 }: { 
@@ -23,6 +34,16 @@ export default function NotificationSettings({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<PushPreferences>(initialPreferences);
+  const [diagnostics, setDiagnostics] = useState<PushDiagnostics>({
+    browserPermission: "unknown",
+    serviceWorkerRegistered: false,
+    serviceWorkerActive: false,
+    subscriptionSaved: false,
+    lastSubscriptionUpdate: null,
+    platform: "unknown",
+    installedPwa: false,
+    browser: "unknown",
+  });
 
   useEffect(() => {
     setPushSupported(isPushSupported());
@@ -34,6 +55,7 @@ export default function NotificationSettings({
         ]);
         setDeviceEnabled(status.enabled);
         setPrefs(p);
+        await refreshDiagnostics(status);
       } catch {
         /* ignore */
       } finally {
@@ -54,6 +76,7 @@ export default function NotificationSettings({
         await enablePushNotifications();
         const status = await getPushDeviceStatus();
         setDeviceEnabled(status.enabled);
+        await refreshDiagnostics(status);
         if (!status.enabled) {
           setError("Notifications were permitted, but this device subscription was not saved.");
         }
@@ -93,10 +116,12 @@ export default function NotificationSettings({
     setTestMessage(null);
     try {
       const res = await fetch("/api/push/test", { method: "POST" });
+      const d = await res.json().catch(() => null);
       if (res.ok) {
-        setTestMessage("✅ Test push notification dispatched! Please check your device.");
+        setTestMessage(
+          `Test push accepted by browser push service (${d?.diagnostics?.delivered ?? 1} delivered). If it does not appear, check OS/browser notification settings, battery optimization, or Focus/Do Not Disturb.`
+        );
       } else {
-        const d = await res.json().catch(() => null);
         throw new Error(d?.error || "Failed to send test push.");
       }
     } catch (err: any) {
@@ -123,8 +148,10 @@ export default function NotificationSettings({
           localStorage.setItem("pwa_last_subscription_check", nowStr);
           setLastCheck(new Date(nowStr).toLocaleString());
           setDeviceEnabled(true);
+          await refreshDiagnostics();
         } else {
           setDeviceEnabled(false);
+          await refreshDiagnostics();
           setError("No active browser push subscription found. Click Enable below.");
         }
       } else {
@@ -135,6 +162,29 @@ export default function NotificationSettings({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function refreshDiagnostics(prefetchedStatus?: Awaited<ReturnType<typeof getPushDeviceStatus>>) {
+    if (typeof window === "undefined") return;
+    const nav = window.navigator as Navigator & { standalone?: boolean; userAgentData?: { platform?: string } };
+    const installedPwa =
+      nav.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+    const browser = navigator.userAgent;
+    let registration: ServiceWorkerRegistration | undefined;
+    if ("serviceWorker" in navigator) {
+      registration = await navigator.serviceWorker.getRegistration("/");
+    }
+    const status = prefetchedStatus ?? (await getPushDeviceStatus().catch(() => null));
+    setDiagnostics({
+      browserPermission: "Notification" in window ? Notification.permission : "unsupported",
+      serviceWorkerRegistered: !!registration,
+      serviceWorkerActive: !!registration?.active,
+      subscriptionSaved: !!status?.enabled,
+      lastSubscriptionUpdate: status?.lastSeenAt ?? status?.updatedAt ?? null,
+      platform: status?.platform ?? nav.userAgentData?.platform ?? (browser.includes("Android") ? "android" : browser.includes("iPhone") || browser.includes("iPad") ? "ios" : "desktop"),
+      installedPwa,
+      browser,
+    });
   }
 
   return (
@@ -171,6 +221,26 @@ export default function NotificationSettings({
         {loading && <p className="text-xs text-ink-500 mb-3">Checking this device...</p>}
         {error && <p className="text-xs text-terracotta-600 mb-3">{error}</p>}
         {testMessage && <p className="text-xs text-ink-700 font-semibold mb-3">{testMessage}</p>}
+
+        <div className="bg-white/70 border border-cream-200 rounded-2xl p-4 text-xs text-ink-600 mb-4">
+          <p className="font-semibold text-ink-800 mb-2">Notification diagnostics</p>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+            <Diag label="Browser permission" value={diagnostics.browserPermission} />
+            <Diag label="Service worker registered" value={diagnostics.serviceWorkerRegistered ? "Yes" : "No"} />
+            <Diag label="Service worker active" value={diagnostics.serviceWorkerActive ? "Yes" : "No"} />
+            <Diag label="Push subscription saved" value={diagnostics.subscriptionSaved ? "Yes" : "No"} />
+            <Diag
+              label="Last subscription update"
+              value={diagnostics.lastSubscriptionUpdate ? new Date(diagnostics.lastSubscriptionUpdate).toLocaleString() : "Not recorded"}
+            />
+            <Diag label="Platform/browser" value={`${diagnostics.platform} · ${diagnostics.browser.slice(0, 42)}`} />
+            <Diag label="Installed PWA mode" value={diagnostics.installedPwa ? "Yes" : "No"} />
+          </dl>
+          <p className="mt-3 text-[11px] text-ink-500">
+            If a test is accepted but does not appear, check OS notification permission, Focus or Do Not Disturb,
+            Android battery optimization, expired subscriptions, and whether iPhone/iPad users opened the installed Home Screen app.
+          </p>
+        </div>
 
         {!supported ? (
           <div className="bg-cream-50 p-4 rounded-2xl text-sm text-ink-700">
@@ -264,6 +334,15 @@ export default function NotificationSettings({
         </div>
       </section>
     </main>
+  );
+}
+
+function Diag({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="font-medium text-ink-500">{label}</dt>
+      <dd className="text-right text-ink-800">{value}</dd>
+    </div>
   );
 }
 

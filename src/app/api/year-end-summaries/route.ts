@@ -2,28 +2,31 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-export async function POST(request: Request) {
+async function requireAdmin() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 
   const admin = createAdminClient();
-
-  // Fetch profiles role and org
   const { data: profile } = await admin
     .from("profiles")
-    .select("role, organization_id")
+    .select("id, role, organization_id")
     .eq("id", user.id)
     .single();
 
   if (!profile || (profile.role !== "admin" && profile.role !== "client")) {
-    return NextResponse.json({ error: "Only administrators can generate year-end summaries." }, { status: 403 });
+    return { error: NextResponse.json({ error: "Only administrators can manage year-end summaries." }, { status: 403 }) };
   }
+
+  return { admin, profile };
+}
+
+export async function POST(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+  const { admin, profile } = auth;
 
   const payload = await request.json().catch(() => null);
   if (!payload?.year) {
@@ -102,6 +105,10 @@ export async function POST(request: Request) {
         total_hours: hours,
         total_pay: pay,
         total_bonus: bonus,
+        status: "active",
+        voided_at: null,
+        voided_by: null,
+        void_reason: null,
         released_at: payload.released ? new Date().toISOString() : autoReleaseDate.toISOString(),
         updated_at: new Date().toISOString(),
       }, {
@@ -116,4 +123,67 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ ok: true, summaries: results });
+}
+
+export async function PATCH(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+  const { admin, profile } = auth;
+  const payload = await request.json().catch(() => null);
+  if (!payload?.summaryId || !payload.action) {
+    return NextResponse.json({ error: "Missing summary ID or action." }, { status: 400 });
+  }
+
+  const { data: summary } = await admin
+    .from("year_end_summaries")
+    .select("id, organization_id")
+    .eq("id", payload.summaryId)
+    .maybeSingle();
+  if (!summary || summary.organization_id !== profile.organization_id) {
+    return NextResponse.json({ error: "Year-end summary not found." }, { status: 404 });
+  }
+
+  if (payload.action === "void") {
+    if (payload.confirmation !== "CONFIRM") {
+      return NextResponse.json({ error: "Type CONFIRM to delete this year-end summary." }, { status: 400 });
+    }
+    const { error } = await admin
+      .from("year_end_summaries")
+      .update({
+        status: "deleted",
+        voided_at: new Date().toISOString(),
+        voided_by: profile.id,
+        void_reason: payload.reason?.trim() || "Deleted by administrator",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", payload.summaryId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await admin.from("activity_logs").insert({
+      organization_id: profile.organization_id,
+      actor_id: profile.id,
+      action_type: "delete_year_end_summary",
+      shift_count: 0,
+      metadata: { reason: payload.reason ?? null },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (payload.action === "adjust") {
+    const { error } = await admin
+      .from("year_end_summaries")
+      .update({
+        status: "corrected",
+        correction_note: payload.note?.trim() || null,
+        adjusted_total_hours: payload.totalHours === "" || payload.totalHours == null ? null : Number(payload.totalHours),
+        adjusted_total_pay: payload.totalPay === "" || payload.totalPay == null ? null : Number(payload.totalPay),
+        adjusted_total_bonus: payload.totalBonus === "" || payload.totalBonus == null ? null : Number(payload.totalBonus),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", payload.summaryId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
 }

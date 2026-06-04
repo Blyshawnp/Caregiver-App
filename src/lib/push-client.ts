@@ -74,11 +74,12 @@ export async function enablePushNotifications() {
 
   try {
     logStep("requesting permission");
-    const permission = await withTimeout(
+    await withTimeout(
       Notification.requestPermission(),
       30_000,
       "Notification permission request timed out."
     );
+    const permission = Notification.permission;
     if (permission !== "granted") {
       console.error("[push-enable] permission not granted", permission);
       throw new Error(
@@ -90,6 +91,9 @@ export async function enablePushNotifications() {
 
     logStep("registering service worker");
     const registration = await ensureServiceWorkerRegistration();
+    if (!navigator.serviceWorker.controller) {
+      throw new Error("Please refresh the app once, then try enabling notifications again.");
+    }
 
     logStep("checking existing subscription");
     const existing = await withTimeout(
@@ -153,7 +157,13 @@ export async function getPushDeviceStatus(endpoint?: string | null) {
     const data = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new Error(data?.error ?? "Could not verify push subscription.");
   }
-  return (await response.json()) as { enabled: boolean; endpoint: string | null };
+  return (await response.json()) as {
+    enabled: boolean;
+    endpoint: string | null;
+    lastSeenAt?: string | null;
+    updatedAt?: string | null;
+    platform?: string | null;
+  };
 }
 
 export async function saveCurrentPushSubscription(subscription: PushSubscription) {

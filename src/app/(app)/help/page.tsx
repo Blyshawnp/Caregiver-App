@@ -189,7 +189,7 @@ export default async function HelpPage() {
 
         <Section title="Emergency Prep & Pet Records">
           <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
-            <li>Open <strong>Clients → View client profile → Pets</strong> to see a client's pet list, photos, feeding notes, medication instructions, behavior cautions, and emergency notes.</li>
+            <li>Open <strong>Clients → View client profile → Pets</strong> to see a client's pet list, photos, feeding notes, medication instructions, care notes, and emergency notes.</li>
             <li>Caregivers can view pets for clients they are allowed to see from the client profile, shift detail shortcut, or home access page.</li>
             <li>Before accepting an assigned shift, caregivers should review the <strong>Pets in home</strong> summary and tap <strong>View pets</strong> if they have allergy or safety concerns.</li>
             <li>Admins and client admins can add or update caregiver, client, and pet photos from the team profile, client profile, and pet editor. Photos are stored in Supabase Storage and shown with permission-controlled access.</li>

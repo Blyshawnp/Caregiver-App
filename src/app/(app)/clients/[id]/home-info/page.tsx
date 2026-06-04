@@ -411,7 +411,7 @@ function ClientProfileView({
                     <span className="block font-semibold text-ink-900 truncate">{pet.name}</span>
                     <span className="block text-xs text-ink-500 capitalize">{pet.pet_type || "Pet"}</span>
                     {(pet.medication_instructions || pet.emergency_notes || pet.behavior_notes) && (
-                      <span className="block text-[10px] text-terracotta-600 mt-1">Medication, emergency, or caution notes</span>
+                      <span className="block text-[10px] text-terracotta-600 mt-1">Pet notes available</span>
                     )}
                   </span>
                 </Link>
@@ -429,7 +429,7 @@ function ClientProfileView({
           </span>
           <span className="text-ink-300">→</span>
         </Link>
-        <Link href="/documents" className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition">
+        <Link href={`/clients/${client.id}/documents`} className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition">
           <span>
             <span className="block font-medium text-ink-900">Documents ({documents.length})</span>
             <span className="block text-xs text-ink-500">Care documents and instructions</span>

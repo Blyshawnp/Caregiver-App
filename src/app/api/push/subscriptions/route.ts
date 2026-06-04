@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   let query = admin
     .from("push_subscriptions")
-    .select("endpoint")
+    .select("endpoint, last_seen_at, updated_at, platform")
     .eq("user_id", user.id)
     .eq("is_active", true);
 
@@ -38,6 +38,9 @@ export async function GET(request: Request) {
   return NextResponse.json({
     enabled: (data ?? []).length > 0,
     endpoint: data?.[0]?.endpoint ?? null,
+    lastSeenAt: data?.[0]?.last_seen_at ?? null,
+    updatedAt: data?.[0]?.updated_at ?? null,
+    platform: data?.[0]?.platform ?? null,
   });
 }
 

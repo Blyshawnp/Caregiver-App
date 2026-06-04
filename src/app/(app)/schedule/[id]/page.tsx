@@ -134,6 +134,15 @@ type ShiftPetSummary = {
   show_to_caregivers: boolean;
 };
 
+type ShiftClientDocument = {
+  id: string;
+  category: string;
+  title: string;
+  description: string | null;
+  storage_path: string;
+  created_at: string;
+};
+
 export default async function ShiftDetailPage({
   params,
 }: {
@@ -425,6 +434,16 @@ export default async function ShiftDetailPage({
     !!shift.client_id &&
     canShowClientDetails &&
     (isAssignedCaregiver || visiblePetCount > 0);
+  let shiftDocuments: ShiftClientDocument[] = [];
+  if (shift.client_id && canShowClientDetails) {
+    const { data } = await supabase
+      .from("client_documents")
+      .select("id, category, title, description, storage_path, created_at")
+      .eq("client_id", shift.client_id)
+      .in("category", ["general", "instructions", "emergency", "wifi"])
+      .order("created_at", { ascending: false });
+    shiftDocuments = (data ?? []) as ShiftClientDocument[];
+  }
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -487,7 +506,7 @@ export default async function ShiftDetailPage({
             }}
           />
           <p className="text-xs uppercase tracking-normal text-ink-500">
-            {formatShiftTypeName(shift.shift_types?.name)} · #{id.slice(0, 8).toUpperCase()}
+            {formatShiftTypeName(shift.shift_types?.name)}
           </p>
         </div>
         <p className="font-sans text-3xl font-semibold tracking-normal leading-tight text-ink-900">
@@ -628,12 +647,8 @@ export default async function ShiftDetailPage({
                 <div className="mt-3 space-y-1">
                   {petCautions.map((pet) => (
                     <p key={pet.id} className="text-xs text-ink-600">
-                      <span className="font-medium">{pet.name}:</span>{" "}
-                      {[
-                        pet.medication_instructions ? "needs medication" : null,
-                        pet.emergency_notes ? "emergency notes" : null,
-                        pet.behavior_notes ? "behavior caution" : null,
-                      ].filter(Boolean).join(", ")}
+                      <span className="font-medium">{pet.name}</span>{" "}
+                      {formatPetNoteSummary(pet)}
                     </p>
                   ))}
                 </div>
@@ -747,21 +762,47 @@ export default async function ShiftDetailPage({
           </Link>
         )}
 
-        {shift.client_id && visiblePetCount > 0 && canShowClientDetails && (
-          <Link
-            href={`/clients/${shift.client_id}/home-info?tab=pets`}
-            className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-4 rounded-2xl shadow-soft transition"
-          >
-            <span>
-              <span className="block font-medium text-ink-900">
-                Pets ({visiblePetCount})
+        {shift.client_id && canShowClientDetails && (
+          <section className="bg-white px-5 py-4 rounded-2xl shadow-soft">
+            <div className="flex items-start justify-between gap-3">
+              <span>
+                <span className="block font-medium text-ink-900">
+                  Shift documents ({shiftDocuments.length})
+                </span>
+                <span className="block text-xs text-ink-500">
+                  Client instructions, care plans, home access, and emergency documents
+                </span>
               </span>
-              <span className="block text-xs text-ink-500">
-                Photos, feeding, medication, behavior, and emergency notes
-              </span>
-            </span>
-            <ArrowRightIcon size={16} className="text-ink-300" />
-          </Link>
+              <Link
+                href={`/clients/${shift.client_id}/documents`}
+                className="text-sm text-forest-600 font-medium hover:underline shrink-0"
+              >
+                View all
+              </Link>
+            </div>
+            {shiftDocuments.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {shiftDocuments.slice(0, 3).map((doc) => (
+                  <li key={doc.id} className="flex items-center justify-between gap-3 rounded-xl bg-cream-50 px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-ink-900 truncate">{doc.title}</span>
+                      <span className="block text-[10px] uppercase tracking-wide text-ink-500">{formatDocumentCategory(doc.category)}</span>
+                    </span>
+                    <span className="flex gap-2 shrink-0">
+                      <Link href={`/print?type=client-document&id=${doc.id}&mode=view`} className="text-xs text-forest-600 hover:underline">
+                        View
+                      </Link>
+                      <Link href={`/print?type=client-document&id=${doc.id}`} className="text-xs text-forest-600 hover:underline">
+                        Print
+                      </Link>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-ink-500 mt-3">No client documents are attached yet.</p>
+            )}
+          </section>
         )}
       </section>
 
@@ -852,6 +893,13 @@ export default async function ShiftDetailPage({
 
       {/* Actions */}
       <div className="space-y-2 mt-6">
+        <Link
+          href={`/api/calendar/shifts?ids=${id}`}
+          className="flex items-center justify-between bg-white hover:bg-cream-50 px-5 py-3.5 rounded-2xl shadow-soft text-ink-900 font-medium transition"
+        >
+          Add to calendar
+          <ArrowRightIcon size={16} className="text-ink-300" />
+        </Link>
         {canEdit && caregiverOptions.length > 0 && (
           <ForceAssignButton
             shiftId={id}
@@ -995,6 +1043,13 @@ export default async function ShiftDetailPage({
           </>
         )}
       </div>
+
+      <section className="mt-6 bg-white rounded-2xl shadow-soft p-4">
+        <p className="text-[10px] uppercase tracking-wider text-ink-500 font-medium">
+          Shift tracking number
+        </p>
+        <p className="mt-1 font-mono text-sm text-ink-900 break-all">{id}</p>
+      </section>
     </main>
   );
 }
@@ -1145,6 +1200,16 @@ function formatPetTypeSummary(pets: ShiftPetSummary[]) {
   return Array.from(counts.entries())
     .map(([type, count]) => `${count} ${count === 1 ? type : pluralizePetType(type)}`)
     .join(", ");
+}
+
+function formatPetNoteSummary(pet: ShiftPetSummary) {
+  if (pet.emergency_notes) return "has emergency notes available.";
+  if (pet.medication_instructions || pet.behavior_notes) return "has care notes available.";
+  return "has pet notes available.";
+}
+
+function formatDocumentCategory(category: string) {
+  return category.replaceAll("_", " ");
 }
 
 function pluralizePetType(type: string) {

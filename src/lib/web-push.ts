@@ -27,6 +27,14 @@ type NotificationRow = {
 };
 
 type SupabaseAdmin = ReturnType<typeof createAdminClient>;
+export type PushDeliveryResult = {
+  attempted: number;
+  delivered: number;
+  failed: number;
+  disabled: number;
+  skipped: "not_configured" | "no_notifications" | "no_subscriptions" | null;
+  failures: Array<{ status: number; endpointHost: string }>;
+};
 
 const DEFAULT_PREFS: NotificationPreferenceRow = {
   messages: true,
@@ -39,14 +47,21 @@ const DEFAULT_PREFS: NotificationPreferenceRow = {
 export async function sendPushForNotifications(
   admin: SupabaseAdmin,
   notifications: NotificationRow[]
-) {
+): Promise<PushDeliveryResult> {
   const publicKey =
     process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT;
 
   if (!publicKey || !privateKey || !subject || notifications.length === 0) {
-    return;
+    return {
+      attempted: 0,
+      delivered: 0,
+      failed: 0,
+      disabled: 0,
+      skipped: notifications.length === 0 ? "no_notifications" : "not_configured",
+      failures: [],
+    };
   }
 
   const recipientIds = Array.from(
@@ -60,7 +75,16 @@ export async function sendPushForNotifications(
     .in("user_id", recipientIds);
 
   const activeSubscriptions = (subscriptions ?? []).filter(Boolean);
-  if (activeSubscriptions.length === 0) return;
+  if (activeSubscriptions.length === 0) {
+    return {
+      attempted: 0,
+      delivered: 0,
+      failed: 0,
+      disabled: 0,
+      skipped: "no_subscriptions",
+      failures: [],
+    };
+  }
 
   const { data: preferenceRows } = await admin
     .from("notification_preferences")
@@ -80,6 +104,9 @@ export async function sendPushForNotifications(
   }
 
   const disabledIds: string[] = [];
+  const failures: PushDeliveryResult["failures"] = [];
+  let attempted = 0;
+  let delivered = 0;
 
   await Promise.all(
     notifications.flatMap((notification) => {
@@ -91,6 +118,7 @@ export async function sendPushForNotifications(
         subscriptionsByUser.get(notification.recipient_id) ?? [];
 
       return userSubscriptions.map(async (subscription) => {
+        attempted += 1;
         const result = await sendWebPush(subscription, {
           title: notification.title,
           body: notification.body ?? "",
@@ -102,6 +130,14 @@ export async function sendPushForNotifications(
 
         if (result.status === 404 || result.status === 410) {
           disabledIds.push(subscription.id);
+        }
+        if (result.ok) {
+          delivered += 1;
+        } else {
+          failures.push({
+            status: result.status,
+            endpointHost: new URL(subscription.endpoint).host,
+          });
         }
       });
     })
@@ -117,6 +153,15 @@ export async function sendPushForNotifications(
       })
       .in("id", disabledIds);
   }
+
+  return {
+    attempted,
+    delivered,
+    failed: failures.length,
+    disabled: disabledIds.length,
+    skipped: null,
+    failures,
+  };
 }
 
 async function sendWebPush(

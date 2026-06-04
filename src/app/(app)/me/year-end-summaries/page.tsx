@@ -21,6 +21,10 @@ type SummaryRow = {
   total_hours: number;
   total_pay: number;
   total_bonus: number;
+  status?: "active" | "voided" | "deleted" | "corrected";
+  adjusted_total_hours?: number | null;
+  adjusted_total_pay?: number | null;
+  adjusted_total_bonus?: number | null;
   released_at: string | null;
   created_at: string;
   profiles?: { full_name: string } | null;
@@ -65,8 +69,9 @@ export default async function YearEndSummariesPage() {
     // Caregiver: see own summaries
     const { data: sumData } = await supabase
       .from("year_end_summaries")
-      .select("id, caregiver_id, year, total_hours, total_pay, total_bonus, released_at, created_at")
+      .select("id, caregiver_id, year, total_hours, total_pay, total_bonus, status, adjusted_total_hours, adjusted_total_pay, adjusted_total_bonus, released_at, created_at")
       .eq("caregiver_id", profile.id)
+      .neq("status", "deleted")
       .order("year", { ascending: false });
 
     summaries = (sumData ?? []) as SummaryRow[];
@@ -83,7 +88,7 @@ export default async function YearEndSummariesPage() {
     const { data: sumData } = await supabase
       .from("year_end_summaries")
       .select(`
-        id, caregiver_id, year, total_hours, total_pay, total_bonus, released_at, created_at,
+        id, caregiver_id, year, total_hours, total_pay, total_bonus, status, adjusted_total_hours, adjusted_total_pay, adjusted_total_bonus, released_at, created_at,
         profiles:caregiver_id ( full_name )
       `)
       .eq("organization_id", profile.organization_id)

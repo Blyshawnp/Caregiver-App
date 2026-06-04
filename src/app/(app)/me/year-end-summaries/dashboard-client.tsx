@@ -11,6 +11,10 @@ type SummaryRow = {
   total_hours: number;
   total_pay: number;
   total_bonus: number;
+  status?: "active" | "voided" | "deleted" | "corrected";
+  adjusted_total_hours?: number | null;
+  adjusted_total_pay?: number | null;
+  adjusted_total_bonus?: number | null;
   released_at: string | null;
   created_at: string;
   profiles?: { full_name: string } | null;
@@ -158,6 +162,31 @@ export default function YearEndDashboardClient({
     } else {
       alert("Failed to generate year-end summaries.");
     }
+  }
+
+  async function handleDeleteSummary(summaryId: string) {
+    if (!confirm("Are you sure you want to delete this year-end summary?")) return;
+    const confirmation = prompt("Type CONFIRM to delete this year-end summary.");
+    if (confirmation !== "CONFIRM") return;
+
+    const res = await fetch("/api/year-end-summaries", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        summaryId,
+        action: "void",
+        confirmation,
+        reason: "Deleted from admin year-end summary dashboard",
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Failed to delete year-end summary.");
+      return;
+    }
+    startTransition(() => {
+      router.refresh();
+    });
   }
 
   // Admin: patch correction request
@@ -474,24 +503,37 @@ export default function YearEndDashboardClient({
                       <th className="py-2 text-right">Earning</th>
                       <th className="py-2 text-right">Bonuses</th>
                       <th className="py-2 text-right">Status</th>
+                      <th className="py-2 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-cream-100">
-                    {initialSummaries.map((sum) => (
+                    {initialSummaries.filter((sum) => sum.status !== "deleted").map((sum) => (
                       <tr key={sum.id}>
                         <td className="py-2.5 px-1 font-bold text-ink-900">{sum.year}</td>
                         <td className="py-2.5 font-medium text-ink-800">{sum.profiles?.full_name ?? "—"}</td>
-                        <td className="py-2.5 text-right">{sum.total_hours.toFixed(1)}</td>
-                        <td className="py-2.5 text-right font-semibold">{formatCurrency(sum.total_pay)}</td>
-                        <td className="py-2.5 text-right text-forest-700">{formatCurrency(sum.total_bonus)}</td>
+                        <td className="py-2.5 text-right">{(sum.adjusted_total_hours ?? sum.total_hours).toFixed(1)}</td>
+                        <td className="py-2.5 text-right font-semibold">{formatCurrency(sum.adjusted_total_pay ?? sum.total_pay)}</td>
+                        <td className="py-2.5 text-right text-forest-700">{formatCurrency(sum.adjusted_total_bonus ?? sum.total_bonus)}</td>
                         <td className="py-2.5 text-right">
                           <span className={`px-1.5 py-0.5 rounded-md font-bold text-[9px] uppercase tracking-wider ${
+                            sum.status === "corrected"
+                              ? "bg-amber-50 text-amber-800"
+                              :
                             sum.released_at && new Date(sum.released_at) <= new Date()
                               ? "bg-forest-50 text-forest-700"
                               : "bg-cream-100 text-ink-500"
                           }`}>
-                            {sum.released_at && new Date(sum.released_at) <= new Date() ? "Released" : "Scheduled"}
+                            {sum.status === "corrected" ? "Corrected" : sum.released_at && new Date(sum.released_at) <= new Date() ? "Released" : "Scheduled"}
                           </span>
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSummary(sum.id)}
+                            className="text-[10px] text-terracotta-600 hover:underline font-semibold"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))}

@@ -45,7 +45,7 @@ export type PushDeliveryResult = {
   failed: number;
   disabled: number;
   skipped: "not_configured" | "no_notifications" | "no_subscriptions" | null;
-  failures: Array<{ status: number; endpointHost: string }>;
+  failures: Array<{ status: number; endpointHost: string; reason?: string }>;
 };
 
 const DEFAULT_PREFS: NotificationPreferenceRow = {
@@ -172,6 +172,7 @@ export async function sendPushForNotifications(
           failures.push({
             status: result.status,
             endpointHost: new URL(subscription.endpoint).host,
+            reason: reasonForPushStatus(result.status),
           });
         }
       });
@@ -235,7 +236,7 @@ async function sendWebPush(
 
   const jwt = createVapidJwt(endpoint.origin, subject, vapidPublicKey, vapidPrivateKey);
 
-  return fetch(subscription.endpoint, {
+  const response = await fetch(subscription.endpoint, {
     method: "POST",
     headers: {
       TTL: "2419200",
@@ -249,6 +250,30 @@ async function sendWebPush(
     },
     body,
   });
+
+  if (response.ok || response.status === 404 || response.status === 410) {
+    return response;
+  }
+
+  return fetch(subscription.endpoint, {
+    method: "POST",
+    headers: {
+      TTL: "2419200",
+      Authorization: `vapid t=${jwt}, k=${vapidPublicKey}`,
+      Urgency:
+        payload.sound === "urgent" || payload.sound === "urgent_alert"
+          ? "high"
+          : "normal",
+    },
+  });
+}
+
+function reasonForPushStatus(status: number) {
+  if (status === 404 || status === 410) return "Subscription expired or was removed by the browser push service.";
+  if (status === 400) return "Browser push service rejected the subscription or payload.";
+  if (status === 401 || status === 403) return "VAPID authentication failed or the subscription was created with older notification keys.";
+  if (status === 429) return "Browser push service rate-limited this endpoint.";
+  return "Browser push service rejected the test notification.";
 }
 
 function encryptPayload(

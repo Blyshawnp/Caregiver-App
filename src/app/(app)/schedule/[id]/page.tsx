@@ -30,6 +30,7 @@ import {
   computeShiftPay,
   roundUpToQuarter,
   formatCurrency,
+  formatEnumLabel,
 } from "@/lib/pay";
 import {
   formatTimeInTz,
@@ -93,7 +94,7 @@ type ShiftDetail = {
     is_prn: boolean;
     importance: "low" | "medium" | "high" | "critical";
     time_mode: "unscheduled" | "time_of_day" | "exact_time";
-    time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+    time_of_day: "morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
     scheduled_time: string | null;
     sort_order: number;
     notes: string | null;
@@ -647,7 +648,6 @@ export default async function ShiftDetailPage({
                 <div className="mt-3 space-y-1">
                   {petCautions.map((pet) => (
                     <p key={pet.id} className="text-xs text-ink-600">
-                      <span className="font-medium">{pet.name}</span>{" "}
                       {formatPetNoteSummary(pet)}
                     </p>
                   ))}
@@ -1153,7 +1153,7 @@ function formatEventType(eventType: string) {
     case "auto_checkout_skipped_stale_location":
       return "Auto checkout skipped: stale location";
     default:
-      return eventType.replaceAll("_", " ");
+      return formatEnumLabel(eventType);
   }
 }
 
@@ -1203,13 +1203,13 @@ function formatPetTypeSummary(pets: ShiftPetSummary[]) {
 }
 
 function formatPetNoteSummary(pet: ShiftPetSummary) {
-  if (pet.emergency_notes) return "has emergency notes available.";
-  if (pet.medication_instructions || pet.behavior_notes) return "has care notes available.";
-  return "has pet notes available.";
+  if (pet.emergency_notes) return `${pet.name} has emergency notes available. Review ${pet.name}'s pet profile for details.`;
+  if (pet.medication_instructions || pet.behavior_notes) return `${pet.name} has care notes available. Review ${pet.name}'s pet profile for details.`;
+  return `${pet.name} has pet notes available.`;
 }
 
 function formatDocumentCategory(category: string) {
-  return category.replaceAll("_", " ");
+  return formatEnumLabel(category);
 }
 
 function pluralizePetType(type: string) {

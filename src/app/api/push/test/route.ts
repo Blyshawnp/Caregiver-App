@@ -42,9 +42,11 @@ export async function POST(request: Request) {
       );
     }
     if (result.delivered === 0) {
+      const firstFailure = result.failures[0];
+      const error = describePushFailure(firstFailure?.status, firstFailure?.reason);
       return NextResponse.json(
         {
-          error: "The browser push service did not accept the test notification. The subscription may be expired or blocked by OS/browser settings.",
+          error,
           diagnostics: result,
         },
         { status: 502 }
@@ -56,4 +58,17 @@ export async function POST(request: Request) {
     console.error("[push-test] error", err);
     return NextResponse.json({ error: err.message || "Failed to send test push" }, { status: 500 });
   }
+}
+
+function describePushFailure(status?: number, reason?: string) {
+  if (status === 404 || status === 410) {
+    return "The saved push subscription has expired. Refresh notifications or enable alerts again on this device.";
+  }
+  if (status === 401 || status === 403) {
+    return "The browser push service rejected the notification keys. Refresh notifications to create a new subscription with the current VAPID key.";
+  }
+  if (status === 400) {
+    return "The browser push service rejected the subscription payload. Refresh notifications, then send another test.";
+  }
+  return reason || "The browser push service did not accept the test notification. Check OS/browser notification settings, Focus or Do Not Disturb, battery optimization, and installed PWA state.";
 }

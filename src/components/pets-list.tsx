@@ -148,7 +148,7 @@ export default function PetsList({
                       )}
                       {hasBehavior && (
                         <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-100 text-[9px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-lg">
-                          ⚠️ Caution
+                          🐾 Care notes
                         </span>
                       )}
                     </div>
@@ -162,8 +162,9 @@ export default function PetsList({
 
       {/* DETAIL MODAL DIALOG */}
       {selectedPet && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-lifted border border-cream-200/50 flex flex-col animate-scale-in">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] overflow-y-auto p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] no-print animate-fade-in">
+          <div className="min-h-[calc(100dvh-2rem)] flex items-center justify-center">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90dvh] overflow-y-auto shadow-lifted border border-cream-200/50 flex flex-col animate-scale-in">
             {/* Modal Photo Header */}
             <div className="relative h-60 w-full bg-cream-200 shrink-0">
               <PetPhotoImage
@@ -345,6 +346,7 @@ export default function PetsList({
                 Close
               </button>
             </div>
+          </div>
           </div>
         </div>
       )}

@@ -67,19 +67,7 @@ export async function enablePushNotifications() {
     throw new Error("Push notifications require HTTPS. Open the secure app link and try again.");
   }
 
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  if (!publicKey) {
-    console.error("[push-enable] missing NEXT_PUBLIC_VAPID_PUBLIC_KEY");
-    throw new Error("Push notifications are not configured. Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY.");
-  }
-
-  let applicationServerKey: ArrayBuffer;
-  try {
-    applicationServerKey = urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer;
-  } catch (error) {
-    console.error("[push-enable] invalid NEXT_PUBLIC_VAPID_PUBLIC_KEY", error);
-    throw new Error("Push notifications are misconfigured. NEXT_PUBLIC_VAPID_PUBLIC_KEY is invalid.");
-  }
+  const applicationServerKey = getApplicationServerKey();
 
   try {
     logStep("requesting permission");
@@ -101,7 +89,7 @@ export async function enablePushNotifications() {
     logStep("registering service worker");
     const registration = await ensureServiceWorkerRegistration();
     if (!navigator.serviceWorker.controller) {
-      throw new Error("Please refresh the app once, then try enabling notifications again.");
+      console.info("[push-enable] service worker is active but has not controlled this page yet");
     }
 
     logStep("checking existing subscription");
@@ -250,6 +238,57 @@ async function ensureServiceWorkerRegistration() {
   }
 }
 
+export async function refreshPushSubscription() {
+  if (!isPushSupported()) {
+    if (isIOSBrowser() && !isStandalonePwa()) {
+      throw new Error("On iPhone or iPad, install the app to your Home Screen, open it from the Home Screen, then enable notifications.");
+    }
+    throw new Error("Push notifications are not supported on this device or browser.");
+  }
+  if (!isSecurePushContext()) {
+    throw new Error("Push notifications require HTTPS. Open the secure app link and try again.");
+  }
+
+  const permission = Notification.permission === "granted"
+    ? "granted"
+    : await withTimeout(
+        Notification.requestPermission(),
+        30_000,
+        "Notification permission request timed out."
+      );
+
+  if (permission !== "granted" || Notification.permission !== "granted") {
+    throw new Error(
+      Notification.permission === "denied"
+        ? "Notifications are blocked in your browser settings."
+        : "Notification permission was dismissed."
+    );
+  }
+
+  const registration = await ensureServiceWorkerRegistration();
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) {
+    await fetch("/api/push/subscriptions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: existing.endpoint }),
+    }).catch(() => null);
+    await existing.unsubscribe().catch(() => false);
+  }
+
+  const subscription = await withTimeout(
+    registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: getApplicationServerKey(),
+    }),
+    20_000,
+    "Browser push subscription timed out."
+  );
+
+  await saveCurrentPushSubscription(subscription);
+  return subscription;
+}
+
 function waitForServiceWorkerActivation(worker: ServiceWorker) {
   if (worker.state === "activated") return Promise.resolve();
 
@@ -315,4 +354,19 @@ function urlBase64ToUint8Array(base64String: string) {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
+}
+
+function getApplicationServerKey(): ArrayBuffer {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!publicKey) {
+    console.error("[push-enable] missing NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+    throw new Error("Push notifications are not configured. Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY.");
+  }
+
+  try {
+    return urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer;
+  } catch (error) {
+    console.error("[push-enable] invalid NEXT_PUBLIC_VAPID_PUBLIC_KEY", error);
+    throw new Error("Push notifications are misconfigured. NEXT_PUBLIC_VAPID_PUBLIC_KEY is invalid.");
+  }
 }

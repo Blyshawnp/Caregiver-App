@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getTaskTimeGroupLabel } from "@/lib/task-scheduling";
 
 /* ====================================================
    BULK DELETE MODAL
@@ -547,12 +548,20 @@ export function BulkAddTaskModal({
                         )}
                         {t.time_mode === "exact_time" && t.scheduled_time && (
                           <span className="text-[9px] bg-cream-200 text-ink-600 px-1.5 py-0.5 rounded font-medium">
-                            {t.scheduled_time}
+                            {getTaskTimeGroupLabel({
+                              timeMode: t.time_mode,
+                              timeOfDay: t.time_of_day,
+                              scheduledTime: t.scheduled_time,
+                            })}
                           </span>
                         )}
                         {t.time_mode === "time_of_day" && t.time_of_day && (
                           <span className="text-[9px] bg-cream-200 text-ink-600 px-1.5 py-0.5 rounded font-medium">
-                            {t.time_of_day.replace("_", " ")}
+                            {getTaskTimeGroupLabel({
+                              timeMode: t.time_mode,
+                              timeOfDay: t.time_of_day,
+                              scheduledTime: t.scheduled_time,
+                            })}
                           </span>
                         )}
                       </div>

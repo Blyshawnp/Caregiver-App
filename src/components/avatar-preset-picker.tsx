@@ -102,6 +102,15 @@ export default function AvatarPickerModal({
     }
   }, [currentValue, open]);
 
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose, open]);
+
   if (!open) return null;
 
   async function handleUpload(file: File | undefined) {
@@ -124,14 +133,14 @@ export default function AvatarPickerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-ink-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      className="fixed inset-0 z-[1000] bg-ink-950/65 backdrop-blur-sm overflow-y-auto p-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)] flex items-end sm:items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label={title}
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-lifted border border-cream-200"
+        className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-3xl bg-white shadow-lifted border border-cream-200"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="p-5 border-b border-cream-200 flex items-center justify-between gap-3">

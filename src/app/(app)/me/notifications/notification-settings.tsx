@@ -7,6 +7,7 @@ import {
   getPushDeviceStatus,
   getPushPreferences,
   isPushSupported,
+  refreshPushSubscription,
   savePushPreferences,
   type PushPreferences,
 } from "@/lib/push-client";
@@ -178,29 +179,23 @@ export default function NotificationSettings({
   async function handleManualCheck() {
     setLoading(true);
     setError(null);
+    setTestMessage(null);
     try {
-      if ("serviceWorker" in navigator) {
-        const registration = await navigator.serviceWorker.ready;
-        const sub = await registration.pushManager.getSubscription();
-        if (sub) {
-          await fetch("/api/push/subscriptions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(sub.toJSON()),
-          });
-          const nowStr = new Date().toISOString();
-          localStorage.setItem("pwa_last_subscription_check", nowStr);
-          setLastCheck(new Date(nowStr).toLocaleString());
-          setDeviceEnabled(true);
-          await refreshDiagnostics();
-        } else {
-          setDeviceEnabled(false);
-          await refreshDiagnostics();
-          setError("No active browser push subscription found. Click Enable below.");
-        }
-      } else {
-        setError("Service Worker not ready.");
+      const sub = await refreshPushSubscription();
+      const nowStr = new Date().toISOString();
+      localStorage.setItem("pwa_last_subscription_check", nowStr);
+      setLastCheck(new Date(nowStr).toLocaleString());
+      setDeviceEnabled(true);
+      await refreshDiagnostics(await getPushDeviceStatus(sub.endpoint));
+
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(d?.error || "Subscription refreshed, but the test push failed.");
       }
+      setTestMessage(
+        `Subscription refreshed and test push accepted (${d?.diagnostics?.delivered ?? 1} delivered). If it does not appear, check OS notification permission, Focus/Do Not Disturb, battery optimization, or installed PWA state.`
+      );
     } catch (err: any) {
       setError(err.message || "Failed to refresh subscription.");
     } finally {

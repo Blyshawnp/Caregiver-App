@@ -47,7 +47,7 @@ type Template = {
   is_prn: boolean;
   importance: "low" | "medium" | "high" | "critical";
   time_mode: "unscheduled" | "time_of_day" | "exact_time";
-  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  time_of_day: "morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
   scheduled_time: string | null;
   allow_repeat: boolean;
   default_days_of_week?: number[] | null;
@@ -511,6 +511,7 @@ export default function TemplatesList({
               >
                 <option value="morning">{tr("task.morning", lang)}</option>
                 <option value="early_afternoon">{tr("task.earlyAfternoon", lang)}</option>
+                <option value="afternoon">{tr("task.afternoon", lang)}</option>
                 <option value="late_afternoon">{tr("task.lateAfternoon", lang)}</option>
                 <option value="evening">{tr("task.evening", lang)}</option>
                 <option value="bedtime">{tr("task.bedtime", lang)}</option>
@@ -850,6 +851,7 @@ function TemplateRow({
             <select value={timeOfDay} onChange={(e) => setTimeOfDay(e.target.value as NonNullable<Template["time_of_day"]>)} className={inputCls}>
               <option value="morning">{tr("task.morning", lang)}</option>
               <option value="early_afternoon">{tr("task.earlyAfternoon", lang)}</option>
+              <option value="afternoon">{tr("task.afternoon", lang)}</option>
               <option value="late_afternoon">{tr("task.lateAfternoon", lang)}</option>
               <option value="evening">{tr("task.evening", lang)}</option>
               <option value="bedtime">{tr("task.bedtime", lang)}</option>
@@ -1265,6 +1267,8 @@ function timeOfDayLabel(value: NonNullable<Template["time_of_day"]>, lang: "en" 
       return tr("task.morning", lang);
     case "early_afternoon":
       return tr("task.earlyAfternoon", lang);
+    case "afternoon":
+      return tr("task.afternoon", lang);
     case "late_afternoon":
       return tr("task.lateAfternoon", lang);
     case "evening":

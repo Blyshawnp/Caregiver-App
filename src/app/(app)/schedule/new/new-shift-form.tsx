@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { sendNotificationEvent } from "@/lib/notify-client";
+import { getTaskTimeGroupLabel } from "@/lib/task-scheduling";
 
 type Caregiver = { id: string; full_name: string };
 type ShiftType = { id: string; name: string; color: string };
@@ -21,7 +22,7 @@ type TaskTemplate = {
   is_prn: boolean;
   importance: "low" | "medium" | "high" | "critical";
   time_mode: "unscheduled" | "time_of_day" | "exact_time";
-  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  time_of_day: "morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
   scheduled_time: string | null;
   allow_repeat: boolean;
 };
@@ -580,7 +581,11 @@ export default function NewShiftForm({
                     <span className="mt-1 flex flex-wrap gap-1.5">
                       <TemplateBadge label={template.is_prn ? "PRN" : template.is_optional ? "Optional" : "Required"} />
                       <TemplateBadge label={template.importance} />
-                      <TemplateBadge label={template.time_mode === "exact_time" && template.scheduled_time ? template.scheduled_time : template.time_mode === "time_of_day" && template.time_of_day ? template.time_of_day.replaceAll("_", " ") : "Unscheduled"} />
+                      <TemplateBadge label={getTaskTimeGroupLabel({
+                        timeMode: template.time_mode,
+                        timeOfDay: template.time_of_day,
+                        scheduledTime: template.scheduled_time,
+                      })} />
                       <TemplateBadge label={template.allow_repeat ? "Repeatable" : "Single"} />
                     </span>
                   </span>
@@ -743,7 +748,7 @@ function expandDates(
 
 function TemplateBadge({ label }: { label: string }) {
   return (
-    <span className="text-[10px] uppercase tracking-[0.18em] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
+    <span className="text-[10px] uppercase tracking-normal bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
       {label}
     </span>
   );

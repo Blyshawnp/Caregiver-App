@@ -122,7 +122,7 @@ export type ShiftTodoRow = {
   is_prn: boolean;
   importance: "low" | "medium" | "high" | "critical";
   time_mode: "unscheduled" | "time_of_day" | "exact_time";
-  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  time_of_day: "morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
   scheduled_time: string | null;
   sort_order: number;
   allow_repeat: boolean;

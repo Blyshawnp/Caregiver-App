@@ -32,7 +32,7 @@ type ShiftTodo = {
   is_prn: boolean;
   importance: "low" | "medium" | "high" | "critical";
   time_mode: "unscheduled" | "time_of_day" | "exact_time";
-  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  time_of_day: "morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
   scheduled_time: string | null;
   sort_order: number;
   notes: string | null;
@@ -54,7 +54,7 @@ type Template = {
   is_prn: boolean;
   importance: "low" | "medium" | "high" | "critical";
   time_mode: "unscheduled" | "time_of_day" | "exact_time";
-  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  time_of_day: "morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
   scheduled_time: string | null;
   allow_repeat: boolean;
 };
@@ -113,7 +113,7 @@ export default function EditShiftForm({
   const [crtType, setCrtType] = useState<"required" | "optional" | "prn">("required");
   const [crtImportance, setCrtImportance] = useState<"low" | "medium" | "high" | "critical">("medium");
   const [crtTimeMode, setCrtTimeMode] = useState<"unscheduled" | "time_of_day" | "exact_time">("unscheduled");
-  const [crtTimeOfDay, setCrtTimeOfDay] = useState<"morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime">("morning");
+  const [crtTimeOfDay, setCrtTimeOfDay] = useState<"morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime">("morning");
   const [crtScheduledTime, setCrtScheduledTime] = useState("12:00");
   const [crtSortOrder, setCrtSortOrder] = useState(0);
   const [crtAllowRepeat, setCrtAllowRepeat] = useState(true);
@@ -857,6 +857,7 @@ export default function EditShiftForm({
                     >
                       <option value="morning">Morning</option>
                       <option value="early_afternoon">Early Afternoon</option>
+                      <option value="afternoon">Afternoon</option>
                       <option value="late_afternoon">Late Afternoon</option>
                       <option value="evening">Evening</option>
                       <option value="bedtime">Bedtime</option>

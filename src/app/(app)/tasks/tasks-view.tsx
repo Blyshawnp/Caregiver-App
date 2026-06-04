@@ -30,7 +30,7 @@ type Todo = {
   is_prn: boolean;
   importance: "low" | "medium" | "high" | "critical";
   time_mode: "unscheduled" | "time_of_day" | "exact_time";
-  time_of_day: "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
+  time_of_day: "morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime" | null;
   scheduled_time: string | null;
   sort_order: number;
   notes: string | null;
@@ -69,7 +69,7 @@ export default function TasksView({
   const [newTaskType, setNewTaskType] = useState<TaskType>("required");
   const [newImportance, setNewImportance] = useState<"low" | "medium" | "high" | "critical">("medium");
   const [newTimeMode, setNewTimeMode] = useState<"unscheduled" | "time_of_day" | "exact_time">("unscheduled");
-  const [newTimeOfDay, setNewTimeOfDay] = useState<"morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime">("morning");
+  const [newTimeOfDay, setNewTimeOfDay] = useState<"morning" | "early_afternoon" | "afternoon" | "late_afternoon" | "evening" | "bedtime">("morning");
   const [newScheduledTime, setNewScheduledTime] = useState("12:00");
   const [newSortOrder, setNewSortOrder] = useState(0);
   const [newAllowRepeat, setNewAllowRepeat] = useState(true);
@@ -399,6 +399,7 @@ export default function TasksView({
                     >
                       <option value="morning">{tr("task.morning", lang)}</option>
                       <option value="early_afternoon">{tr("task.earlyAfternoon", lang)}</option>
+                      <option value="afternoon">{tr("task.afternoon", lang)}</option>
                       <option value="late_afternoon">{tr("task.lateAfternoon", lang)}</option>
                       <option value="evening">{tr("task.evening", lang)}</option>
                       <option value="bedtime">{tr("task.bedtime", lang)}</option>

@@ -182,6 +182,20 @@ export async function PATCH(request: Request) {
       })
       .eq("id", payload.summaryId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await admin.from("activity_logs").insert({
+      organization_id: profile.organization_id,
+      actor_id: profile.id,
+      action_type: "adjust_year_end_summary",
+      shift_count: 0,
+      metadata: {
+        summary_id: payload.summaryId,
+        note: payload.note ?? null,
+        adjusted_total_hours: payload.totalHours ?? null,
+        adjusted_total_pay: payload.totalPay ?? null,
+        adjusted_total_bonus: payload.totalBonus ?? null,
+      },
+    });
     return NextResponse.json({ ok: true });
   }
 

@@ -1,10 +1,17 @@
 export type TaskImportance = "low" | "medium" | "high" | "critical";
 export type TaskTimeMode = "unscheduled" | "time_of_day" | "exact_time";
-export type TaskTimeOfDay = "morning" | "early_afternoon" | "late_afternoon" | "evening" | "bedtime";
+export type TaskTimeOfDay =
+  | "morning"
+  | "early_afternoon"
+  | "afternoon"
+  | "late_afternoon"
+  | "evening"
+  | "bedtime";
 
 const TIME_OF_DAY_ORDER: TaskTimeOfDay[] = [
   "morning",
   "early_afternoon",
+  "afternoon",
   "late_afternoon",
   "evening",
   "bedtime",
@@ -25,6 +32,7 @@ export function normalizeTaskTimeMode(value?: string | null): TaskTimeMode {
 export function normalizeTaskTimeOfDay(value?: string | null): TaskTimeOfDay | null {
   return value === "morning" ||
     value === "early_afternoon" ||
+    value === "afternoon" ||
     value === "late_afternoon" ||
     value === "evening" ||
     value === "bedtime"
@@ -82,13 +90,14 @@ export function getTaskTimeGroupLabel(input: {
     const timeOfDay = normalizeTaskTimeOfDay(input.timeOfDay);
     if (timeOfDay === "morning") return lang === "es" ? "Mañana" : "Morning";
     if (timeOfDay === "early_afternoon")
-      return lang === "es" ? "Tarde temprana" : "Early Afternoon";
+      return lang === "es" ? "Primera hora de la tarde" : "Early Afternoon";
+    if (timeOfDay === "afternoon") return lang === "es" ? "Tarde" : "Afternoon";
     if (timeOfDay === "late_afternoon")
-      return lang === "es" ? "Tarde" : "Late Afternoon";
+      return lang === "es" ? "Última hora de la tarde" : "Late Afternoon";
     if (timeOfDay === "evening") return lang === "es" ? "Noche" : "Evening";
     if (timeOfDay === "bedtime") return lang === "es" ? "Hora de dormir" : "Bedtime";
   }
-  return lang === "es" ? "Sin programar" : "Unscheduled";
+  return lang === "es" ? "Sin horario" : "Unscheduled";
 }
 
 export function sortTasks<T extends {

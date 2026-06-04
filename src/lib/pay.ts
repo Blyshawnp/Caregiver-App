@@ -220,6 +220,7 @@ export function formatEnumLabel(val: string | null | undefined, lang: string = "
   const mapping: Record<string, Record<string, string>> = {
     en: {
       early_afternoon: "Early Afternoon",
+      afternoon: "Afternoon",
       late_afternoon: "Late Afternoon",
       not_needed: "Not needed this shift",
       needs_follow_up: "Needs follow-up",
@@ -238,7 +239,7 @@ export function formatEnumLabel(val: string | null | undefined, lang: string = "
       critical: "Critical",
       unscheduled: "Unscheduled",
       time_of_day: "Time of day",
-      exact_time: "Exact time",
+      exact_time: "Exact Time",
       morning: "Morning",
       evening: "Evening",
       bedtime: "Bedtime",
@@ -253,6 +254,7 @@ export function formatEnumLabel(val: string | null | undefined, lang: string = "
     },
     es: {
       early_afternoon: "Primera hora de la tarde",
+      afternoon: "Tarde",
       late_afternoon: "Última hora de la tarde",
       not_needed: "No fue necesario en este turno",
       needs_follow_up: "Necesita seguimiento",
@@ -286,11 +288,12 @@ export function formatEnumLabel(val: string | null | undefined, lang: string = "
     }
   };
 
+  const normalized = val.trim().toLowerCase().replace(/\s+/g, "_");
   const currentMap = mapping[l];
   if (currentMap[val]) return currentMap[val];
-  if (currentMap[val.toLowerCase()]) return currentMap[val.toLowerCase()];
+  if (currentMap[normalized]) return currentMap[normalized];
 
-  return val
+  return normalized
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

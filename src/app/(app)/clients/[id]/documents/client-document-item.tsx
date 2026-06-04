@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { formatEnumLabel } from "@/lib/pay";
 
 type ClientDoc = {
   id: string;
@@ -56,7 +57,7 @@ export default function ClientDocumentItem({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <span className="inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-lg bg-forest-100 text-forest-800 mb-2">
-            {doc.category.replaceAll("_", " ")}
+            {formatEnumLabel(doc.category)}
           </span>
           <h3 className="font-display text-lg text-ink-900 font-semibold">{doc.title}</h3>
           {doc.description && <p className="text-sm text-ink-600 mt-1">{doc.description}</p>}

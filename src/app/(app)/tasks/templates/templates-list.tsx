@@ -10,6 +10,7 @@ import {
 } from "@/lib/task-categories";
 import { t as tr } from "@/lib/i18n";
 import { useEffect } from "react";
+import { getTaskTimeGroupLabel } from "@/lib/task-scheduling";
 
 function useUnsavedChangesWarning(isDirty: boolean) {
   useEffect(() => {
@@ -767,6 +768,14 @@ function TemplateRow({
 
   const isDirty = name !== template.task_name || 
                   description !== (template.description ?? "") ||
+                  taskType !== (template.is_prn ? "prn" : template.is_optional ? "optional" : "required") ||
+                  importance !== template.importance ||
+                  timeMode !== template.time_mode ||
+                  (timeMode === "time_of_day" && timeOfDay !== (template.time_of_day ?? "morning")) ||
+                  (timeMode === "exact_time" && scheduledTime !== (template.scheduled_time ?? "12:00")) ||
+                  allowRepeat !== template.allow_repeat ||
+                  sortOrder !== template.sort_order ||
+                  daysOfWeek.some((val, idx) => val !== (template.default_days_of_week?.includes(idx) ?? true)) ||
                   autoAdd !== (template.auto_add_to_matching_shifts ?? true) ||
                   startDate !== (template.auto_add_start_date ?? "") ||
                   endDate !== (template.auto_add_end_date ?? "") ||
@@ -1017,10 +1026,10 @@ function TemplateRow({
         </p>
         {template.description && <p className="text-xs text-ink-500 mt-0.5">{template.description}</p>}
         <div className="flex flex-wrap gap-1.5 mt-2">
-          <TemplateBadge label={template.is_prn ? tr("task.prn", lang) : template.is_optional ? tr("task.optional", lang) : tr("task.required", lang)} />
+                  <TemplateBadge label={template.is_prn ? tr("task.prn", lang) : template.is_optional ? tr("task.optional", lang) : tr("task.required", lang)} />
           <TemplateBadge label={importanceLabel(template.importance, lang)} />
-          <TemplateBadge label={template.time_mode === "exact_time" && template.scheduled_time ? template.scheduled_time : template.time_mode === "time_of_day" && template.time_of_day ? timeOfDayLabel(template.time_of_day, lang) : tr("task.unscheduled", lang)} />
-          <TemplateBadge label={template.allow_repeat ? (lang === "es" ? "Repetible" : "Repeatable") : tr("task.single", lang)} />
+          <TemplateBadge label={getTaskTimeGroupLabel({ timeMode: template.time_mode, timeOfDay: template.time_of_day, scheduledTime: template.scheduled_time }, lang)} />
+          <TemplateBadge label={template.allow_repeat ? tr("task.repeatable", lang) : tr("task.single", lang)} />
           <TemplateBadge label={`#${template.sort_order}`} />
         </div>
       </div>
@@ -1038,8 +1047,11 @@ function normalizeCategory(category: Template["category"]): TaskCategory {
 }
 
 function TemplateBadge({ label }: { label: string }) {
+  const isShortUpper = label === "PRN" || label === "AM" || label === "PM";
   return (
-    <span className="text-[10px] uppercase tracking-[0.18em] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded">
+    <span className={`text-[10px] bg-cream-100 text-ink-600 px-1.5 py-0.5 rounded ${
+      isShortUpper ? "uppercase tracking-wider font-semibold" : "normal-case font-medium"
+    }`}>
       {label}
     </span>
   );

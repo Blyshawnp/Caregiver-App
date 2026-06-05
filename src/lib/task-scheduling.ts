@@ -48,10 +48,21 @@ function resolveTaskTiming(input: {
   const timeOfDay = normalizeTaskTimeOfDay(input.timeOfDay);
   const scheduledTime = input.scheduledTime?.trim() || null;
 
+  // If timeMode is explicitly set, honor it
+  if (input.timeMode === "exact_time" && scheduledTime) {
+    return { mode: "exact_time" as const, timeOfDay: null, scheduledTime };
+  }
+  if (input.timeMode === "time_of_day" && timeOfDay) {
+    return { mode: "time_of_day" as const, timeOfDay, scheduledTime: null };
+  }
+  if (input.timeMode === "unscheduled") {
+    return { mode: "unscheduled" as const, timeOfDay: null, scheduledTime: null };
+  }
+
+  // Fallback if timeMode is null or missing
   if (scheduledTime) {
     return { mode: "exact_time" as const, timeOfDay: null, scheduledTime };
   }
-
   if (timeOfDay) {
     return { mode: "time_of_day" as const, timeOfDay, scheduledTime: null };
   }

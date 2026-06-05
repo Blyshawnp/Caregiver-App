@@ -287,6 +287,7 @@ export function BulkAddTaskModal({
         (timeFilter === "exact" && t.time_mode === "exact_time") ||
         (timeFilter === "morning" && t.time_of_day === "morning") ||
         (timeFilter === "early_afternoon" && t.time_of_day === "early_afternoon") ||
+        (timeFilter === "afternoon" && t.time_of_day === "afternoon") ||
         (timeFilter === "late_afternoon" && t.time_of_day === "late_afternoon") ||
         (timeFilter === "evening" && t.time_of_day === "evening") ||
         (timeFilter === "bedtime" && t.time_of_day === "bedtime");
@@ -371,6 +372,7 @@ export function BulkAddTaskModal({
 
           todosToInsert.push({
             shift_id: shift.id,
+            template_id: template.id,
             task_name: template.task_name,
             description: template.description,
             is_optional: template.is_optional,
@@ -446,6 +448,11 @@ export function BulkAddTaskModal({
     { value: "other", label: "Other" },
   ];
 
+  const getCategoryLabel = (catKey: string) => {
+    const cat = categories.find((c) => c.value === catKey);
+    return cat ? cat.label : "Other";
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-3xl p-6 max-w-lg w-full max-h-[85vh] flex flex-col shadow-lifted">
@@ -499,6 +506,7 @@ export function BulkAddTaskModal({
             <option value="exact">Exact Scheduled Time</option>
             <option value="morning">Morning</option>
             <option value="early_afternoon">Early Afternoon</option>
+            <option value="afternoon">Afternoon</option>
             <option value="late_afternoon">Late Afternoon</option>
             <option value="evening">Evening</option>
             <option value="bedtime">Bedtime</option>
@@ -529,7 +537,7 @@ export function BulkAddTaskModal({
                       )}
                       <div className="flex flex-wrap gap-1 mt-1">
                         <span className="text-[9px] bg-cream-200 text-ink-600 px-1.5 py-0.5 rounded font-medium">
-                          {t.category || "other"}
+                          {getCategoryLabel(t.category)}
                         </span>
                         {t.is_prn && (
                           <span className="text-[9px] bg-terracotta-500/15 text-terracotta-700 px-1.5 py-0.5 rounded font-medium">

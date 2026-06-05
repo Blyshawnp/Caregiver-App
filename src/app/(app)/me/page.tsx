@@ -335,8 +335,8 @@ export default async function MePage() {
       <section className="space-y-2 mb-4">
         <NavLink
           href="/account/settings#appearance"
-          label="Appearance"
-          description="Change colors, font size, and accessibility preferences."
+          label={t("appearance.title", lang)}
+          description={t("appearance.description", lang)}
           Icon={UserIcon}
         />
         <NavLink

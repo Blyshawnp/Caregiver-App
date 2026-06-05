@@ -77,7 +77,7 @@ export function getShiftStatus(
     return makeStatus("ready_to_check_in");
   }
 
-  if (now < start && shift.assignment_status === "accepted") {
+  if (now < start && shift.assignment_status !== "declined") {
     return makeStatus("upcoming");
   }
 

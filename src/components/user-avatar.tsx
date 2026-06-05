@@ -116,23 +116,31 @@ export default function UserAvatar({
 
   const preview = previewOpen && displayUrl && !failed && (
     <div
-      className="fixed inset-0 z-[1000] bg-ink-950/75 backdrop-blur-sm overflow-y-auto p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)]"
+      className="fixed inset-0 z-[1200] bg-ink-950/80 backdrop-blur-sm p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-center justify-center"
       onClick={() => setPreviewOpen(false)}
       role="dialog"
       aria-modal="true"
       aria-label={`${person.full_name || "User"} profile photo preview`}
     >
+      <button
+        type="button"
+        onClick={() => setPreviewOpen(false)}
+        className="fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-[1201] bg-white/95 hover:bg-white text-ink-900 px-3 py-2 rounded-xl text-sm font-medium shadow-lifted"
+        aria-label="Close profile photo preview"
+      >
+        Close
+      </button>
       <div
-        className="min-h-[calc(100dvh-2rem)] flex items-center justify-center"
+        className="w-full max-w-3xl"
       >
         <div
-          className="bg-white rounded-3xl shadow-lifted max-w-3xl w-full max-h-[92dvh] p-4 flex flex-col"
+          className="bg-white rounded-3xl shadow-lifted w-full max-h-[85dvh] p-3 flex flex-col"
           onClick={(event) => event.stopPropagation()}
         >
           <img
             src={displayUrl}
             alt={`${person.full_name || "User"} profile photo`}
-            className="w-full max-h-[80dvh] object-contain rounded-2xl bg-cream-100"
+            className="w-full max-h-[76dvh] object-contain rounded-2xl bg-cream-100"
           />
           <div className="flex gap-2 mt-3">
             {person.id && (
@@ -143,14 +151,6 @@ export default function UserAvatar({
                 View profile
               </Link>
             )}
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(false)}
-              className="flex-1 bg-cream-100 hover:bg-cream-200 text-ink-800 py-2.5 rounded-xl text-sm font-medium transition"
-              aria-label="Close profile photo preview"
-            >
-              Close
-            </button>
           </div>
         </div>
       </div>

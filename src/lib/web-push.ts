@@ -228,11 +228,19 @@ async function sendWebPush(
     process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY!;
   const subject = process.env.VAPID_SUBJECT!;
-  const body = encryptPayload(
-    JSON.stringify(payload),
-    subscription.p256dh,
-    subscription.auth
-  );
+  let body: Buffer;
+  try {
+    body = encryptPayload(
+      JSON.stringify(payload),
+      subscription.p256dh,
+      subscription.auth
+    );
+  } catch {
+    return new Response("Invalid push subscription keys", {
+      status: 400,
+      statusText: "Invalid Subscription",
+    });
+  }
 
   const jwt = createVapidJwt(endpoint.origin, subject, vapidPublicKey, vapidPrivateKey);
 
@@ -248,24 +256,10 @@ async function sendWebPush(
           ? "high"
           : "normal",
     },
-    body,
+    body: new Uint8Array(body),
   });
 
-  if (response.ok || response.status === 404 || response.status === 410) {
-    return response;
-  }
-
-  return fetch(subscription.endpoint, {
-    method: "POST",
-    headers: {
-      TTL: "2419200",
-      Authorization: `vapid t=${jwt}, k=${vapidPublicKey}`,
-      Urgency:
-        payload.sound === "urgent" || payload.sound === "urgent_alert"
-          ? "high"
-          : "normal",
-    },
-  });
+  return response;
 }
 
 function reasonForPushStatus(status: number) {

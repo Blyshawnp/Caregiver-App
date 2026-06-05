@@ -282,6 +282,7 @@ export default async function HelpPage() {
             <li><strong>Font Size:</strong> Choose <em>Standard</em>, <em>Large</em>, or <em>Extra large</em>. Cards and buttons expand naturally on mobile.</li>
             <li><strong>Spanish Language:</strong> Toggle between English and Spanish seamlessly under <strong>Me &rarr; Language</strong>. This translates the dashboard, client detail sheets, task categories, PRN options, invoices, and summaries.</li>
             <li><strong>PWA Installation Controls:</strong> Control progressive web app banner prompts. You can choose <em>Install app</em>, <em>Not now</em>, <em>Don't show for 24 hours</em> (remind tomorrow), or <em>Don't show again</em>. A manual <em>Install app</em> button is also available in Settings.</li>
+            <li><strong>Installed App Icon:</strong> If your Home Screen or Android launcher still shows an old or off-center icon after an update, remove the installed PWA shortcut and install it again. Mobile launchers can cache old icons.</li>
             <li><strong>Notification Sounds & Volume:</strong> Toggle audio alerts and adjust playback volume using the slider (suggested default is 80%). Use the <em>Play test sound</em> button to test browser autoplay compatibility.</li>
             <li><strong>Push Notification Health Check:</strong> Verify notification health via the status indicator (Active, Not active, or Unsupported) and view the last successful subscription check time. Tap <em>Refresh subscription</em> to update server metadata.</li>
           </ul>

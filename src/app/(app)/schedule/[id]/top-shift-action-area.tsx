@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { StarOfLifeIcon } from "@/components/icons";
+import Image from "next/image";
 import { formatCurrency } from "@/lib/pay";
 import AcceptDeclineButtons from "./accept-decline-buttons";
 import ClaimShiftButton from "./claim-shift-button";
@@ -132,38 +132,45 @@ export default function TopShiftActionArea({
   ) : null;
 
   return (
-    <section className="bg-white border-2 border-cream-200 rounded-3xl p-5 mb-5 shadow-soft grain-overlay relative">
+    <section className="bg-white border border-cream-200 rounded-3xl p-5 mb-5 shadow-soft grain-overlay relative">
       <div className="relative">
-        <div className="flex justify-between items-start gap-4 mb-2">
-          <div>
-            <h2 className="font-display text-lg text-ink-900 leading-tight">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-normal text-ink-500">
+              Shift summary
+            </p>
+            <h2 className="mt-1 truncate font-sans text-2xl font-semibold tracking-normal leading-tight text-ink-900">
               {clientName}
             </h2>
             <p className="text-xs text-ink-500 mt-0.5">{shiftDateTime}</p>
           </div>
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
-            shiftStatusTone === "forest"
-              ? "bg-forest-100 text-forest-700"
-              : shiftStatusTone === "terracotta"
-                ? "bg-terracotta-100 text-terracotta-700"
-                : "bg-cream-200 text-ink-600"
-          }`}>
-            {shiftStatusLabel}
-          </span>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${
+              shiftStatusTone === "forest"
+                ? "bg-forest-100 text-forest-700"
+                : shiftStatusTone === "terracotta"
+                  ? "bg-terracotta-100 text-terracotta-700"
+                  : "bg-cream-200 text-ink-600"
+            }`}>
+              {shiftStatusLabel}
+            </span>
+            <Link
+              href="/emergency"
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+            >
+              <Image
+                src="/icons/emergency.png"
+                alt=""
+                width={18}
+                height={18}
+                className="h-4 w-4 object-contain"
+              />
+              <span>Emergency info</span>
+            </Link>
+          </div>
         </div>
 
         {paySummary}
-
-        {/* Emergency shortcut button */}
-        <div className="mt-3 flex gap-2">
-          <Link
-            href="/emergency"
-            className="flex-1 max-w-[150px] flex items-center justify-center gap-1 text-[11px] font-semibold text-terracotta-700 bg-terracotta-400/10 hover:bg-terracotta-400/20 border border-terracotta-400/30 px-3 py-2 rounded-xl transition"
-          >
-            <StarOfLifeIcon size={12} className="text-terracotta-600 shrink-0" />
-            <span>Emergency Info</span>
-          </Link>
-        </div>
 
         {/* Action Button Section */}
         <div className="mt-4 space-y-2.5">

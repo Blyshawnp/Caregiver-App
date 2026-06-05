@@ -42,6 +42,15 @@ export default function PetsList({
 
   const selectedPet = selectedPetIdx !== null ? pets[selectedPetIdx] : null;
 
+  useEffect(() => {
+    if (!selectedPet) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setSelectedPetIdx(null);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPet]);
+
   function getTypeBadgeStyles(type: string) {
     switch (type) {
       case "Dog":
@@ -162,25 +171,33 @@ export default function PetsList({
 
       {/* DETAIL MODAL DIALOG */}
       {selectedPet && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] overflow-y-auto p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] no-print animate-fade-in">
-          <div className="min-h-[calc(100dvh-2rem)] flex items-center justify-center">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90dvh] overflow-y-auto shadow-lifted border border-cream-200/50 flex flex-col animate-scale-in">
+        <div
+          className="fixed inset-0 z-[1200] bg-black/70 backdrop-blur-sm p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] no-print animate-fade-in flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${selectedPet.name} pet details`}
+          onClick={() => setSelectedPetIdx(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setSelectedPetIdx(null)}
+            className="fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-[1201] rounded-xl bg-white/95 px-3 py-2 text-sm font-medium text-ink-900 shadow-lifted transition hover:bg-white active:scale-[0.98]"
+            aria-label="Close pet preview"
+          >
+            Close
+          </button>
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full max-h-[85dvh] overflow-hidden shadow-lifted border border-cream-200/50 flex flex-col animate-scale-in"
+            onClick={(event) => event.stopPropagation()}
+          >
             {/* Modal Photo Header */}
-            <div className="relative h-60 w-full bg-cream-200 shrink-0">
+            <div className="relative h-60 max-h-[38dvh] w-full bg-cream-200 shrink-0">
               <PetPhotoImage
                 src={selectedPet.photo_display_url ?? selectedPet.photo_url}
                 alt={selectedPet.name}
-                imageClassName="w-full h-full object-cover"
+                imageClassName="w-full h-full object-contain"
                 iconClassName="w-16 h-16 text-forest-600/20"
               />
-              {/* Close Button */}
-              <button
-                type="button"
-                onClick={() => setSelectedPetIdx(null)}
-                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center font-bold text-sm shadow-md transition-all active:scale-[0.9]"
-              >
-                ✕
-              </button>
             </div>
 
             {/* Modal Body Info */}
@@ -346,7 +363,6 @@ export default function PetsList({
                 Close
               </button>
             </div>
-          </div>
           </div>
         </div>
       )}

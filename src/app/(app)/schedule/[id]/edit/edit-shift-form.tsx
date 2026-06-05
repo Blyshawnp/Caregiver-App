@@ -560,7 +560,7 @@ export default function EditShiftForm({
                 const badgeList = [
                   todo.is_optional ? "Optional" : "Required",
                   todo.is_prn ? "PRN" : null,
-                  todo.importance !== "medium" ? todo.importance : null,
+                  todo.importance !== "medium" ? (todo.importance.charAt(0).toUpperCase() + todo.importance.slice(1)) : null,
                   getTaskTimeGroupLabel({
                     timeMode: todo.time_mode,
                     timeOfDay: todo.time_of_day,
@@ -719,7 +719,7 @@ export default function EditShiftForm({
                                   <div className="flex gap-1 mt-1">
                                     {tmpl.is_optional && <Badge color="cream">Optional</Badge>}
                                     {tmpl.is_prn && <Badge color="terracotta">PRN</Badge>}
-                                    {tmpl.importance !== "medium" && <Badge>{tmpl.importance}</Badge>}
+                                    {tmpl.importance !== "medium" && <Badge>{tmpl.importance.charAt(0).toUpperCase() + tmpl.importance.slice(1)}</Badge>}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0 ml-2">

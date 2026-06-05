@@ -4,7 +4,10 @@ export type NotificationTone =
   | "bell"
   | "bright_alert"
   | "urgent_alert"
-  | "silent";
+  | "silent"
+  | "loud_chime"
+  | "repeating_chime"
+  | "urgent_tone";
 
 export type NotificationPreferenceCategory =
   | "messages"
@@ -36,6 +39,9 @@ export const TONE_OPTIONS: Array<{ id: NotificationTone; label: string }> = [
   { id: "bell", label: "Bell" },
   { id: "bright_alert", label: "Bright alert" },
   { id: "urgent_alert", label: "Urgent alert" },
+  { id: "loud_chime", label: "Loud chime" },
+  { id: "repeating_chime", label: "Repeating chime" },
+  { id: "urgent_tone", label: "Urgent tone" },
   { id: "silent", label: "Silent" },
 ];
 

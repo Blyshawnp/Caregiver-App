@@ -19,13 +19,18 @@ import {
   type NotificationCategoryPreference,
   type NotificationPreferenceCategory,
 } from "@/lib/notification-preferences";
+import { getVapidFingerprint } from "@/lib/vapid-helper";
 
 type PushDiagnostics = {
   browserPermission: string;
   serviceWorkerRegistered: boolean;
   serviceWorkerActive: boolean;
   subscriptionSaved: boolean;
+  subscriptionEndpointPresent: boolean;
+  subscriptionKeysPresent: boolean;
+  vapidKeyMatch: boolean;
   lastSubscriptionUpdate: string | null;
+  lastTestPushResult: string | null;
   platform: string;
   installedPwa: boolean;
   browser: string;
@@ -47,14 +52,29 @@ export default function NotificationSettings({
     serviceWorkerRegistered: false,
     serviceWorkerActive: false,
     subscriptionSaved: false,
+    subscriptionEndpointPresent: false,
+    subscriptionKeysPresent: false,
+    vapidKeyMatch: false,
     lastSubscriptionUpdate: null,
+    lastTestPushResult: "Not run",
     platform: "unknown",
     installedPwa: false,
     browser: "unknown",
   });
 
+  const [inAppAlertSound, setInAppAlertSound] = useState("default");
+  const [inAppAlertVolume, setInAppAlertVolume] = useState(0.8);
+  const [urgentAlertsRepeat, setUrgentAlertsRepeat] = useState(true);
+
   useEffect(() => {
     setPushSupported(isPushSupported());
+    
+    if (typeof window !== "undefined") {
+      setInAppAlertSound(localStorage.getItem("pwa_in_app_alert_sound") || "default");
+      setInAppAlertVolume(localStorage.getItem("pwa_in_app_alert_volume") ? parseFloat(localStorage.getItem("pwa_in_app_alert_volume")!) : 0.8);
+      setUrgentAlertsRepeat(localStorage.getItem("pwa_urgent_alerts_repeat") !== "false");
+    }
+
     async function init() {
       try {
         const [status, p] = await Promise.all([
@@ -63,6 +83,13 @@ export default function NotificationSettings({
         ]);
         setDeviceEnabled(status.enabled);
         setPrefs(normalizePrefs(p));
+        
+        if (typeof window !== "undefined") {
+          if (p.quiet_hours_start) localStorage.setItem("pwa_quiet_hours_start", p.quiet_hours_start);
+          if (p.quiet_hours_end) localStorage.setItem("pwa_quiet_hours_end", p.quiet_hours_end);
+          localStorage.setItem("pwa_urgent_override_quiet_hours", String(p.urgent_override_quiet_hours ?? true));
+        }
+
         await refreshDiagnostics(status);
       } catch {
         /* ignore */
@@ -80,6 +107,7 @@ export default function NotificationSettings({
       if (deviceEnabled) {
         await disablePushNotifications();
         setDeviceEnabled(false);
+        await refreshDiagnostics();
       } else {
         await enablePushNotifications();
         const status = await getPushDeviceStatus();
@@ -109,6 +137,21 @@ export default function NotificationSettings({
   async function updatePreferencePatch(update: Partial<PushPreferences>) {
     const next = normalizePrefs({ ...prefs, ...update });
     setPrefs(next);
+
+    if (typeof window !== "undefined") {
+      if (update.quiet_hours_start !== undefined) {
+        if (update.quiet_hours_start) localStorage.setItem("pwa_quiet_hours_start", update.quiet_hours_start);
+        else localStorage.removeItem("pwa_quiet_hours_start");
+      }
+      if (update.quiet_hours_end !== undefined) {
+        if (update.quiet_hours_end) localStorage.setItem("pwa_quiet_hours_end", update.quiet_hours_end);
+        else localStorage.removeItem("pwa_quiet_hours_end");
+      }
+      if (update.urgent_override_quiet_hours !== undefined) {
+        localStorage.setItem("pwa_urgent_override_quiet_hours", String(update.urgent_override_quiet_hours));
+      }
+    }
+
     try {
       const saved = await savePushPreferences(update);
       setPrefs(normalizePrefs(saved));
@@ -163,16 +206,20 @@ export default function NotificationSettings({
       const res = await fetch("/api/push/test", { method: "POST" });
       const d = await res.json().catch(() => null);
       if (res.ok) {
+        localStorage.setItem("pwa_last_test_push_result", "success");
         setTestMessage(
           `Test push accepted by browser push service (${d?.diagnostics?.delivered ?? 1} delivered). If it does not appear, check OS/browser notification settings, battery optimization, or Focus/Do Not Disturb.`
         );
       } else {
+        const errCode = d?.code || "unknown_error";
+        localStorage.setItem("pwa_last_test_push_result", errCode);
         throw new Error(d?.error || "Failed to send test push.");
       }
     } catch (err: any) {
       setTestMessage(`❌ Error: ${err.message}`);
     } finally {
       setTestLoading(false);
+      await refreshDiagnostics();
     }
   }
 
@@ -181,25 +228,88 @@ export default function NotificationSettings({
     setError(null);
     setTestMessage(null);
     try {
-      const sub = await refreshPushSubscription();
+      if (!("serviceWorker" in navigator)) {
+        throw new Error("Service worker not supported.");
+      }
+      const registration = await navigator.serviceWorker.ready;
+
+      const existing = await registration.pushManager.getSubscription();
+      if (existing) {
+        await fetch("/api/push/subscriptions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: existing.endpoint }),
+        }).catch(() => null);
+        await existing.unsubscribe().catch(() => false);
+      }
+
+      if (!registration.active) {
+        throw new Error("Service worker is not active.");
+      }
+
+      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!publicKey) {
+        throw new Error("Application VAPID public key not configured.");
+      }
+
+      const padding = "=".repeat((publicKey.length % 4) ? 4 - (publicKey.length % 4) : 0);
+      const base64 = `${publicKey}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; i += 1) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      const applicationServerKey = outputArray.buffer as ArrayBuffer;
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+
+      const fingerprint = getVapidFingerprint(publicKey);
+      const saveRes = await fetch("/api/push/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...subscription.toJSON(),
+          vapid_key_fingerprint: fingerprint,
+        }),
+      });
+
+      if (!saveRes.ok) {
+        const d = await saveRes.json().catch(() => null);
+        throw new Error(d?.error || "Could not save refreshed subscription.");
+      }
+
+      const status = await getPushDeviceStatus(subscription.endpoint);
+      if (!status.enabled) {
+        throw new Error("Verifying subscription in database failed.");
+      }
+
       const nowStr = new Date().toISOString();
       localStorage.setItem("pwa_last_subscription_check", nowStr);
       setLastCheck(new Date(nowStr).toLocaleString());
       setDeviceEnabled(true);
-      await refreshDiagnostics(await getPushDeviceStatus(sub.endpoint));
+      await refreshDiagnostics(status);
 
-      const res = await fetch("/api/push/test", { method: "POST" });
-      const d = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(d?.error || "Subscription refreshed, but the test push failed.");
+      const testRes = await fetch("/api/push/test", { method: "POST" });
+      const testData = await testRes.json().catch(() => null);
+      if (testRes.ok) {
+        localStorage.setItem("pwa_last_test_push_result", "success");
+        setTestMessage(
+          `Subscription refreshed and test push accepted (${testData?.diagnostics?.delivered ?? 1} delivered).`
+        );
+      } else {
+        const errCode = testData?.code || "unknown_error";
+        localStorage.setItem("pwa_last_test_push_result", errCode);
+        throw new Error(testData?.error || "Subscription refreshed, but test push failed.");
       }
-      setTestMessage(
-        `Subscription refreshed and test push accepted (${d?.diagnostics?.delivered ?? 1} delivered). If it does not appear, check OS notification permission, Focus/Do Not Disturb, battery optimization, or installed PWA state.`
-      );
     } catch (err: any) {
       setError(err.message || "Failed to refresh subscription.");
+      localStorage.setItem("pwa_last_test_push_result", "unknown_error");
     } finally {
       setLoading(false);
+      await refreshDiagnostics();
     }
   }
 
@@ -210,21 +320,89 @@ export default function NotificationSettings({
       nav.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
     const browser = navigator.userAgent;
     let registration: ServiceWorkerRegistration | undefined;
+    let sub: PushSubscription | null = null;
     if ("serviceWorker" in navigator) {
       registration = await navigator.serviceWorker.getRegistration("/");
+      if (registration) {
+        sub = await registration.pushManager.getSubscription();
+      }
     }
-    const status = prefetchedStatus ?? (await getPushDeviceStatus().catch(() => null));
+    const status = prefetchedStatus ?? (await getPushDeviceStatus(sub?.endpoint).catch(() => null));
+    
+    const currentFingerprint = getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
+    const dbFingerprint = status?.vapidKeyFingerprint;
+    const vapidKeyMatch = status?.enabled && dbFingerprint ? dbFingerprint === currentFingerprint : false;
+    
+    const endpointPresent = !!sub?.endpoint;
+    const keysPresent = !!sub?.getKey?.("p256dh") && !!sub?.getKey?.("auth");
+    
+    const lastTest = localStorage.getItem("pwa_last_test_push_result");
+
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
       serviceWorkerRegistered: !!registration,
       serviceWorkerActive: !!registration?.active,
       subscriptionSaved: !!status?.enabled,
+      subscriptionEndpointPresent: endpointPresent,
+      subscriptionKeysPresent: keysPresent,
+      vapidKeyMatch,
       lastSubscriptionUpdate: status?.lastSeenAt ?? status?.updatedAt ?? null,
+      lastTestPushResult: lastTest ? describeTestResult(lastTest) : "Not run",
       platform: status?.platform ?? nav.userAgentData?.platform ?? (browser.includes("Android") ? "android" : browser.includes("iPhone") || browser.includes("iPad") ? "ios" : "desktop"),
       installedPwa,
       browser,
     });
   }
+
+  function describeTestResult(code: string) {
+    switch (code) {
+      case "success": return "Success";
+      case "expired_subscription": return "Subscription expired (404/410)";
+      case "invalid_vapid_key": return "Notification key mismatch (401/403)";
+      case "rejected_by_push_service": return "Rejected by browser push service (400)";
+      case "permission_denied": return "Permission denied";
+      case "no_subscription": return "No active subscription";
+      case "service_worker_missing": return "Service worker missing";
+      default: return `Failed (${code})`;
+    }
+  }
+
+  function getOverallStatus() {
+    if (!supported || diagnostics.browserPermission === "unsupported") {
+      return { label: "Browser unsupported", color: "text-terracotta-600 font-semibold" };
+    }
+    if (diagnostics.browserPermission === "denied") {
+      return { label: "Permission denied", color: "text-terracotta-600 font-semibold" };
+    }
+    if (!diagnostics.serviceWorkerRegistered || !diagnostics.serviceWorkerActive) {
+      return { label: "Service worker issue", color: "text-terracotta-600 font-semibold" };
+    }
+
+    const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
+    const hasMismatch = deviceEnabled && diagnostics.subscriptionSaved && diagnostics.vapidKeyMatch === false;
+
+    if (
+      hasMismatch ||
+      lastTest === "invalid_vapid_key" ||
+      lastTest === "expired_subscription" ||
+      diagnostics.lastSubscriptionUpdate === "invalid_key"
+    ) {
+      return { label: "Needs refresh", color: "text-amber-600 font-semibold" };
+    }
+
+    if (!deviceEnabled || !diagnostics.subscriptionSaved) {
+      return { label: "Not subscribed", color: "text-ink-500 font-semibold" };
+    }
+
+    if (lastTest === "success") {
+      return { label: "Active and test passed", color: "text-forest-700 font-semibold" };
+    }
+
+    return { label: "Active but test not recently run", color: "text-forest-700 font-semibold" };
+  }
+
+  const overallStatus = getOverallStatus();
+  const showMismatchWarning = deviceEnabled && diagnostics.subscriptionSaved && diagnostics.vapidKeyMatch === false;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto space-y-6">
@@ -239,16 +417,16 @@ export default function NotificationSettings({
           Enable native notifications on this device to stay updated instantly.
         </p>
 
+        {showMismatchWarning && (
+          <div className="bg-terracotta-50 border border-terracotta-200 p-4 rounded-2xl text-xs text-terracotta-700 font-semibold mb-4 animate-pulse">
+            ⚠️ This device needs to refresh notifications because the app notification key changed.
+          </div>
+        )}
+
         <div className="bg-cream-50 p-4 rounded-2xl text-xs space-y-2 mb-4 border border-cream-200">
           <p className="font-medium text-ink-700">
             <strong>Notification status:</strong>{" "}
-            {!supported ? (
-              <span className="text-terracotta-600 font-semibold">Unsupported on this device</span>
-            ) : deviceEnabled ? (
-              <span className="text-forest-700 font-semibold">🟢 Active & Registered on this device</span>
-            ) : (
-              <span className="text-ink-500 font-semibold">⚪ Not active on this device</span>
-            )}
+            <span className={overallStatus.color}>{overallStatus.label}</span>
           </p>
           {lastCheck && (
             <p className="text-ink-500">
@@ -268,10 +446,14 @@ export default function NotificationSettings({
             <Diag label="Service worker registered" value={diagnostics.serviceWorkerRegistered ? "Yes" : "No"} />
             <Diag label="Service worker active" value={diagnostics.serviceWorkerActive ? "Yes" : "No"} />
             <Diag label="Push subscription saved" value={diagnostics.subscriptionSaved ? "Yes" : "No"} />
+            <Diag label="Subscription endpoint present" value={diagnostics.subscriptionEndpointPresent ? "Yes" : "No"} />
+            <Diag label="Subscription keys present" value={diagnostics.subscriptionKeysPresent ? "Yes" : "No"} />
+            <Diag label="VAPID key match" value={diagnostics.vapidKeyMatch ? "Yes" : "No"} />
             <Diag
               label="Last subscription update"
               value={diagnostics.lastSubscriptionUpdate ? new Date(diagnostics.lastSubscriptionUpdate).toLocaleString() : "Not recorded"}
             />
+            <Diag label="Last test push result" value={diagnostics.lastTestPushResult || "Not run"} />
             <Diag label="Platform/browser" value={`${diagnostics.platform} · ${diagnostics.browser.slice(0, 42)}`} />
             <Diag label="Installed PWA mode" value={diagnostics.installedPwa ? "Yes" : "No"} />
           </dl>
@@ -320,6 +502,71 @@ export default function NotificationSettings({
             )}
           </div>
         )}
+      </section>
+
+      <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
+        <h2 className="font-display text-xl mb-1">In-app Alert Sound Settings</h2>
+        <p className="text-xs text-ink-500 mb-4">
+          Configure sounds played when you receive alerts while the app is open.
+        </p>
+        <div className="bg-cream-50 p-4 rounded-2xl border border-cream-200 text-xs mb-4 text-ink-600 leading-relaxed">
+          📢 <strong>Note:</strong> Your device controls the sound for native push notifications. Carer Vista Pro can play louder in-app alert sounds while the app is open, but your phone or computer controls the sound used for system push notifications.
+        </div>
+
+        <div className="space-y-4">
+          <label className="block text-xs font-semibold text-ink-700">
+            Default In-app Alert Sound
+            <select
+              value={inAppAlertSound}
+              onChange={(e) => {
+                const val = e.target.value;
+                setInAppAlertSound(val);
+                localStorage.setItem("pwa_in_app_alert_sound", val);
+              }}
+              className="mt-1 block w-full bg-white border border-cream-200 rounded-xl px-3 py-2 text-sm text-ink-850 focus:outline-none focus:border-forest-500"
+            >
+              <option value="default">Default</option>
+              <option value="soft_chime">Soft chime</option>
+              <option value="bell">Loud chime</option>
+              <option value="repeating_chime">Repeating chime</option>
+              <option value="urgent_tone">Urgent tone</option>
+            </select>
+          </label>
+
+          <label className="block text-xs font-semibold text-ink-700">
+            Alert Sound Volume ({Math.round(inAppAlertVolume * 100)}%)
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={inAppAlertVolume}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setInAppAlertVolume(val);
+                localStorage.setItem("pwa_in_app_alert_volume", String(val));
+              }}
+              className="mt-2 w-full accent-forest-600"
+            />
+          </label>
+
+          <ToggleRow
+            label="Repeat urgent alerts until acknowledged"
+            checked={urgentAlertsRepeat}
+            onChange={(v) => {
+              setUrgentAlertsRepeat(v);
+              localStorage.setItem("pwa_urgent_alerts_repeat", String(v));
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={() => playNotificationTone(inAppAlertSound as any, inAppAlertVolume)}
+            className="w-full bg-cream-200 hover:bg-cream-300 text-ink-700 py-2.5 rounded-xl text-xs font-semibold transition"
+          >
+            🔊 Play Test Alert Sound
+          </button>
+        </div>
       </section>
 
       <section className="bg-white rounded-3xl p-6 shadow-soft grain-overlay">
@@ -414,7 +661,7 @@ export default function NotificationSettings({
                         value={current.tone}
                         onChange={(event) =>
                           updateCategoryPreference(category.id, {
-                            tone: event.target.value as NotificationCategoryPreference["tone"],
+                            tone: event.target.value as any,
                           })
                         }
                         className="mt-1 w-full bg-white border border-cream-200 rounded-xl px-3 py-2"

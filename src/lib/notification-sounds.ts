@@ -13,13 +13,60 @@ const FREQUENCIES: Record<SoundKind | NotificationTone, number[]> = {
   bell: [740, 988],
   bright_alert: [784, 1046],
   urgent_alert: [880, 660, 880],
+  loud_chime: [880, 880, 880],
+  repeating_chime: [587, 698, 587, 698],
+  urgent_tone: [988, 784, 988, 784],
   silent: [],
 };
 
 let audioContext: AudioContext | null = null;
 
 export async function playNotificationSound(kind: SoundKind) {
-  return playNotificationTone(mapLegacySound(kind));
+  if (typeof window !== "undefined") {
+    const start = localStorage.getItem("pwa_quiet_hours_start");
+    const end = localStorage.getItem("pwa_quiet_hours_end");
+    if (isQuietHoursNow(start, end)) {
+      const urgentBypass = localStorage.getItem("pwa_urgent_override_quiet_hours") !== "false";
+      const isUrgent = kind === "urgent";
+      if (!isUrgent || !urgentBypass) {
+        return false;
+      }
+    }
+
+    const customDefault = localStorage.getItem("pwa_in_app_alert_sound") as NotificationTone | null;
+    const customVolume = localStorage.getItem("pwa_in_app_alert_volume");
+    const volume = customVolume !== null ? parseFloat(customVolume) : undefined;
+    
+    if (customDefault && customDefault !== "default") {
+      if (kind === "urgent") {
+        return playNotificationTone("urgent_tone", volume ?? 0.9);
+      }
+      return playNotificationTone(customDefault, volume);
+    }
+  }
+  return playNotificationTone(
+    mapLegacySound(kind), 
+    typeof window !== "undefined" && localStorage.getItem("pwa_in_app_alert_volume") 
+      ? parseFloat(localStorage.getItem("pwa_in_app_alert_volume")!) 
+      : undefined
+  );
+}
+
+function isQuietHoursNow(start: string | null, end: string | null) {
+  if (!start || !end) return false;
+  const toMinutes = (val: string) => {
+    const [h, m] = val.split(":").map(Number);
+    return !Number.isFinite(h) || !Number.isFinite(m) ? null : h * 60 + m;
+  };
+  const startMinutes = toMinutes(start);
+  const endMinutes = toMinutes(end);
+  if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) return false;
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  if (startMinutes < endMinutes) {
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+  }
+  return nowMinutes >= startMinutes || nowMinutes < endMinutes;
 }
 
 export async function playNotificationTone(

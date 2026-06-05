@@ -8,6 +8,7 @@ type PushSubscriptionPayload = {
     p256dh: string;
     auth: string;
   };
+  vapid_key_fingerprint?: string;
 };
 
 export async function GET(request: Request) {
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   let query = admin
     .from("push_subscriptions")
-    .select("endpoint, last_seen_at, updated_at, platform")
+    .select("endpoint, last_seen_at, updated_at, platform, vapid_key_fingerprint")
     .eq("user_id", user.id)
     .eq("is_active", true);
 
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
     lastSeenAt: data?.[0]?.last_seen_at ?? null,
     updatedAt: data?.[0]?.updated_at ?? null,
     platform: data?.[0]?.platform ?? null,
+    vapidKeyFingerprint: data?.[0]?.vapid_key_fingerprint ?? null,
   });
 }
 
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
       disabled_at: null,
       last_seen_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      vapid_key_fingerprint: payload.vapid_key_fingerprint || null,
     },
     { onConflict: "endpoint" }
   );

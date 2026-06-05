@@ -121,6 +121,7 @@ export async function sendPushForNotifications(
   }
 
   const disabledIds: string[] = [];
+  const invalidKeyIds: string[] = [];
   const failures: PushDeliveryResult["failures"] = [];
   let attempted = 0;
   let delivered = 0;
@@ -165,6 +166,8 @@ export async function sendPushForNotifications(
 
         if (result.status === 404 || result.status === 410) {
           disabledIds.push(subscription.id);
+        } else if (result.status === 401 || result.status === 403) {
+          invalidKeyIds.push(subscription.id);
         }
         if (result.ok) {
           delivered += 1;
@@ -190,11 +193,23 @@ export async function sendPushForNotifications(
       .in("id", disabledIds);
   }
 
+  if (invalidKeyIds.length > 0) {
+    await admin
+      .from("push_subscriptions")
+      .update({
+        is_active: false,
+        vapid_key_fingerprint: "invalid_key",
+        disabled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", invalidKeyIds);
+  }
+
   return {
     attempted,
     delivered,
     failed: failures.length,
-    disabled: disabledIds.length,
+    disabled: disabledIds.length + invalidKeyIds.length,
     skipped: null,
     failures,
   };

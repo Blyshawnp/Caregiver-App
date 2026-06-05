@@ -3,6 +3,7 @@
 import type {
   NotificationCategoryPreferenceMap,
 } from "@/lib/notification-preferences";
+import { getVapidFingerprint } from "@/lib/vapid-helper";
 
 export type PushPreferences = {
   messages: boolean;
@@ -118,7 +119,10 @@ export async function enablePushNotifications() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(subscription.toJSON()),
+        body: JSON.stringify({
+          ...subscription.toJSON(),
+          vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
+        }),
       }),
       15_000,
       "Saving push subscription timed out."
@@ -160,6 +164,7 @@ export async function getPushDeviceStatus(endpoint?: string | null) {
     lastSeenAt?: string | null;
     updatedAt?: string | null;
     platform?: string | null;
+    vapidKeyFingerprint?: string | null;
   };
 }
 
@@ -169,7 +174,10 @@ export async function saveCurrentPushSubscription(subscription: PushSubscription
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(subscription.toJSON()),
+    body: JSON.stringify({
+      ...subscription.toJSON(),
+      vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
+    }),
   });
   if (!response.ok) {
     const data = (await response.json().catch(() => null)) as { error?: string } | null;

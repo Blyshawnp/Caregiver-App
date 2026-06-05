@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized", code: "permission_denied" }, { status: 401 });
     }
 
     const admin = createAdminClient();
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: "No active push subscription was found for this device. Refresh subscription or enable alerts again.",
+          code: "no_subscription",
           diagnostics: result,
         },
         { status: 409 }
@@ -37,26 +38,46 @@ export async function POST(request: Request) {
     }
     if (result.skipped === "not_configured") {
       return NextResponse.json(
-        { error: "Push notifications are not configured on the server.", diagnostics: result },
+        {
+          error: "Push notifications are not configured on the server.",
+          code: "unknown_error",
+          diagnostics: result,
+        },
         { status: 500 }
       );
     }
     if (result.delivered === 0) {
       const firstFailure = result.failures[0];
-      const error = describePushFailure(firstFailure?.status, firstFailure?.reason);
+      const status = firstFailure?.status;
+      
+      let errorCode = "rejected_by_push_service";
+      if (status === 404 || status === 410) {
+        errorCode = "expired_subscription";
+      } else if (status === 401 || status === 403) {
+        errorCode = "invalid_vapid_key";
+      }
+
+      const error = describePushFailure(status, firstFailure?.reason);
       return NextResponse.json(
         {
           error,
+          code: errorCode,
           diagnostics: result,
         },
         { status: 502 }
       );
     }
 
-    return NextResponse.json({ ok: true, diagnostics: result });
+    return NextResponse.json({ ok: true, code: "success", diagnostics: result });
   } catch (err: any) {
     console.error("[push-test] error", err);
-    return NextResponse.json({ error: err.message || "Failed to send test push" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: err.message || "Failed to send test push",
+        code: "unknown_error",
+      },
+      { status: 500 }
+    );
   }
 }
 

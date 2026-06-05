@@ -160,9 +160,9 @@ export default function InstallPrompt() {
                   C
                 </div>
                 <div className="min-w-0">
-                  <p className="font-semibold text-sm leading-tight text-cream-50">Install Caregiver App</p>
+                  <p className="font-semibold text-sm leading-tight text-cream-50">Install Carer Vista Pro</p>
                   <p className="text-[11px] text-cream-50/70 mt-0.5">
-                    Add Caregiver App to your home screen for rapid offline check-ins, tasks, and notes.
+                    Add Carer Vista Pro to your home screen for rapid offline check-ins, tasks, and notes.
                   </p>
                 </div>
               </div>
@@ -209,7 +209,7 @@ export default function InstallPrompt() {
               <div className="w-12 h-1 bg-cream-200 rounded-full mx-auto mb-5" />
               <h2 className="font-display text-2xl text-ink-900 mb-1">Add to Home Screen</h2>
               <p className="text-sm text-ink-500 mb-5">
-                Two taps to make Caregiver App feel like a real app on your iPhone.
+                Two taps to make Carer Vista Pro feel like a real app on your iPhone.
               </p>
               <ol className="space-y-3.5 mb-6">
                 <Step n={1}>

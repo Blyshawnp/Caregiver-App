@@ -183,11 +183,78 @@
   --forest-600: #000000;
   --forest-700: #000000;
   --forest-800: #000000;
-  --terracotta-400: #000000;
-  --terracotta-500: #000000;
-  --terracotta-600: #000000;
+  --terracotta-400: #dc2626;
+  --terracotta-500: #b91c1c;
+  --terracotta-600: #991b1b;
   --ink-900: #000000;
   --ink-700: #000000;
   --ink-500: #111827;
   --ink-300: #4b5563;
+}
+
+/* ====================================================
+   APPEARANCE / ACCESSIBILITY PREFERENCES
+   ==================================================== */
+.font-large :where(p, a, button, label, input, select, textarea, li, td, th, span) {
+  font-size: max(1em, 1rem);
+}
+
+.font-large :where(.text-xs, .text-\[10px\], .text-\[11px\]) {
+  font-size: 0.875rem !important;
+}
+
+.font-large :where(.text-sm) {
+  font-size: 1rem !important;
+}
+
+.font-large :where(.text-base) {
+  font-size: 1.0625rem !important;
+}
+
+.font-extra_large :where(p, a, button, label, input, select, textarea, li, td, th, span) {
+  font-size: max(1em, 1.0625rem);
+}
+
+.font-extra_large :where(.text-xs, .text-\[10px\], .text-\[11px\]) {
+  font-size: 1rem !important;
+}
+
+.font-extra_large :where(.text-sm) {
+  font-size: 1.0625rem !important;
+}
+
+.font-extra_large :where(.text-base) {
+  font-size: 1.125rem !important;
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.001ms !important;
+}
+
+.increase-contrast {
+  --ink-500: #1f2937;
+  --ink-700: #111827;
+  --cream-200: #d1d5db;
+}
+
+.increase-contrast :where(.text-ink-300, .text-ink-400, .text-ink-500) {
+  color: #1f2937 !important;
+}
+
+.increase-contrast :where(.border-cream-100, .border-cream-150, .border-cream-200) {
+  border-color: #cbd5e1 !important;
+}
+
+.larger-buttons :where(button, a[href], input, select, textarea) {
+  min-height: 44px;
+}
+
+.larger-buttons :where(button, a[href]) {
+  padding-top: max(0.625rem, 0.6em);
+  padding-bottom: max(0.625rem, 0.6em);
 }

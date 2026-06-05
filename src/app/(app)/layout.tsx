@@ -20,6 +20,11 @@ type ProfileWithOrg = {
   language: Lang | null;
   avatar_url: string | null;
   avatar_color: string | null;
+  theme_preference: string | null;
+  font_size_preference: "standard" | "large" | "extra_large" | null;
+  reduce_motion: boolean | null;
+  increase_contrast: boolean | null;
+  larger_buttons: boolean | null;
   tutorial_completed: boolean | null;
   organizations: {
     name: string;
@@ -67,10 +72,10 @@ export default async function AppLayout({
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, organization_id, language, avatar_url, avatar_color, theme_preference, tutorial_completed, organizations(name, intro_video_url, intro_video_enabled, show_intro_video_on_first_login)"
+      "id, full_name, role, organization_id, language, avatar_url, avatar_color, theme_preference, font_size_preference, reduce_motion, increase_contrast, larger_buttons, tutorial_completed, organizations(name, intro_video_url, intro_video_enabled, show_intro_video_on_first_login)"
     )
     .eq("id", user.id)
-    .single<ProfileWithOrg & { theme_preference: string }>();
+    .single<ProfileWithOrg>();
 
   const lang: Lang = profile?.language === "es" ? "es" : "en";
 
@@ -147,7 +152,16 @@ export default async function AppLayout({
   }
 
   return (
-    <div className={`min-h-dvh flex flex-col bg-cream-100 theme-${profile?.theme_preference ?? "default"}`}>
+    <div
+      className={[
+        "min-h-dvh flex flex-col bg-cream-100",
+        `theme-${profile?.theme_preference ?? "default"}`,
+        `font-${profile?.font_size_preference ?? "standard"}`,
+        profile?.reduce_motion ? "reduce-motion" : "",
+        profile?.increase_contrast ? "increase-contrast" : "",
+        profile?.larger_buttons ? "larger-buttons" : "",
+      ].filter(Boolean).join(" ")}
+    >
       <AppHeader
         fullName={profile?.full_name ?? "There"}
         orgName={profile?.organizations?.name ?? ""}

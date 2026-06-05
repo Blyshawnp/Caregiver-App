@@ -21,13 +21,19 @@ type ThemeOption = {
 
 const THEME_OPTIONS: ThemeOption[] = [
   { key: "system", label: "System default", primaryBg: "bg-slate-450" },
-  { key: "default", label: "Caregiver App default", primaryBg: "bg-[#0D6587]" },
+  { key: "default", label: "Carer Vista Pro default", primaryBg: "bg-[#0D6587]" },
   { key: "teal", label: "Teal", primaryBg: "bg-teal-600" },
   { key: "blue", label: "Blue", primaryBg: "bg-blue-600" },
   { key: "green", label: "Green", primaryBg: "bg-green-600" },
   { key: "purple", label: "Purple", primaryBg: "bg-purple-600" },
   { key: "rose", label: "Rose", primaryBg: "bg-rose-600" },
   { key: "high-contrast", label: "High contrast", primaryBg: "bg-black" },
+];
+
+const FONT_SIZE_OPTIONS = [
+  { key: "standard", label: "Standard" },
+  { key: "large", label: "Large" },
+  { key: "extra_large", label: "Extra large" },
 ];
 
 export default function AccountSettingsPage() {
@@ -44,6 +50,10 @@ export default function AccountSettingsPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [themePref, setThemePref] = useState("default");
+  const [fontSizePref, setFontSizePref] = useState("standard");
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [increaseContrast, setIncreaseContrast] = useState(false);
+  const [largerButtons, setLargerButtons] = useState(false);
 
   // Sound states
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -88,8 +98,14 @@ export default function AccountSettingsPage() {
   // Unsaved changes checks
   const isEmailDirty = email.trim() !== "" && email !== currentEmail;
   const isPassDirty = password.trim() !== "" || confirmPassword.trim() !== "";
-  const isThemeDirty = profile && themePref !== (profile.theme_preference ?? "default");
-  const isDirty = isEmailDirty || isPassDirty || isThemeDirty;
+  const isAppearanceDirty = profile && (
+    themePref !== (profile.theme_preference ?? "default") ||
+    fontSizePref !== (profile.font_size_preference ?? "standard") ||
+    reduceMotion !== !!profile.reduce_motion ||
+    increaseContrast !== !!profile.increase_contrast ||
+    largerButtons !== !!profile.larger_buttons
+  );
+  const isDirty = isEmailDirty || isPassDirty || isAppearanceDirty;
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -124,6 +140,10 @@ export default function AccountSettingsPage() {
         if (prof) {
           setProfile(prof);
           setThemePref(prof.theme_preference ?? "default");
+          setFontSizePref(prof.font_size_preference ?? "standard");
+          setReduceMotion(!!prof.reduce_motion);
+          setIncreaseContrast(!!prof.increase_contrast);
+          setLargerButtons(!!prof.larger_buttons);
         }
 
         if (typeof window !== "undefined") {
@@ -190,9 +210,23 @@ export default function AccountSettingsPage() {
   }
 
   async function handleUpdateTheme(themeKey: string) {
+    await handleUpdateAppearance({ theme_preference: themeKey });
+  }
+
+  async function handleUpdateAppearance(update: {
+    theme_preference?: string;
+    font_size_preference?: string;
+    reduce_motion?: boolean;
+    increase_contrast?: boolean;
+    larger_buttons?: boolean;
+  }) {
     if (!userId) return;
 
-    setThemePref(themeKey);
+    if (update.theme_preference !== undefined) setThemePref(update.theme_preference);
+    if (update.font_size_preference !== undefined) setFontSizePref(update.font_size_preference);
+    if (update.reduce_motion !== undefined) setReduceMotion(update.reduce_motion);
+    if (update.increase_contrast !== undefined) setIncreaseContrast(update.increase_contrast);
+    if (update.larger_buttons !== undefined) setLargerButtons(update.larger_buttons);
     setThemeUpdating(true);
     setThemeSuccess("");
     setThemeError("");
@@ -200,14 +234,14 @@ export default function AccountSettingsPage() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ theme_preference: themeKey })
+        .update(update)
         .eq("id", userId);
 
       if (error) throw error;
 
-      setThemeSuccess("Theme preference saved!");
+      setThemeSuccess("Appearance preferences saved.");
       if (profile) {
-        setProfile({ ...profile, theme_preference: themeKey });
+        setProfile({ ...profile, ...update });
       }
       router.refresh();
     } catch (err: any) {
@@ -248,9 +282,9 @@ export default function AccountSettingsPage() {
 
       <div className="space-y-6">
         {/* Color Scheme preferences */}
-        <section className="bg-white rounded-3xl p-6 shadow-soft border border-cream-150">
-          <h2 className="font-display text-lg text-ink-900 mb-1">Color Scheme & Theme</h2>
-          <p className="text-xs text-ink-500 mb-3">Choose a curated primary color scheme across all app headers, cards, and buttons.</p>
+        <section id="appearance" className="bg-white rounded-3xl p-6 shadow-soft border border-cream-150">
+          <h2 className="font-display text-lg text-ink-900 mb-1">Appearance</h2>
+          <p className="text-xs text-ink-500 mb-3">Change colors, font size, and accessibility preferences. These settings are free for all users.</p>
 
           <div className="bg-cream-50/50 border border-cream-200/50 rounded-2xl p-3.5 text-xs text-ink-600 mb-4 leading-relaxed">
             💡 <strong>Theme Guide:</strong> Select a color scheme that matches your preference or visual comfort. 
@@ -258,6 +292,7 @@ export default function AccountSettingsPage() {
             The <em>System default</em> option uses your browser or operating system's default colors.
           </div>
 
+          <h3 className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-2">Color theme</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {THEME_OPTIONS.map((opt) => (
               <button
@@ -273,6 +308,45 @@ export default function AccountSettingsPage() {
                 <span className="truncate">{opt.label}</span>
               </button>
             ))}
+          </div>
+
+          <div className="mt-5">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-ink-500 mb-2">Font size</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {FONT_SIZE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => handleUpdateAppearance({ font_size_preference: opt.key })}
+                  className={`p-3.5 rounded-2xl border text-left text-xs font-semibold transition ${
+                    fontSizePref === opt.key
+                      ? "border-forest-600 bg-forest-50/20 text-forest-750"
+                      : "border-cream-200 bg-cream-50 hover:bg-cream-100 text-ink-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-2.5">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-ink-500">Accessibility</h3>
+            <AppearanceToggle
+              label="Reduce motion"
+              checked={reduceMotion}
+              onChange={(value) => handleUpdateAppearance({ reduce_motion: value })}
+            />
+            <AppearanceToggle
+              label="Increase contrast"
+              checked={increaseContrast}
+              onChange={(value) => handleUpdateAppearance({ increase_contrast: value })}
+            />
+            <AppearanceToggle
+              label="Larger buttons"
+              checked={largerButtons}
+              onChange={(value) => handleUpdateAppearance({ larger_buttons: value })}
+            />
           </div>
 
           {themeSuccess && (
@@ -422,7 +496,7 @@ export default function AccountSettingsPage() {
         {/* PWA Manual Install Instructions */}
         <section className="bg-white rounded-3xl p-6 shadow-soft border border-cream-150">
           <h2 className="font-display text-lg text-ink-900 mb-1">PWA Progressive Web App Settings</h2>
-          <p className="text-xs text-ink-500 mb-4">Install Caregiver App directly onto your device for standalone offline reliability.</p>
+          <p className="text-xs text-ink-500 mb-4">Install Carer Vista Pro directly onto your device for standalone offline reliability.</p>
 
           <div className="space-y-4 text-xs text-ink-750">
             <div className="bg-cream-50 p-4 rounded-2xl border border-cream-200">
@@ -482,10 +556,32 @@ export default function AccountSettingsPage() {
         {/* Unsaved changes banner footer */}
         {isDirty && (
           <div className="bg-terracotta-500/10 border border-terracotta-500/20 rounded-2xl p-4 text-xs text-terracotta-700 font-semibold animate-pulse text-center">
-            ⚠️ You have unsaved theme or credentials settings. Please save them before navigating away.
+            ⚠️ You have unsaved appearance or credentials settings. Please save them before navigating away.
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+function AppearanceToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 rounded-2xl border border-cream-200 bg-cream-50 px-3.5 py-3 text-xs font-semibold text-ink-700">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-5 w-5 rounded accent-forest-600"
+      />
+    </label>
   );
 }

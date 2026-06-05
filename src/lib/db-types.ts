@@ -22,6 +22,11 @@ export type ProfileRow = {
   organization_id: string;
   avatar_url: string | null;
   avatar_color: string | null;
+  theme_preference: string | null;
+  font_size_preference: "standard" | "large" | "extra_large";
+  reduce_motion: boolean;
+  increase_contrast: boolean;
+  larger_buttons: boolean;
   bio: string | null;
   vehicle_1_make_model: string | null;
   vehicle_1_color: string | null;

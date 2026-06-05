@@ -334,6 +334,12 @@ export default async function MePage() {
 
       <section className="space-y-2 mb-4">
         <NavLink
+          href="/account/settings#appearance"
+          label="Appearance"
+          description="Change colors, font size, and accessibility preferences."
+          Icon={UserIcon}
+        />
+        <NavLink
           href="/documents"
           label="Documents & agreements"
           Icon={UserIcon}
@@ -388,10 +394,12 @@ function formatVehicle(color?: string | null, makeModel?: string | null) {
 function NavLink({
   href,
   label,
+  description,
   Icon,
 }: {
   href: string;
   label: string;
+  description?: string;
   Icon: React.ComponentType<{ size?: number; className?: string }>;
 }) {
   return (
@@ -402,7 +410,10 @@ function NavLink({
       <span className="w-9 h-9 rounded-xl bg-forest-100 text-forest-600 grid place-items-center shrink-0">
         <Icon size={18} />
       </span>
-      <span className="flex-1 font-medium text-ink-900">{label}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-medium text-ink-900">{label}</span>
+        {description && <span className="block text-xs text-ink-500 mt-0.5">{description}</span>}
+      </span>
       <ArrowRightIcon size={16} className="text-ink-300" />
     </Link>
   );

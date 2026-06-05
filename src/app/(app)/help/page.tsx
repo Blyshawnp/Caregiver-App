@@ -277,7 +277,9 @@ export default async function HelpPage() {
             Manage your credentials, offline standalone experience, and notifications in <strong>Account & Settings</strong> and the <strong>Me</strong> tab:
           </p>
           <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
-            <li><strong>Theme & Color Schemes:</strong> Customize the look of the app shell, buttons, navigation, and active states. Choose from <em>System default</em>, <em>Caregiver App default</em>, <em>Teal</em>, <em>Blue</em>, <em>Green</em>, <em>Purple</em>, <em>Rose</em>, or the highly readable <em>High contrast</em> scheme.</li>
+            <li><strong>Appearance:</strong> All users can open <strong>Me → Appearance</strong> or <strong>Account & Settings → Appearance</strong> to change color theme, font size, reduce motion, increase contrast, and larger button preferences.</li>
+            <li><strong>Theme & Color Schemes:</strong> Choose from <em>System default</em>, <em>Carer Vista Pro default</em>, <em>Teal</em>, <em>Blue</em>, <em>Green</em>, <em>Purple</em>, <em>Rose</em>, or the highly readable <em>High contrast</em> scheme.</li>
+            <li><strong>Font Size:</strong> Choose <em>Standard</em>, <em>Large</em>, or <em>Extra large</em>. Cards and buttons expand naturally on mobile.</li>
             <li><strong>Spanish Language:</strong> Toggle between English and Spanish seamlessly under <strong>Me &rarr; Language</strong>. This translates the dashboard, client detail sheets, task categories, PRN options, invoices, and summaries.</li>
             <li><strong>PWA Installation Controls:</strong> Control progressive web app banner prompts. You can choose <em>Install app</em>, <em>Not now</em>, <em>Don't show for 24 hours</em> (remind tomorrow), or <em>Don't show again</em>. A manual <em>Install app</em> button is also available in Settings.</li>
             <li><strong>Notification Sounds & Volume:</strong> Toggle audio alerts and adjust playback volume using the slider (suggested default is 80%). Use the <em>Play test sound</em> button to test browser autoplay compatibility.</li>

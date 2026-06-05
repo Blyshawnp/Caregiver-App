@@ -156,14 +156,14 @@ export default function TopShiftActionArea({
             </span>
             <Link
               href="/emergency"
-              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-200/70 bg-red-50/80 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition hover:bg-red-100"
             >
               <Image
                 src="/icons/emergency.png"
                 alt=""
                 width={18}
                 height={18}
-                className="h-4 w-4 object-contain"
+                className="h-3.5 w-3.5 object-contain"
               />
               <span>Emergency info</span>
             </Link>

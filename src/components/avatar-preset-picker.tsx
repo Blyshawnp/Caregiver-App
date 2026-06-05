@@ -133,14 +133,22 @@ export default function AvatarPickerModal({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] bg-ink-950/65 backdrop-blur-sm overflow-y-auto p-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)] flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-[1200] bg-ink-950/75 backdrop-blur-sm p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label={title}
       onClick={onClose}
     >
+      <button
+        type="button"
+        onClick={onClose}
+        className="fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-[1201] rounded-xl bg-white/95 px-3 py-2 text-sm font-medium text-ink-900 shadow-lifted transition hover:bg-white active:scale-[0.98]"
+        aria-label="Close avatar picker"
+      >
+        Close
+      </button>
       <div
-        className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-3xl bg-white shadow-lifted border border-cream-200"
+        className="w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-3xl bg-white shadow-lifted border border-cream-200"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="p-5 border-b border-cream-200 flex items-center justify-between gap-3">

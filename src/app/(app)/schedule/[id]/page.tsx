@@ -1175,8 +1175,10 @@ function formatPetTypeSummary(pets: ShiftPetSummary[]) {
 }
 
 function formatPetNoteSummary(pet: ShiftPetSummary) {
-  if (pet.emergency_notes) return `${pet.name} has emergency notes available. Review ${pet.name}'s pet profile for details.`;
-  if (pet.medication_instructions || pet.behavior_notes) return `${pet.name} has care notes available. Review ${pet.name}'s pet profile for details.`;
+  if (pet.emergency_notes) return `${pet.name} has vet or emergency contact details on file.`;
+  if (pet.medication_instructions || pet.behavior_notes) {
+    return `${pet.name} has pet notes available. Review ${pet.name}'s pet profile for feeding, access, and routine details.`;
+  }
   return `${pet.name} has pet notes available.`;
 }
 

@@ -202,7 +202,8 @@ export default async function HelpPage() {
             <li>Admins can do everything in their org.</li>
             <li>Clients can edit emergency contacts, allergies, notes — but not Wi-Fi password.</li>
             <li><strong>Sensitive Documents:</strong> Shared documents may contain highly sensitive medical or personal information. Users should only upload, view, or share documents they are explicitly authorized to share.</li>
-            <li><strong>Print Approvals & Acknowledgments:</strong> Printing sensitive documents may require administrator approval. When a document requires acknowledgment, your read/acknowledgment records will be stored and made visible to administrators.</li>
+            <li><strong>Client Documents:</strong> Documents uploaded from client home info are visible from the client Documents page and allowed shift Documents sections. They do not require edit mode to view.</li>
+            <li><strong>Print Approvals & Acknowledgments:</strong> Printing sensitive documents may require administrator approval. Use <strong>Request print approval</strong> on the document item when approval is required. Approved documents can be printed from the clean print view.</li>
           </ul>
         </Section>
 
@@ -258,6 +259,7 @@ export default async function HelpPage() {
           <ul className="text-sm text-ink-700 space-y-1.5 list-disc pl-5">
             <li><strong>Bulk Delete / Cancel:</strong> Select multiple shifts on the schedule page (via 'Bulk actions') and delete them together. This will show a strong warning if any shift contains check-ins, completed tasks, or notes.</li>
             <li><strong>Bulk Add Tasks:</strong> Assign library task templates to all selected shifts in one go, with duplication-skipping controls to avoid duplicate tasks.</li>
+            <li><strong>Calendar Export:</strong> Use <strong>Add to calendar</strong> on a shift detail page for one shift, or export selected/all visible shifts from the Schedule page. The app downloads a standard .ics file for iPhone Calendar, Google Calendar, Outlook, Android, and desktop calendars.</li>
           </ul>
         </Section>
 

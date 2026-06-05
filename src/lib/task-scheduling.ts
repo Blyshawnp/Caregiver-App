@@ -40,6 +40,25 @@ export function normalizeTaskTimeOfDay(value?: string | null): TaskTimeOfDay | n
     : null;
 }
 
+function resolveTaskTiming(input: {
+  timeMode?: string | null;
+  timeOfDay?: string | null;
+  scheduledTime?: string | null;
+}) {
+  const timeOfDay = normalizeTaskTimeOfDay(input.timeOfDay);
+  const scheduledTime = input.scheduledTime?.trim() || null;
+
+  if (scheduledTime) {
+    return { mode: "exact_time" as const, timeOfDay: null, scheduledTime };
+  }
+
+  if (timeOfDay) {
+    return { mode: "time_of_day" as const, timeOfDay, scheduledTime: null };
+  }
+
+  return { mode: "unscheduled" as const, timeOfDay: null, scheduledTime: null };
+}
+
 export function getTaskImportanceRank(value?: string | null) {
   const normalized = normalizeTaskImportance(value);
   return IMPORTANCE_ORDER.indexOf(normalized);
@@ -50,12 +69,12 @@ export function getTaskTimeGroupKey(input: {
   timeOfDay?: string | null;
   scheduledTime?: string | null;
 }) {
-  const mode = normalizeTaskTimeMode(input.timeMode);
-  if (mode === "exact_time" && input.scheduledTime) {
-    return `time:${formatTaskClock(input.scheduledTime)}`;
+  const timing = resolveTaskTiming(input);
+  if (timing.mode === "exact_time" && timing.scheduledTime) {
+    return `time:${formatTaskClock(timing.scheduledTime)}`;
   }
-  if (mode === "time_of_day") {
-    return `tod:${normalizeTaskTimeOfDay(input.timeOfDay) ?? "unscheduled"}`;
+  if (timing.mode === "time_of_day" && timing.timeOfDay) {
+    return `tod:${timing.timeOfDay}`;
   }
   return "unscheduled";
 }
@@ -65,14 +84,13 @@ export function getTaskTimeGroupSort(input: {
   timeOfDay?: string | null;
   scheduledTime?: string | null;
 }) {
-  const mode = normalizeTaskTimeMode(input.timeMode);
-  if (mode === "exact_time" && input.scheduledTime) {
-    const [hours, minutes] = input.scheduledTime.split(":").map((part) => Number(part));
+  const timing = resolveTaskTiming(input);
+  if (timing.mode === "exact_time" && timing.scheduledTime) {
+    const [hours, minutes] = timing.scheduledTime.split(":").map((part) => Number(part));
     return hours * 60 + minutes;
   }
-  if (mode === "time_of_day") {
-    const timeOfDay = normalizeTaskTimeOfDay(input.timeOfDay);
-    return 24 * 60 + Math.max(0, TIME_OF_DAY_ORDER.indexOf(timeOfDay ?? "morning")) * 60;
+  if (timing.mode === "time_of_day" && timing.timeOfDay) {
+    return 24 * 60 + TIME_OF_DAY_ORDER.indexOf(timing.timeOfDay) * 60;
   }
   return 48 * 60;
 }
@@ -82,12 +100,12 @@ export function getTaskTimeGroupLabel(input: {
   timeOfDay?: string | null;
   scheduledTime?: string | null;
 }, lang: "en" | "es" = "en") {
-  const mode = normalizeTaskTimeMode(input.timeMode);
-  if (mode === "exact_time" && input.scheduledTime) {
-    return formatTaskClock(input.scheduledTime);
+  const timing = resolveTaskTiming(input);
+  if (timing.mode === "exact_time" && timing.scheduledTime) {
+    return formatTaskClock(timing.scheduledTime);
   }
-  if (mode === "time_of_day") {
-    const timeOfDay = normalizeTaskTimeOfDay(input.timeOfDay);
+  if (timing.mode === "time_of_day") {
+    const timeOfDay = timing.timeOfDay;
     if (timeOfDay === "morning") return lang === "es" ? "Mañana" : "Morning";
     if (timeOfDay === "early_afternoon")
       return lang === "es" ? "Primera hora de la tarde" : "Early Afternoon";

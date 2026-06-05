@@ -11,7 +11,6 @@ import {
   type TaskCategoryOption,
 } from "@/lib/task-categories";
 import {
-  formatTaskClock,
   getTaskTimeGroupKey,
   getTaskTimeGroupLabel,
   getTaskTimeGroupSort,
@@ -529,6 +528,15 @@ function TaskRow({
   lang: "en" | "es";
 }) {
   const category = todo.category ?? deriveTaskCategory({ taskName: todo.task_name, description: todo.description, notes: todo.notes });
+  const timeLabel = getTaskTimeGroupLabel(
+    {
+      timeMode: todo.time_mode,
+      timeOfDay: todo.time_of_day,
+      scheduledTime: todo.scheduled_time,
+    },
+    lang
+  );
+  const unscheduledLabel = getTaskTimeGroupLabel({}, lang);
   const badges = [
     todo.is_optional ? tr("task.optional", lang) : null,
     todo.is_prn ? tr("task.prn", lang) : null,
@@ -570,21 +578,9 @@ function TaskRow({
           <p className={`text-ink-900 font-medium leading-snug ${isComplete ? "line-through text-ink-500" : ""}`}>
             {todo.task_name}
           </p>
-          {todo.time_mode === "exact_time" && todo.scheduled_time && (
-            <span className="text-[10px] uppercase tracking-[0.18em] bg-forest-100 text-forest-700 px-1.5 py-0.5 rounded">
-              {formatTaskClock(todo.scheduled_time)}
-            </span>
-          )}
-          {todo.time_mode === "time_of_day" && todo.time_of_day && (
-            <span className="text-[10px] uppercase tracking-[0.18em] bg-forest-100 text-forest-700 px-1.5 py-0.5 rounded">
-              {getTaskTimeGroupLabel(
-                {
-                  timeMode: todo.time_mode,
-                  timeOfDay: todo.time_of_day,
-                  scheduledTime: todo.scheduled_time,
-                },
-                lang
-              )}
+          {timeLabel !== unscheduledLabel && (
+            <span className="text-[10px] uppercase bg-forest-100 text-forest-700 px-1.5 py-0.5 rounded">
+              {timeLabel}
             </span>
           )}
         </div>

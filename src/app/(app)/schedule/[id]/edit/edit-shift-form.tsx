@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { type TaskCategoryOption } from "@/lib/task-categories";
+import { getTaskTimeGroupLabel } from "@/lib/task-scheduling";
 
 type Caregiver = { id: string; full_name: string };
 type ShiftType = { id: string; name: string; color: string };
@@ -222,6 +223,7 @@ export default function EditShiftForm({
       .from("shift_todos")
       .insert({
         shift_id: shift.id,
+        template_id: template.id,
         task_name: template.task_name,
         description: template.description,
         is_optional: template.is_optional,
@@ -286,6 +288,7 @@ export default function EditShiftForm({
       .from("shift_todos")
       .insert({
         shift_id: shift.id,
+        template_id: newTemplate?.id ?? null,
         task_name: crtName.trim(),
         description: crtDescription.trim() || null,
         is_optional: crtType === "optional",
@@ -558,8 +561,11 @@ export default function EditShiftForm({
                   todo.is_optional ? "Optional" : "Required",
                   todo.is_prn ? "PRN" : null,
                   todo.importance !== "medium" ? todo.importance : null,
-                  todo.time_mode === "exact_time" && todo.scheduled_time ? todo.scheduled_time : null,
-                  todo.time_mode === "time_of_day" && todo.time_of_day ? todo.time_of_day : null,
+                  getTaskTimeGroupLabel({
+                    timeMode: todo.time_mode,
+                    timeOfDay: todo.time_of_day,
+                    scheduledTime: todo.scheduled_time,
+                  }),
                 ].filter(Boolean) as string[];
 
                 return (

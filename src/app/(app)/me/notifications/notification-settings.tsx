@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import {
   disablePushNotifications,
   enablePushNotifications,
+  getCurrentBrowserPushSubscription,
+  getPushDeviceId,
   getPushDeviceStatus,
   getPushPreferences,
   isPushSupported,
@@ -25,9 +27,13 @@ type PushDiagnostics = {
   browserPermission: string;
   serviceWorkerRegistered: boolean;
   serviceWorkerActive: boolean;
+  browserSubscriptionExists: boolean;
+  deviceId: string;
   subscriptionSaved: boolean;
+  subscriptionActive: boolean;
   subscriptionEndpointPresent: boolean;
   subscriptionKeysPresent: boolean;
+  endpointMatch: boolean | null;
   vapidKeyMatch: boolean;
   lastSubscriptionUpdate: string | null;
   lastTestPushResult: string | null;
@@ -51,9 +57,13 @@ export default function NotificationSettings({
     browserPermission: "unknown",
     serviceWorkerRegistered: false,
     serviceWorkerActive: false,
+    browserSubscriptionExists: false,
+    deviceId: "",
     subscriptionSaved: false,
+    subscriptionActive: false,
     subscriptionEndpointPresent: false,
     subscriptionKeysPresent: false,
+    endpointMatch: null,
     vapidKeyMatch: false,
     lastSubscriptionUpdate: null,
     lastTestPushResult: "Not run",
@@ -203,7 +213,16 @@ export default function NotificationSettings({
     setTestLoading(true);
     setTestMessage(null);
     try {
-      const res = await fetch("/api/push/test", { method: "POST" });
+      const currentSubscription = await getCurrentBrowserPushSubscription();
+      const res = await fetch("/api/push/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: getPushDeviceId(),
+          endpoint: currentSubscription?.endpoint ?? null,
+          browserSubscriptionExists: Boolean(currentSubscription),
+        }),
+      });
       const d = await res.json().catch(() => null);
       if (res.ok) {
         localStorage.setItem("pwa_last_test_push_result", "success");
@@ -228,62 +247,11 @@ export default function NotificationSettings({
     setError(null);
     setTestMessage(null);
     try {
-      if (!("serviceWorker" in navigator)) {
-        throw new Error("Service worker not supported.");
-      }
-      const registration = await navigator.serviceWorker.ready;
-
-      const existing = await registration.pushManager.getSubscription();
-      if (existing) {
-        await fetch("/api/push/subscriptions", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: existing.endpoint }),
-        }).catch(() => null);
-        await existing.unsubscribe().catch(() => false);
-      }
-
-      if (!registration.active) {
-        throw new Error("Service worker is not active.");
-      }
-
-      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!publicKey) {
-        throw new Error("Application VAPID public key not configured.");
-      }
-
-      const padding = "=".repeat((publicKey.length % 4) ? 4 - (publicKey.length % 4) : 0);
-      const base64 = `${publicKey}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
-      const rawData = window.atob(base64);
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; i += 1) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
-      const applicationServerKey = outputArray.buffer as ArrayBuffer;
-
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey,
-      });
-
-      const fingerprint = getVapidFingerprint(publicKey);
-      const saveRes = await fetch("/api/push/subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...subscription.toJSON(),
-          vapid_key_fingerprint: fingerprint,
-        }),
-      });
-
-      if (!saveRes.ok) {
-        const d = await saveRes.json().catch(() => null);
-        throw new Error(d?.error || "Could not save refreshed subscription.");
-      }
+      const subscription = await refreshPushSubscription();
 
       const status = await getPushDeviceStatus(subscription.endpoint);
       if (!status.enabled) {
-        throw new Error("Verifying subscription in database failed.");
+        throw new Error("Refresh did not complete. Please enable alerts again.");
       }
 
       const nowStr = new Date().toISOString();
@@ -292,7 +260,15 @@ export default function NotificationSettings({
       setDeviceEnabled(true);
       await refreshDiagnostics(status);
 
-      const testRes = await fetch("/api/push/test", { method: "POST" });
+      const testRes = await fetch("/api/push/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: getPushDeviceId(),
+          endpoint: subscription.endpoint,
+          browserSubscriptionExists: true,
+        }),
+      });
       const testData = await testRes.json().catch(() => null);
       if (testRes.ok) {
         localStorage.setItem("pwa_last_test_push_result", "success");
@@ -305,7 +281,7 @@ export default function NotificationSettings({
         throw new Error(testData?.error || "Subscription refreshed, but test push failed.");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to refresh subscription.");
+      setError(err.message || "Refresh did not complete. Please enable alerts again.");
       localStorage.setItem("pwa_last_test_push_result", "unknown_error");
     } finally {
       setLoading(false);
@@ -334,7 +310,8 @@ export default function NotificationSettings({
     const vapidKeyMatch = status?.enabled && dbFingerprint ? dbFingerprint === currentFingerprint : false;
     
     const endpointPresent = !!sub?.endpoint;
-    const keysPresent = !!sub?.getKey?.("p256dh") && !!sub?.getKey?.("auth");
+    const browserKeysPresent = !!sub?.getKey?.("p256dh") && !!sub?.getKey?.("auth");
+    const serverKeysPresent = status?.keysPresent ?? false;
     
     const lastTest = localStorage.getItem("pwa_last_test_push_result");
 
@@ -342,9 +319,13 @@ export default function NotificationSettings({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
       serviceWorkerRegistered: !!registration,
       serviceWorkerActive: !!registration?.active,
-      subscriptionSaved: !!status?.enabled,
+      browserSubscriptionExists: !!sub,
+      deviceId: getPushDeviceId(),
+      subscriptionSaved: !!status?.serverSubscriptionExists,
+      subscriptionActive: !!status?.active,
       subscriptionEndpointPresent: endpointPresent,
-      subscriptionKeysPresent: keysPresent,
+      subscriptionKeysPresent: browserKeysPresent && serverKeysPresent,
+      endpointMatch: status?.endpointMatch ?? null,
       vapidKeyMatch,
       lastSubscriptionUpdate: status?.lastSeenAt ?? status?.updatedAt ?? null,
       lastTestPushResult: lastTest ? describeTestResult(lastTest) : "Not run",
@@ -361,7 +342,9 @@ export default function NotificationSettings({
       case "invalid_vapid_key": return "Notification key mismatch (401/403)";
       case "rejected_by_push_service": return "Rejected by browser push service (400)";
       case "permission_denied": return "Permission denied";
-      case "no_subscription": return "No active subscription";
+      case "no_subscription":
+      case "no_active_subscription":
+        return "No active subscription";
       case "service_worker_missing": return "Service worker missing";
       default: return `Failed (${code})`;
     }
@@ -379,7 +362,12 @@ export default function NotificationSettings({
     }
 
     const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
-    const hasMismatch = deviceEnabled && diagnostics.subscriptionSaved && diagnostics.vapidKeyMatch === false;
+    const hasMismatch =
+      deviceEnabled &&
+      diagnostics.subscriptionSaved &&
+      (diagnostics.vapidKeyMatch === false ||
+        diagnostics.endpointMatch === false ||
+        !diagnostics.subscriptionActive);
 
     if (
       hasMismatch ||
@@ -390,7 +378,11 @@ export default function NotificationSettings({
       return { label: "Needs refresh", color: "text-amber-600 font-semibold" };
     }
 
-    if (!deviceEnabled || !diagnostics.subscriptionSaved) {
+    if (diagnostics.browserSubscriptionExists && !diagnostics.subscriptionActive) {
+      return { label: "Needs save/refresh", color: "text-amber-600 font-semibold" };
+    }
+
+    if (!deviceEnabled || !diagnostics.subscriptionSaved || !diagnostics.subscriptionActive) {
       return { label: "Not subscribed", color: "text-ink-500 font-semibold" };
     }
 
@@ -445,8 +437,12 @@ export default function NotificationSettings({
             <Diag label="Browser permission" value={diagnostics.browserPermission} />
             <Diag label="Service worker registered" value={diagnostics.serviceWorkerRegistered ? "Yes" : "No"} />
             <Diag label="Service worker active" value={diagnostics.serviceWorkerActive ? "Yes" : "No"} />
-            <Diag label="Push subscription saved" value={diagnostics.subscriptionSaved ? "Yes" : "No"} />
-            <Diag label="Subscription endpoint present" value={diagnostics.subscriptionEndpointPresent ? "Yes" : "No"} />
+            <Diag label="Browser push subscription exists" value={diagnostics.browserSubscriptionExists ? "Yes" : "No"} />
+            <Diag label="Browser endpoint present" value={diagnostics.subscriptionEndpointPresent ? "Yes" : "No"} />
+            <Diag label="Saved server subscription exists" value={diagnostics.subscriptionSaved ? "Yes" : "No"} />
+            <Diag label="Saved server subscription active" value={diagnostics.subscriptionActive ? "Yes" : "No"} />
+            <Diag label="Device ID" value={diagnostics.deviceId || "Not available"} />
+            <Diag label="Endpoint match" value={diagnostics.endpointMatch === null ? "Not checked" : diagnostics.endpointMatch ? "Yes" : "No"} />
             <Diag label="Subscription keys present" value={diagnostics.subscriptionKeysPresent ? "Yes" : "No"} />
             <Diag label="VAPID key match" value={diagnostics.vapidKeyMatch ? "Yes" : "No"} />
             <Diag

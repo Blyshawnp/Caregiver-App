@@ -215,6 +215,65 @@ export async function sendPushForNotifications(
   };
 }
 
+export async function sendPushToSubscription(
+  admin: SupabaseAdmin,
+  subscription: PushSubscriptionRow,
+  payload: Record<string, unknown>
+): Promise<PushDeliveryResult> {
+  const publicKey =
+    process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const subject = process.env.VAPID_SUBJECT;
+
+  if (!publicKey || !privateKey || !subject) {
+    return {
+      attempted: 0,
+      delivered: 0,
+      failed: 0,
+      disabled: 0,
+      skipped: "not_configured",
+      failures: [],
+    };
+  }
+
+  const result = await sendWebPush(subscription, payload);
+  const shouldDisable = result.status === 404 || result.status === 410;
+  const invalidKey = result.status === 401 || result.status === 403;
+
+  if (shouldDisable || invalidKey) {
+    const update: Record<string, string | boolean> = {
+      is_active: false,
+      disabled_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (invalidKey) {
+      update.vapid_key_fingerprint = "invalid_key";
+    }
+
+    await admin
+      .from("push_subscriptions")
+      .update(update)
+      .eq("id", subscription.id);
+  }
+
+  return {
+    attempted: 1,
+    delivered: result.ok ? 1 : 0,
+    failed: result.ok ? 0 : 1,
+    disabled: shouldDisable || invalidKey ? 1 : 0,
+    skipped: null,
+    failures: result.ok
+      ? []
+      : [
+          {
+            status: result.status,
+            endpointHost: new URL(subscription.endpoint).host,
+            reason: reasonForPushStatus(result.status),
+          },
+        ],
+  };
+}
+
 function isQuietHoursNow(start: string | null, end: string | null) {
   if (!start || !end) return false;
   const startMinutes = toMinutes(start);

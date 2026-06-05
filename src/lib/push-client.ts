@@ -5,6 +5,8 @@ import type {
 } from "@/lib/notification-preferences";
 import { getVapidFingerprint } from "@/lib/vapid-helper";
 
+const PUSH_DEVICE_ID_STORAGE_KEY = "caregiver-app:push-device-id";
+
 export type PushPreferences = {
   messages: boolean;
   shift_assignments: boolean;
@@ -28,6 +30,19 @@ export function isPushSupported() {
     "PushManager" in window &&
     "Notification" in window
   );
+}
+
+export function getPushDeviceId() {
+  if (typeof window === "undefined") return "";
+  const existing = localStorage.getItem(PUSH_DEVICE_ID_STORAGE_KEY);
+  if (existing) return existing;
+
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `push-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  localStorage.setItem(PUSH_DEVICE_ID_STORAGE_KEY, id);
+  return id;
 }
 
 function isStandalonePwa() {
@@ -121,6 +136,8 @@ export async function enablePushNotifications() {
         },
         body: JSON.stringify({
           ...subscription.toJSON(),
+          device_id: getPushDeviceId(),
+          platform: getClientPlatform(),
           vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
         }),
       }),
@@ -150,7 +167,11 @@ export async function enablePushNotifications() {
 }
 
 export async function getPushDeviceStatus(endpoint?: string | null) {
-  const query = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : "";
+  const params = new URLSearchParams();
+  const deviceId = getPushDeviceId();
+  if (deviceId) params.set("deviceId", deviceId);
+  if (endpoint) params.set("endpoint", endpoint);
+  const query = params.toString() ? `?${params.toString()}` : "";
   const response = await fetch(`/api/push/subscriptions${query}`, {
     cache: "no-store",
   });
@@ -160,7 +181,12 @@ export async function getPushDeviceStatus(endpoint?: string | null) {
   }
   return (await response.json()) as {
     enabled: boolean;
+    deviceId: string | null;
     endpoint: string | null;
+    active: boolean;
+    serverSubscriptionExists: boolean;
+    endpointMatch: boolean | null;
+    keysPresent: boolean;
     lastSeenAt?: string | null;
     updatedAt?: string | null;
     platform?: string | null;
@@ -176,6 +202,8 @@ export async function saveCurrentPushSubscription(subscription: PushSubscription
     },
     body: JSON.stringify({
       ...subscription.toJSON(),
+      device_id: getPushDeviceId(),
+      platform: getClientPlatform(),
       vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
     }),
   });
@@ -194,7 +222,7 @@ export async function disablePushNotifications() {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ endpoint: subscription?.endpoint }),
+    body: JSON.stringify({ endpoint: subscription?.endpoint, device_id: getPushDeviceId() }),
   });
   if (!response.ok) {
     const data = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -279,7 +307,7 @@ export async function refreshPushSubscription() {
     await fetch("/api/push/subscriptions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ endpoint: existing.endpoint }),
+      body: JSON.stringify({ endpoint: existing.endpoint, device_id: getPushDeviceId() }),
     }).catch(() => null);
     await existing.unsubscribe().catch(() => false);
   }
@@ -319,6 +347,22 @@ export async function getPushPreferences() {
     throw new Error("Could not load notification preferences.");
   }
   return (await response.json()) as PushPreferences;
+}
+
+export async function getCurrentBrowserPushSubscription() {
+  if (!isPushSupported()) return null;
+  const registration =
+    (await navigator.serviceWorker.getRegistration("/")) ??
+    (await navigator.serviceWorker.ready);
+  return registration.pushManager.getSubscription();
+}
+
+function getClientPlatform() {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("ipod")) return "ios";
+  if (ua.includes("android")) return "android";
+  return "desktop";
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {

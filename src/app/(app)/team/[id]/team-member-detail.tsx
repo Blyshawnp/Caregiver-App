@@ -12,11 +12,17 @@ type Person = {
   id: string;
   full_name: string;
   email: string;
+  contact_email: string | null;
   phone: string | null;
   role: "admin" | "client" | "caregiver" | "family";
   is_active: boolean;
   avatar_url: string | null;
   avatar_color: string | null;
+  bio: string | null;
+  vehicle_1_make_model: string | null;
+  vehicle_1_color: string | null;
+  vehicle_2_make_model: string | null;
+  vehicle_2_color: string | null;
 };
 
 type Rate = {
@@ -43,6 +49,20 @@ export default function TeamMemberDetail({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [sendingResetEmail, setSendingResetEmail] = useState(false);
+  const [profileDraft, setProfileDraft] = useState({
+    fullName: person.full_name,
+    phone: person.phone ?? "",
+    contactEmail: person.contact_email ?? "",
+    bio: person.bio ?? "",
+    vehicle1MakeModel: person.vehicle_1_make_model ?? "",
+    vehicle1Color: person.vehicle_1_color ?? "",
+    vehicle2MakeModel: person.vehicle_2_make_model ?? "",
+    vehicle2Color: person.vehicle_2_color ?? "",
+  });
 
   // Password reset state for no-email accounts
   const [showResetCreds, setShowResetCreds] = useState(false);
@@ -50,6 +70,72 @@ export default function TeamMemberDetail({
   const [resettingPassword, setResettingPassword] = useState(false);
   const [passwordUpdated, setPasswordUpdated] = useState(false);
   const isNoEmailAccount = person.email.endsWith("@noemail.local");
+  const contactEmailDisplay =
+    person.contact_email || (isNoEmailAccount ? null : person.email);
+
+  async function saveProfile() {
+    setError(null);
+    setProfileMessage(null);
+    setSavingProfile(true);
+
+    const response = await fetch("/api/team/user-management", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "update_profile",
+        userId: person.id,
+        profile: profileDraft,
+      }),
+    });
+
+    const result = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setError(result.error ?? "Could not save changes.");
+      setSavingProfile(false);
+      return;
+    }
+
+    setProfileMessage("Changes saved.");
+    setEditingProfile(false);
+    setSavingProfile(false);
+    router.refresh();
+  }
+
+  async function sendPasswordResetEmail() {
+    setError(null);
+    setProfileMessage(null);
+
+    if (!window.confirm(`Send password reset email to ${person.email}?`)) {
+      return;
+    }
+
+    setSendingResetEmail(true);
+
+    const response = await fetch("/api/team/user-management", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "send_password_reset",
+        userId: person.id,
+      }),
+    });
+
+    const result = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setError(result.error ?? "Password reset email could not be sent.");
+      setSendingResetEmail(false);
+      return;
+    }
+
+    setProfileMessage("Password reset email sent.");
+    setSendingResetEmail(false);
+  }
 
   async function saveRate() {
     setError(null);
@@ -162,7 +248,16 @@ export default function TeamMemberDetail({
     admin: "Administrator",
     client: "Client",
     caregiver: "Caregiver",
+    family: "Family",
   };
+  const editLabel =
+    person.role === "caregiver"
+      ? "Edit caregiver"
+      : person.role === "client"
+        ? "Edit client"
+        : person.role === "family"
+          ? "Edit family member"
+          : "Edit administrator";
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto">
@@ -192,7 +287,8 @@ export default function TeamMemberDetail({
         </div>
 
         <dl className="divide-y divide-cream-200 text-sm">
-          <Row label="Email" value={person.email} />
+          <Row label={isNoEmailAccount ? "Username" : "Login email"} value={person.email} />
+          <Row label="Contact email" value={contactEmailDisplay || "Not set"} />
           <Row label="Phone" value={person.phone || "Not set"} />
           {person.role === "caregiver" && (
             <Row
@@ -201,6 +297,167 @@ export default function TeamMemberDetail({
             />
           )}
         </dl>
+      </section>
+
+      <section className="bg-white rounded-3xl shadow-soft p-5 mb-4 grain-overlay">
+        <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 className="font-display text-base text-ink-900">
+                Managed user details
+              </h2>
+              <p className="text-xs text-ink-500">
+                Update contact and profile information for this care circle user.
+              </p>
+            </div>
+            {!editingProfile && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProfile(true);
+                  setError(null);
+                  setProfileMessage(null);
+                }}
+                className="bg-cream-200 hover:bg-cream-200/70 text-ink-700 px-3 py-2 rounded-xl text-sm font-medium transition"
+              >
+                {editLabel}
+              </button>
+            )}
+          </div>
+
+          {profileMessage && (
+            <p className="text-navy-700 bg-navy-400/10 border border-navy-400/20 rounded-xl px-3 py-2 text-sm mb-3">
+              {profileMessage}
+            </p>
+          )}
+          {!editingProfile && error && (
+            <p className="text-terracotta-600 bg-terracotta-400/10 border border-terracotta-400/20 rounded-xl px-3 py-2 text-sm mb-3">
+              {error}
+            </p>
+          )}
+
+          {!editingProfile ? (
+            <dl className="divide-y divide-cream-200 text-sm">
+              <Row label="Display name" value={person.full_name} />
+              <Row label="Contact email" value={contactEmailDisplay || "Not set"} />
+              <Row label="Phone" value={person.phone || "Not set"} />
+              <Row label="Profile notes" value={person.bio || "Not set"} />
+            </dl>
+          ) : (
+            <div className="space-y-3">
+              <Field
+                label="Display name"
+                value={profileDraft.fullName}
+                onChange={(value) =>
+                  setProfileDraft((draft) => ({ ...draft, fullName: value }))
+                }
+              />
+              <Field
+                label="Contact email"
+                type="email"
+                value={profileDraft.contactEmail}
+                helper="This does not change the login email used by Supabase Auth."
+                onChange={(value) =>
+                  setProfileDraft((draft) => ({ ...draft, contactEmail: value }))
+                }
+              />
+              <Field
+                label="Phone"
+                type="tel"
+                value={profileDraft.phone}
+                onChange={(value) =>
+                  setProfileDraft((draft) => ({ ...draft, phone: value }))
+                }
+              />
+              <TextArea
+                label="Profile notes"
+                value={profileDraft.bio}
+                onChange={(value) =>
+                  setProfileDraft((draft) => ({ ...draft, bio: value }))
+                }
+              />
+              {person.role === "caregiver" && (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Field
+                    label="Vehicle 1 make/model"
+                    value={profileDraft.vehicle1MakeModel}
+                    onChange={(value) =>
+                      setProfileDraft((draft) => ({ ...draft, vehicle1MakeModel: value }))
+                    }
+                  />
+                  <Field
+                    label="Vehicle 1 color"
+                    value={profileDraft.vehicle1Color}
+                    onChange={(value) =>
+                      setProfileDraft((draft) => ({ ...draft, vehicle1Color: value }))
+                    }
+                  />
+                  <Field
+                    label="Vehicle 2 make/model"
+                    value={profileDraft.vehicle2MakeModel}
+                    onChange={(value) =>
+                      setProfileDraft((draft) => ({ ...draft, vehicle2MakeModel: value }))
+                    }
+                  />
+                  <Field
+                    label="Vehicle 2 color"
+                    value={profileDraft.vehicle2Color}
+                    onChange={(value) =>
+                      setProfileDraft((draft) => ({ ...draft, vehicle2Color: value }))
+                    }
+                  />
+                </div>
+              )}
+
+              {error && (
+                <p className="text-terracotta-600 text-xs">{error}</p>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingProfile(false);
+                    setError(null);
+                    setProfileDraft({
+                      fullName: person.full_name,
+                      phone: person.phone ?? "",
+                      contactEmail: person.contact_email ?? "",
+                      bio: person.bio ?? "",
+                      vehicle1MakeModel: person.vehicle_1_make_model ?? "",
+                      vehicle1Color: person.vehicle_1_color ?? "",
+                      vehicle2MakeModel: person.vehicle_2_make_model ?? "",
+                      vehicle2Color: person.vehicle_2_color ?? "",
+                    });
+                  }}
+                  disabled={savingProfile}
+                  className="flex-1 bg-cream-200 hover:bg-cream-200/70 text-ink-700 py-2.5 rounded-xl text-sm font-medium transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveProfile}
+                  disabled={savingProfile}
+                  className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition disabled:opacity-50"
+                >
+                  {savingProfile ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isNoEmailAccount && (
+            <button
+              type="button"
+              onClick={sendPasswordResetEmail}
+              disabled={sendingResetEmail}
+              className="mt-4 w-full bg-white hover:bg-cream-50 text-ink-700 py-3 rounded-2xl border border-cream-200 text-sm font-medium transition disabled:opacity-50"
+            >
+              {sendingResetEmail ? "Sending..." : "Send password reset"}
+            </button>
+          )}
+        </div>
       </section>
 
       {/* Pay rate card (caregivers only) */}
@@ -438,6 +695,59 @@ function Row({ label, value }: { label: string; value?: string | null }) {
         {value ?? "—"}
       </dd>
     </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+  helper,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  helper?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+        {label}
+      </span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20"
+      />
+      {helper && <span className="block text-xs text-ink-500 mt-1">{helper}</span>}
+    </label>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-ink-700 mb-1.5 tracking-wide uppercase">
+        {label}
+      </span>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={3}
+        className="w-full px-3 py-2 bg-cream-50 border border-cream-200 rounded-xl text-ink-900 focus:outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20"
+      />
+    </label>
   );
 }
 

@@ -73,6 +73,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    await admin.from("activity_logs").insert({
+      organization_id: actor.organization_id,
+      actor_id: actor.id,
+      action_type: "managed_user_password_reset",
+      shift_count: 0,
+      metadata: {
+        target_user_id: target.id,
+        target_role: target.role,
+        login_type: "username",
+      },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

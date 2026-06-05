@@ -55,6 +55,9 @@ export default function TermsPage() {
           Users are entirely responsible for entering complete and accurate schedules, contact records, allergy alerts, medication lists, safety details, and care guides. The client and caregivers must keep information updated to ensure safety.
         </p>
         <p className="mt-2">
+          Administrators are responsible for maintaining accurate managed user details, using password reset actions appropriately, and removing or disabling access when a person should no longer use the care circle.
+        </p>
+        <p className="mt-2">
           Location-based geofence checks are strictly for check-in and check-out verification. The application does not perform continuous, real-time location tracking or active geofence monitoring.
         </p>
         <p className="mt-2 font-semibold text-ink-950">

@@ -16,6 +16,7 @@ export type ProfileRow = {
   id: string;
   full_name: string;
   email: string;
+  contact_email: string | null;
   phone: string | null;
   role: Role;
   is_active: boolean;

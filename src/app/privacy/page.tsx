@@ -17,7 +17,7 @@ export default function PrivacyPage() {
         </p>
         <ul className="list-disc pl-5 space-y-1.5 text-sm text-ink-700">
           <li><strong>Account Details:</strong> Name, email address, password hashes, profile settings, language preferences, and theme, font size, and accessibility preferences.</li>
-          <li><strong>Care Circle Profiles:</strong> User roles (admin, caregiver, client, family), caregiver profile photos, and profile settings.</li>
+          <li><strong>Care Circle Profiles:</strong> User roles (admin, caregiver, client, family), caregiver profile photos, contact email, phone, profile notes, and profile settings.</li>
           <li><strong>Client & Home Info:</strong> Name, address, care recipient photos, entry notes, Wi-Fi details, and home notes.</li>
           <li><strong>Emergency & Health Logs:</strong> Emergency contacts, allergy records, medication instructions, and home safety device locations.</li>
           <li><strong>Pets:</strong> Pet profiles, care instructions, emergency notes, and pet photos uploaded by authorized users.</li>
@@ -41,6 +41,7 @@ export default function PrivacyPage() {
           <li>Managing checklist completion, notes, and handoff reports.</li>
           <li>Generating manual recordkeeping estimates for caregiver pay histories and client invoices.</li>
           <li>Logging audits, troubleshooting technical errors, and protecting system security.</li>
+          <li>Allowing administrators to manage profile/contact details and send password reset emails for users in their care circle.</li>
           <li>Remembering notification, tutorial, intro video, and onboarding checklist preferences so they do not repeat unnecessarily.</li>
         </ul>
       </Section>
@@ -51,6 +52,12 @@ export default function PrivacyPage() {
         </p>
         <p className="mt-2">
           We do not sell user data. Information is shared with third-party service providers (such as hosting, database, and email delivery platforms) only as required to run the application, or when legally compelled.
+        </p>
+      </Section>
+
+      <Section title="Administrator Account Management">
+        <p>
+          Administrators may update profile/contact details and initiate password reset emails for managed users in the private care circle. Audit logs may record the administrator, target user, action type, timestamp, and related metadata.
         </p>
       </Section>
 

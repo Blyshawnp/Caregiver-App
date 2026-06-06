@@ -75,8 +75,7 @@ export async function GET(request: Request) {
     anyDeviceRow = data?.[0] ?? null;
   }
 
-  const activeEndpointRow = exactEndpointRow?.is_active ? exactEndpointRow : null;
-  const row = activeEndpointRow ?? activeRow ?? exactEndpointRow ?? anyDeviceRow;
+  const row = endpoint ? exactEndpointRow ?? activeRow ?? anyDeviceRow : activeRow ?? anyDeviceRow;
   const endpointMatch = endpoint && row ? row.endpoint === endpoint : endpoint ? false : null;
   const keysMatch =
     currentP256dh && currentAuth && row?.p256dh && row?.auth
@@ -89,6 +88,11 @@ export async function GET(request: Request) {
   return NextResponse.json({
     enabled: Boolean(row?.is_active && (!endpoint || row.endpoint === endpoint)),
     active: Boolean(row?.is_active),
+    activeColumn: "is_active",
+    rawIsActive: row?.is_active ?? null,
+    rawActive: null,
+    status: null,
+    selectedSubscriptionId: row?.id ? String(row.id).slice(0, 8) : null,
     serverSubscriptionExists: Boolean(row),
     deviceId: row?.device_id ?? deviceId ?? null,
     endpoint: row?.endpoint ?? null,
@@ -161,6 +165,26 @@ export async function POST(request: Request) {
       ? requestedFingerprint
       : serverVapid.serverPublicKeyFingerprint || null;
   const now = new Date().toISOString();
+
+  const { error: deactivateError } = await admin
+    .from("push_subscriptions")
+    .update({
+      is_active: false,
+      disabled_at: now,
+      updated_at: now,
+    })
+    .eq("user_id", user.id)
+    .eq("device_id", payload.device_id)
+    .neq("endpoint", payload.endpoint);
+
+  if (deactivateError) {
+    console.error("[push-subscriptions] old endpoint cleanup failed", {
+      userId: user.id,
+      code: deactivateError.code,
+      message: deactivateError.message,
+    });
+  }
+
   const { error } = await admin.from("push_subscriptions").upsert(
     {
       organization_id: profile.organization_id,
@@ -187,25 +211,6 @@ export async function POST(request: Request) {
       message: error.message,
     });
     return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  const { error: deactivateError } = await admin
-    .from("push_subscriptions")
-    .update({
-      is_active: false,
-      disabled_at: now,
-      updated_at: now,
-    })
-    .eq("user_id", user.id)
-    .eq("device_id", payload.device_id)
-    .neq("endpoint", payload.endpoint);
-
-  if (deactivateError) {
-    console.error("[push-subscriptions] old endpoint cleanup failed", {
-      userId: user.id,
-      code: deactivateError.code,
-      message: deactivateError.message,
-    });
   }
 
   const { error: reactivateError } = await admin
@@ -237,8 +242,9 @@ export async function POST(request: Request) {
   console.info("[push-subscriptions] save succeeded", { userId: user.id });
   const { data: saved } = await admin
     .from("push_subscriptions")
-    .select("id, device_id, endpoint, p256dh, auth, is_active, updated_at, vapid_key_fingerprint")
+    .select("id, device_id, endpoint, p256dh, auth, is_active, updated_at, last_seen_at, vapid_key_fingerprint")
     .eq("user_id", user.id)
+    .eq("device_id", payload.device_id)
     .eq("endpoint", payload.endpoint)
     .maybeSingle();
 
@@ -264,16 +270,19 @@ export async function POST(request: Request) {
             ? "Push subscription was saved, but the current browser keys were not updated."
             : "Push subscription was saved, but the current endpoint could not be verified.",
         code: !active
-          ? "saved_subscription_inactive"
+          ? "save_failed_inactive"
           : !keysMatch
             ? "saved_subscription_keys_stale"
             : "subscription_save_verification_failed",
         endpointMatch,
         active,
+        activeColumn: "is_active",
+        rawIsActive: saved?.is_active ?? null,
         fingerprintMatch,
         keysMatch,
         deviceId: saved?.device_id ?? null,
         savedFingerprint: saved?.vapid_key_fingerprint ?? null,
+        updatedAt: saved?.updated_at ?? null,
       },
       { status: 500 }
     );
@@ -284,9 +293,12 @@ export async function POST(request: Request) {
     subscription: saved,
     endpointMatch,
     active,
+    activeColumn: "is_active",
+    rawIsActive: saved.is_active,
     keysMatch,
     deviceId: saved.device_id ?? null,
     savedFingerprint: saved.vapid_key_fingerprint ?? null,
+    updatedAt: saved.updated_at ?? null,
   });
 }
 

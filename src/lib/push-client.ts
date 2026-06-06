@@ -193,6 +193,11 @@ export async function getPushDeviceStatus(
     deviceId: string | null;
     endpoint: string | null;
     active: boolean;
+    activeColumn?: string | null;
+    rawIsActive?: boolean | null;
+    rawActive?: boolean | null;
+    status?: string | null;
+    selectedSubscriptionId?: string | null;
     serverSubscriptionExists: boolean;
     endpointMatch: boolean | null;
     keysPresent: boolean;

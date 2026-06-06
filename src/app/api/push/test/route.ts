@@ -246,6 +246,60 @@ async function findCurrentDeviceSubscription(
   const selectFields =
     "id, user_id, device_id, endpoint, p256dh, auth, is_active, vapid_key_fingerprint, updated_at";
 
+  if (endpoint) {
+    let exactQuery = admin
+      .from("push_subscriptions")
+      .select(selectFields)
+      .eq("user_id", userId)
+      .eq("endpoint", endpoint);
+    if (deviceId) exactQuery = exactQuery.eq("device_id", deviceId);
+
+    const { data: endpointRows } = await exactQuery
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    const row = (endpointRows?.[0] ?? null) as PushSubscriptionRow | null;
+    const diagnostics: Record<string, unknown> = {
+      activeColumn: "is_active",
+      rawIsActive: row?.is_active ?? null,
+      rawActive: null,
+      status: null,
+      selectedSubscriptionId: row?.id ? row.id.slice(0, 8) : null,
+      exactEndpointRowFound: Boolean(row),
+      exactEndpointActive: row?.is_active ?? null,
+      savedSubscriptionInactive: Boolean(row && !row.is_active),
+      serverActiveRowFound: Boolean(row?.is_active),
+      endpointMatch: Boolean(row),
+      deviceIdMatch: row && deviceId ? row.device_id === deviceId : null,
+      subscriptionKeysPresent: Boolean(row?.p256dh && row?.auth),
+      serverRowExistsButInactive: Boolean(row && !row.is_active),
+      serverRowExistsWithDifferentDeviceId: Boolean(row && deviceId && row.device_id !== deviceId),
+      serverRowExistsWithMismatchedEndpoint: false,
+      serverRowMissingKeys: Boolean(row && (!row.p256dh || !row.auth)),
+      serverRowsForDevice: null,
+      activeRowsForDevice: null,
+      latestRowActive: row?.is_active ?? null,
+      latestRowFingerprintStatus: row ? describeFingerprintStatus(row.vapid_key_fingerprint ?? null) : null,
+    };
+
+    if (deviceId) {
+      const { data: deviceRows } = await admin
+        .from("push_subscriptions")
+        .select(selectFields)
+        .eq("user_id", userId)
+        .eq("device_id", deviceId)
+        .order("updated_at", { ascending: false })
+        .limit(20);
+      diagnostics.serverRowsForDevice = deviceRows?.length ?? 0;
+      diagnostics.activeRowsForDevice = deviceRows?.filter((item) => item.is_active).length ?? 0;
+    }
+
+    if (!row || !row.is_active || !row.p256dh || !row.auth) {
+      return { subscription: null, diagnostics };
+    }
+
+    return { subscription: row, diagnostics };
+  }
+
   let activeQuery = admin
     .from("push_subscriptions")
     .select(selectFields)
@@ -273,6 +327,11 @@ async function findCurrentDeviceSubscription(
   }
 
   const diagnostics: Record<string, unknown> = {
+    activeColumn: "is_active",
+    rawIsActive: active?.is_active ?? null,
+    rawActive: null,
+    status: null,
+    selectedSubscriptionId: active?.id ? active.id.slice(0, 8) : null,
     serverActiveRowFound: Boolean(active),
     endpointMatch: active && endpoint ? active.endpoint === endpoint : false,
     deviceIdMatch: active && deviceId ? active.device_id === deviceId : false,
@@ -304,35 +363,6 @@ async function findCurrentDeviceSubscription(
       row && endpoint && row.endpoint !== endpoint
     );
     diagnostics.serverRowMissingKeys = Boolean(row && (!row.p256dh || !row.auth));
-  }
-
-  if (endpoint) {
-    const { data: endpointRows } = await admin
-      .from("push_subscriptions")
-      .select(selectFields)
-      .eq("user_id", userId)
-      .eq("endpoint", endpoint)
-      .order("updated_at", { ascending: false })
-      .limit(1);
-    const row = (endpointRows?.[0] ?? null) as PushSubscriptionRow | null;
-    diagnostics.exactEndpointRowFound = Boolean(row);
-    diagnostics.exactEndpointActive = row?.is_active ?? null;
-    diagnostics.savedSubscriptionInactive = Boolean(row && !row.is_active);
-    diagnostics.endpointMatch = row ? true : diagnostics.endpointMatch;
-    diagnostics.latestRowActive = row?.is_active ?? diagnostics.latestRowActive;
-    diagnostics.latestRowFingerprintStatus =
-      row ? describeFingerprintStatus(row.vapid_key_fingerprint ?? null) : diagnostics.latestRowFingerprintStatus;
-    diagnostics.serverRowExistsWithDifferentDeviceId = Boolean(
-      row && deviceId && row.device_id !== deviceId
-    );
-    diagnostics.serverRowExistsButInactive =
-      Boolean(diagnostics.serverRowExistsButInactive) || Boolean(row && !row.is_active);
-    diagnostics.serverRowMissingKeys =
-      Boolean(diagnostics.serverRowMissingKeys) || Boolean(row && (!row.p256dh || !row.auth));
-
-    if (row?.is_active && row.p256dh && row.auth) {
-      return { subscription: row, diagnostics };
-    }
   }
 
   return { subscription: null, diagnostics };

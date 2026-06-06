@@ -32,6 +32,11 @@ type PushDiagnostics = {
   deviceId: string;
   subscriptionSaved: boolean;
   subscriptionActive: boolean;
+  activeColumn: string | null;
+  rawIsActive: boolean | null;
+  rawActive: boolean | null;
+  statusValue: string | null;
+  selectedSubscriptionId: string | null;
   subscriptionEndpointPresent: boolean;
   subscriptionKeysPresent: boolean;
   subscriptionKeysMatch: boolean | null;
@@ -73,6 +78,11 @@ export default function NotificationSettings({
     deviceId: "",
     subscriptionSaved: false,
     subscriptionActive: false,
+    activeColumn: null,
+    rawIsActive: null,
+    rawActive: null,
+    statusValue: null,
+    selectedSubscriptionId: null,
     subscriptionEndpointPresent: false,
     subscriptionKeysPresent: false,
     subscriptionKeysMatch: null,
@@ -376,6 +386,11 @@ export default function NotificationSettings({
       deviceId: getPushDeviceId(),
       subscriptionSaved: !!status?.serverSubscriptionExists,
       subscriptionActive: !!status?.active,
+      activeColumn: status?.activeColumn ?? null,
+      rawIsActive: status?.rawIsActive ?? null,
+      rawActive: status?.rawActive ?? null,
+      statusValue: status?.status ?? null,
+      selectedSubscriptionId: status?.selectedSubscriptionId ?? null,
       subscriptionEndpointPresent: endpointPresent,
       subscriptionKeysPresent: browserKeysPresent && serverKeysPresent,
       subscriptionKeysMatch,
@@ -588,6 +603,11 @@ export default function NotificationSettings({
             <Diag label="Browser endpoint present" value={diagnostics.subscriptionEndpointPresent ? "Yes" : "No"} />
             <Diag label="Saved server subscription exists" value={diagnostics.subscriptionSaved ? "Yes" : "No"} />
             <Diag label="Saved server subscription active" value={diagnostics.subscriptionActive ? "Yes" : "No"} />
+            <Diag label="Canonical active column" value={diagnostics.activeColumn || "Not reported"} />
+            <Diag label="Raw is_active value" value={diagnostics.rawIsActive === null ? "Not present" : diagnostics.rawIsActive ? "true" : "false"} />
+            <Diag label="Raw active value" value={diagnostics.rawActive === null ? "Not present" : diagnostics.rawActive ? "true" : "false"} />
+            <Diag label="Status value" value={diagnostics.statusValue || "Not present"} />
+            <Diag label="Selected subscription row" value={diagnostics.selectedSubscriptionId || "Not selected"} />
             <Diag label="Device ID" value={diagnostics.deviceId || "Not available"} />
             <Diag label="Endpoint match" value={diagnostics.endpointMatch === null ? "Not checked" : diagnostics.endpointMatch ? "Yes" : "No"} />
             <Diag label="Subscription keys present" value={diagnostics.subscriptionKeysPresent ? "Yes" : "No"} />

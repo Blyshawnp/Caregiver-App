@@ -49,8 +49,15 @@ If `NEXT_PUBLIC_VAPID_PUBLIC_KEY` changes, all existing browser subscriptions mu
 
 ## Diagnostics Meanings
 
+- Refresh notifications creates a new browser subscription with the current app public key and saves that exact endpoint to the app database.
+- If diagnostics says the saved subscription is inactive, stale, marked invalid, or has an endpoint mismatch, use Refresh notifications to replace it with a new active subscription for this device.
+- If refresh cannot save the browser endpoint, the app should report the save error instead of showing a false Active state.
 - Device subscription key changed: the saved browser subscription fingerprint does not match the current app public key. Refresh notifications on that device.
 - Server key mismatch: the server sender key pair does not match the app public key. Fix Vercel and Supabase environment variables, then redeploy.
 - Server push not configured: one or more required VAPID variables are missing.
 - Expired subscription: the browser push service returned 404 or 410. Refresh notifications on that device.
 - No active subscription: the browser subscription was not saved or the server lookup cannot find the active row for this device.
+
+## Sounds
+
+Native push notification sounds are controlled by the device, operating system, and browser. A PWA cannot force a separate OS-level notification sound per category. In-app alert sounds can only play while the app is open and after the browser allows audio playback.

@@ -202,7 +202,6 @@ export async function sendPushForNotifications(
       .from("push_subscriptions")
       .update({
         is_active: false,
-        vapid_key_fingerprint: "invalid_key",
         disabled_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -249,9 +248,6 @@ export async function sendPushToSubscription(
       disabled_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    if (invalidKey) {
-      update.vapid_key_fingerprint = "invalid_key";
-    }
 
     await admin
       .from("push_subscriptions")

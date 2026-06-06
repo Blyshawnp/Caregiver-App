@@ -138,17 +138,26 @@ export async function enablePushNotifications() {
           ...subscription.toJSON(),
           device_id: getPushDeviceId(),
           platform: getClientPlatform(),
-          vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
+          vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+          vapid_public_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
         }),
       }),
       15_000,
       "Saving push subscription timed out."
     );
 
+    const saveResult = (await response.json().catch(() => null)) as {
+      error?: string;
+      active?: boolean;
+      endpointMatch?: boolean;
+    } | null;
     if (!response.ok) {
-      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      const data = saveResult;
       console.error("[push-enable] database save failed", data);
       throw new Error(data?.error ?? "Could not save push subscription.");
+    }
+    if (!saveResult?.active || !saveResult.endpointMatch) {
+      throw new Error("Browser subscription exists, but the server could not save it.");
     }
 
     logStep("verifying saved subscription");
@@ -191,6 +200,7 @@ export async function getPushDeviceStatus(endpoint?: string | null) {
     updatedAt?: string | null;
     platform?: string | null;
     vapidKeyFingerprint?: string | null;
+    fingerprintStatus?: "missing" | "invalid_key" | "match" | "mismatch" | string | null;
     serverPublicKeyFingerprint?: string | null;
     serverPrivateKeyConfigured?: boolean;
     vapidSubjectConfigured?: boolean;
@@ -205,16 +215,24 @@ export async function saveCurrentPushSubscription(subscription: PushSubscription
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
+        body: JSON.stringify({
       ...subscription.toJSON(),
       device_id: getPushDeviceId(),
       platform: getClientPlatform(),
-      vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
+      vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+      vapid_public_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
     }),
   });
+  const data = (await response.json().catch(() => null)) as {
+    error?: string;
+    active?: boolean;
+    endpointMatch?: boolean;
+  } | null;
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new Error(data?.error ?? "Could not save push subscription.");
+  }
+  if (!data?.active || !data.endpointMatch) {
+    throw new Error("Browser subscription exists, but the server could not save it.");
   }
 }
 

@@ -12,6 +12,7 @@ type PushSubscriptionPayload = {
   device_id?: string;
   platform?: string;
   vapid_key_fingerprint?: string;
+  vapid_public_key_fingerprint?: string;
 };
 
 export async function GET(request: Request) {
@@ -29,9 +30,23 @@ export async function GET(request: Request) {
   const deviceId = searchParams.get("deviceId");
   const admin = createAdminClient();
 
+  const selectFields = "id, device_id, endpoint, p256dh, auth, is_active, last_seen_at, updated_at, platform, vapid_key_fingerprint";
+
+  let exactEndpointRow = null;
+  if (endpoint) {
+    const { data } = await admin
+      .from("push_subscriptions")
+      .select(selectFields)
+      .eq("user_id", user.id)
+      .eq("endpoint", endpoint)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    exactEndpointRow = data?.[0] ?? null;
+  }
+
   let activeQuery = admin
     .from("push_subscriptions")
-    .select("id, device_id, endpoint, p256dh, auth, is_active, last_seen_at, updated_at, platform, vapid_key_fingerprint")
+    .select(selectFields)
     .eq("user_id", user.id)
     .eq("is_active", true);
 
@@ -50,7 +65,7 @@ export async function GET(request: Request) {
   if (deviceId && !activeRow) {
     const { data } = await admin
       .from("push_subscriptions")
-      .select("id, device_id, endpoint, p256dh, auth, is_active, last_seen_at, updated_at, platform, vapid_key_fingerprint")
+      .select(selectFields)
       .eq("user_id", user.id)
       .eq("device_id", deviceId)
       .order("updated_at", { ascending: false })
@@ -58,25 +73,14 @@ export async function GET(request: Request) {
     anyDeviceRow = data?.[0] ?? null;
   }
 
-  let endpointRow = null;
-  if (!activeRow && endpoint) {
-    const { data } = await admin
-      .from("push_subscriptions")
-      .select("id, device_id, endpoint, p256dh, auth, is_active, last_seen_at, updated_at, platform, vapid_key_fingerprint")
-      .eq("user_id", user.id)
-      .eq("endpoint", endpoint)
-      .order("updated_at", { ascending: false })
-      .limit(1);
-    endpointRow = data?.[0] ?? null;
-  }
-
-  const row = activeRow ?? anyDeviceRow ?? endpointRow;
-  const endpointMatch = endpoint && activeRow ? activeRow.endpoint === endpoint : endpoint ? false : null;
+  const activeEndpointRow = exactEndpointRow?.is_active ? exactEndpointRow : null;
+  const row = activeEndpointRow ?? activeRow ?? exactEndpointRow ?? anyDeviceRow;
+  const endpointMatch = endpoint && row ? row.endpoint === endpoint : endpoint ? false : null;
   const serverVapid = getServerVapidStatus();
 
   return NextResponse.json({
-    enabled: Boolean(activeRow && (!endpoint || activeRow.endpoint === endpoint)),
-    active: Boolean(activeRow),
+    enabled: Boolean(row?.is_active && (!endpoint || row.endpoint === endpoint)),
+    active: Boolean(row?.is_active),
     serverSubscriptionExists: Boolean(row),
     deviceId: row?.device_id ?? deviceId ?? null,
     endpoint: row?.endpoint ?? null,
@@ -86,6 +90,7 @@ export async function GET(request: Request) {
     updatedAt: row?.updated_at ?? null,
     platform: row?.platform ?? null,
     vapidKeyFingerprint: row?.vapid_key_fingerprint ?? null,
+    fingerprintStatus: describeFingerprintStatus(row?.vapid_key_fingerprint ?? null, serverVapid.serverPublicKeyFingerprint),
     serverPublicKeyFingerprint: serverVapid.serverPublicKeyFingerprint,
     serverPrivateKeyConfigured: serverVapid.privateKeyPresent,
     vapidSubjectConfigured: serverVapid.subjectPresent,
@@ -118,12 +123,13 @@ export async function POST(request: Request) {
   }
 
   const payload = (await request.json()) as PushSubscriptionPayload;
-  if (!payload.endpoint || !payload.keys?.p256dh || !payload.keys?.auth) {
+  if (!payload.endpoint || !payload.keys?.p256dh || !payload.keys?.auth || !payload.device_id) {
     console.error("[push-subscriptions] invalid subscription payload", {
       userId: user.id,
       hasEndpoint: !!payload.endpoint,
       hasP256dh: !!payload.keys?.p256dh,
       hasAuth: !!payload.keys?.auth,
+      hasDeviceId: !!payload.device_id,
     });
     return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
   }
@@ -138,21 +144,29 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
+  const serverVapid = getServerVapidStatus();
+  const requestedFingerprint =
+    payload.vapid_public_key_fingerprint || payload.vapid_key_fingerprint || null;
+  const savedFingerprint =
+    requestedFingerprint && requestedFingerprint !== "invalid_key"
+      ? requestedFingerprint
+      : serverVapid.serverPublicKeyFingerprint || null;
+  const now = new Date().toISOString();
   const { error } = await admin.from("push_subscriptions").upsert(
     {
       organization_id: profile.organization_id,
       user_id: user.id,
       endpoint: payload.endpoint,
-      device_id: payload.device_id || null,
+      device_id: payload.device_id,
       p256dh: payload.keys.p256dh,
       auth: payload.keys.auth,
       user_agent: userAgent,
       platform: payload.platform || platform,
       is_active: true,
       disabled_at: null,
-      last_seen_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      vapid_key_fingerprint: payload.vapid_key_fingerprint || null,
+      last_seen_at: now,
+      updated_at: now,
+      vapid_key_fingerprint: savedFingerprint,
     },
     { onConflict: "endpoint" }
   );
@@ -166,28 +180,67 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (payload.device_id) {
-    await admin
-      .from("push_subscriptions")
-      .update({
-        is_active: false,
-        disabled_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", user.id)
-      .eq("device_id", payload.device_id)
-      .neq("endpoint", payload.endpoint);
+  const { error: deactivateError } = await admin
+    .from("push_subscriptions")
+    .update({
+      is_active: false,
+      disabled_at: now,
+      updated_at: now,
+    })
+    .eq("user_id", user.id)
+    .eq("device_id", payload.device_id)
+    .neq("endpoint", payload.endpoint);
+
+  if (deactivateError) {
+    console.error("[push-subscriptions] old endpoint cleanup failed", {
+      userId: user.id,
+      code: deactivateError.code,
+      message: deactivateError.message,
+    });
+  }
+
+  const { error: reactivateError } = await admin
+    .from("push_subscriptions")
+    .update({
+      device_id: payload.device_id,
+      p256dh: payload.keys.p256dh,
+      auth: payload.keys.auth,
+      user_agent: userAgent,
+      platform: payload.platform || platform,
+      is_active: true,
+      disabled_at: null,
+      last_seen_at: now,
+      updated_at: now,
+      vapid_key_fingerprint: savedFingerprint,
+    })
+    .eq("user_id", user.id)
+    .eq("endpoint", payload.endpoint);
+
+  if (reactivateError) {
+    console.error("[push-subscriptions] current endpoint reactivation failed", {
+      userId: user.id,
+      code: reactivateError.code,
+      message: reactivateError.message,
+    });
+    return NextResponse.json({ error: reactivateError.message }, { status: 500 });
   }
 
   console.info("[push-subscriptions] save succeeded", { userId: user.id });
   const { data: saved } = await admin
     .from("push_subscriptions")
-    .select("id, device_id, endpoint, is_active, updated_at")
+    .select("id, device_id, endpoint, is_active, updated_at, vapid_key_fingerprint")
     .eq("user_id", user.id)
     .eq("endpoint", payload.endpoint)
     .maybeSingle();
 
-  return NextResponse.json({ ok: true, subscription: saved });
+  return NextResponse.json({
+    ok: true,
+    subscription: saved,
+    endpointMatch: saved?.endpoint === payload.endpoint,
+    active: saved?.is_active === true,
+    deviceId: saved?.device_id ?? null,
+    savedFingerprint: saved?.vapid_key_fingerprint ?? null,
+  });
 }
 
 export async function DELETE(request: Request) {
@@ -227,4 +280,11 @@ export async function DELETE(request: Request) {
   }
 
   return NextResponse.json({ ok: true });
+}
+
+function describeFingerprintStatus(saved: string | null, current: string) {
+  if (!saved) return "missing";
+  if (saved === "invalid_key") return "invalid_key";
+  if (saved === current) return "match";
+  return "mismatch";
 }

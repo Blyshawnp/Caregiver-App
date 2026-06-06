@@ -46,10 +46,11 @@ export async function POST(request: Request) {
     if (!lookup.subscription) {
       return NextResponse.json(
         {
-          error: "No active push subscription was found for this device. Refresh subscription or enable alerts again.",
-          code: "no_active_subscription",
+          error: "No active matching push subscription was found for this device. Refresh notifications to save this device's current subscription.",
+          code: "no_active_matching_subscription",
           diagnostics: {
             browserSubscriptionExists: payload.browserSubscriptionExists ?? null,
+            browserEndpointProvided: Boolean(payload.endpoint),
             deviceIdProvided: Boolean(payload.deviceId),
             endpointProvided: Boolean(payload.endpoint),
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
@@ -168,7 +169,7 @@ export async function POST(request: Request) {
       if (status === 404 || status === 410) {
         errorCode = "expired_subscription";
       } else if (status === 401 || status === 403) {
-        errorCode = "server_vapid_mismatch";
+        errorCode = "stale_subscription_key";
       }
 
       const error = describePushFailure(status, firstFailure?.reason);
@@ -238,6 +239,10 @@ async function findCurrentDeviceSubscription(
     serverRowExistsWithDifferentDeviceId: false,
     serverRowExistsWithMismatchedEndpoint: Boolean(active && endpoint && active.endpoint !== endpoint),
     serverRowMissingKeys: Boolean(active && (!active.p256dh || !active.auth)),
+    serverRowsForDevice: null,
+    activeRowsForDevice: null,
+    latestRowActive: null,
+    latestRowFingerprintStatus: null,
   };
 
   if (deviceId) {
@@ -247,8 +252,12 @@ async function findCurrentDeviceSubscription(
       .eq("user_id", userId)
       .eq("device_id", deviceId)
       .order("updated_at", { ascending: false })
-      .limit(1);
+      .limit(20);
     const row = (deviceRows?.[0] ?? null) as PushSubscriptionRow | null;
+    diagnostics.serverRowsForDevice = deviceRows?.length ?? 0;
+    diagnostics.activeRowsForDevice = deviceRows?.filter((item) => item.is_active).length ?? 0;
+    diagnostics.latestRowActive = row?.is_active ?? null;
+    diagnostics.latestRowFingerprintStatus = describeFingerprintStatus(row?.vapid_key_fingerprint ?? null);
     diagnostics.serverRowExistsButInactive = Boolean(row && !row.is_active);
     diagnostics.serverRowExistsWithMismatchedEndpoint = Boolean(
       row && endpoint && row.endpoint !== endpoint
@@ -286,12 +295,18 @@ function describePushFailure(status?: number, reason?: string) {
     return "The saved push subscription has expired. Refresh notifications or enable alerts again on this device.";
   }
   if (status === 401 || status === 403) {
-    return "The server notification key appears to be different from the app notification key. The app owner needs to check VAPID environment variables and redeploy.";
+    return "The saved push subscription for this device is stale or inactive. Refresh notifications to save this device's current subscription.";
   }
   if (status === 400) {
     return "The browser push service rejected the subscription payload. Refresh notifications, then send another test.";
   }
   return reason || "The browser push service did not accept the test notification. Check OS/browser notification settings, Focus or Do Not Disturb, battery optimization, and installed PWA state.";
+}
+
+function describeFingerprintStatus(fingerprint: string | null) {
+  if (!fingerprint) return "missing";
+  if (fingerprint === "invalid_key") return "invalid_key";
+  return "present";
 }
 
 function getSafeServerVapidDiagnostics(status: ServerVapidStatus) {

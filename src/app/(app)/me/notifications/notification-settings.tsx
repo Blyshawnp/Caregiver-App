@@ -37,6 +37,7 @@ type PushDiagnostics = {
   vapidKeyMatch: boolean;
   currentAppPublicKeyFingerprint: string;
   savedSubscriptionFingerprint: string | null;
+  savedSubscriptionFingerprintStatus: string | null;
   serverSenderPublicKeyFingerprint: string | null;
   serverPrivateKeyConfigured: boolean;
   vapidSubjectConfigured: boolean;
@@ -76,6 +77,7 @@ export default function NotificationSettings({
     vapidKeyMatch: false,
     currentAppPublicKeyFingerprint: "",
     savedSubscriptionFingerprint: null,
+    savedSubscriptionFingerprintStatus: null,
     serverSenderPublicKeyFingerprint: null,
     serverPrivateKeyConfigured: false,
     vapidSubjectConfigured: false,
@@ -372,6 +374,7 @@ export default function NotificationSettings({
       vapidKeyMatch,
       currentAppPublicKeyFingerprint: currentFingerprint || "Not configured",
       savedSubscriptionFingerprint: dbFingerprint,
+      savedSubscriptionFingerprintStatus: status?.fingerprintStatus ?? null,
       serverSenderPublicKeyFingerprint: serverFingerprint,
       serverPrivateKeyConfigured: status?.serverPrivateKeyConfigured ?? false,
       vapidSubjectConfigured: status?.vapidSubjectConfigured ?? false,
@@ -379,7 +382,7 @@ export default function NotificationSettings({
       serverVapidError: status?.serverVapidError ?? null,
       serverVapidMismatch,
       lastSubscriptionUpdate: status?.lastSeenAt ?? status?.updatedAt ?? null,
-      lastTestPushResult: lastTest ? describeTestResult(lastTest) : "Not run",
+      lastTestPushResult: lastTest ? describeTestResult(lastTest, serverVapidMismatch) : "Not run",
       lastTestProviderStatus: lastProviderStatus,
       platform: status?.platform ?? nav.userAgentData?.platform ?? (browser.includes("Android") ? "android" : browser.includes("iPhone") || browser.includes("iPad") ? "ios" : "desktop"),
       installedPwa,
@@ -387,14 +390,16 @@ export default function NotificationSettings({
     });
   }
 
-  function describeTestResult(code: string) {
+  function describeTestResult(code: string, trueServerMismatch = false) {
     switch (code) {
       case "success": return "Success";
       case "expired_subscription": return "Subscription expired (404/410)";
       case "invalid_vapid_key": return "Notification key mismatch (401/403)";
-      case "server_vapid_mismatch": return "Server notification key mismatch";
+      case "server_vapid_mismatch":
+        return trueServerMismatch ? "Server notification key mismatch" : "Saved subscription stale or inactive";
       case "server_push_not_configured": return "Server push not configured";
       case "stale_subscription_key": return "Device subscription key changed";
+      case "no_active_matching_subscription": return "No active matching subscription";
       case "rejected_by_push_service": return "Rejected by browser push service (400)";
       case "permission_denied": return "Permission denied";
       case "no_subscription":
@@ -417,11 +422,20 @@ export default function NotificationSettings({
     }
 
     const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
-    if (diagnostics.serverVapidMismatch || lastTest === "server_vapid_mismatch") {
+    if (diagnostics.serverVapidMismatch) {
       return { label: "Server key mismatch", color: "text-terracotta-600 font-semibold" };
     }
     if (lastTest === "server_push_not_configured") {
       return { label: "Server push not configured", color: "text-terracotta-600 font-semibold" };
+    }
+    if (diagnostics.browserSubscriptionExists && diagnostics.subscriptionSaved && !diagnostics.subscriptionActive) {
+      return { label: "Saved subscription inactive", color: "text-amber-600 font-semibold" };
+    }
+    if (diagnostics.browserSubscriptionExists && diagnostics.endpointMatch === false) {
+      return { label: "Endpoint mismatch", color: "text-amber-600 font-semibold" };
+    }
+    if (diagnostics.savedSubscriptionFingerprintStatus === "invalid_key") {
+      return { label: "Needs refresh", color: "text-amber-600 font-semibold" };
     }
     const hasMismatch =
       deviceEnabled &&
@@ -456,8 +470,26 @@ export default function NotificationSettings({
 
   const overallStatus = getOverallStatus();
   const showServerMismatchWarning = deviceEnabled && diagnostics.serverVapidMismatch;
+  const showInactiveWarning =
+    !showServerMismatchWarning &&
+    diagnostics.browserSubscriptionExists &&
+    diagnostics.subscriptionSaved &&
+    !diagnostics.subscriptionActive;
+  const showEndpointMismatchWarning =
+    !showServerMismatchWarning &&
+    diagnostics.browserSubscriptionExists &&
+    diagnostics.endpointMatch === false;
+  const showInvalidFingerprintWarning =
+    !showServerMismatchWarning &&
+    diagnostics.savedSubscriptionFingerprintStatus === "invalid_key";
   const showMismatchWarning =
-    !showServerMismatchWarning && deviceEnabled && diagnostics.subscriptionSaved && diagnostics.vapidKeyMatch === false;
+    !showServerMismatchWarning &&
+    !showInactiveWarning &&
+    !showEndpointMismatchWarning &&
+    !showInvalidFingerprintWarning &&
+    deviceEnabled &&
+    diagnostics.subscriptionSaved &&
+    diagnostics.vapidKeyMatch === false;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto space-y-6">
@@ -475,6 +507,24 @@ export default function NotificationSettings({
         {showServerMismatchWarning && (
           <div className="bg-terracotta-50 border border-terracotta-200 p-4 rounded-2xl text-xs text-terracotta-700 font-semibold mb-4">
             Server notification key does not match the app notification key. Check deployment environment variables.
+          </div>
+        )}
+
+        {showInactiveWarning && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800 font-semibold mb-4">
+            Browser subscription exists, but the saved server subscription is inactive. Refresh notifications to save a new active subscription.
+          </div>
+        )}
+
+        {showEndpointMismatchWarning && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800 font-semibold mb-4">
+            Browser subscription exists, but the saved server endpoint does not match this device. Refresh notifications needs to save the current endpoint.
+          </div>
+        )}
+
+        {showInvalidFingerprintWarning && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800 font-semibold mb-4">
+            The saved server subscription was marked invalid. Refresh notifications should replace it with a new active subscription.
           </div>
         )}
 
@@ -516,6 +566,7 @@ export default function NotificationSettings({
             <Diag label="VAPID key match" value={diagnostics.vapidKeyMatch ? "Yes" : "No"} />
             <Diag label="App public key fingerprint" value={diagnostics.currentAppPublicKeyFingerprint || "Not configured"} />
             <Diag label="Saved subscription fingerprint" value={diagnostics.savedSubscriptionFingerprint || "Not saved"} />
+            <Diag label="Saved fingerprint status" value={diagnostics.savedSubscriptionFingerprintStatus || "Not checked"} />
             <Diag label="Server sender fingerprint" value={diagnostics.serverSenderPublicKeyFingerprint || "Not configured"} />
             <Diag label="Server private key configured" value={diagnostics.serverPrivateKeyConfigured ? "Yes" : "No"} />
             <Diag label="VAPID subject configured" value={diagnostics.vapidSubjectConfigured ? "Yes" : "No"} />

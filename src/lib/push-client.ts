@@ -7,6 +7,7 @@ import { getVapidFingerprint } from "@/lib/vapid-helper";
 
 const PUSH_DEVICE_ID_STORAGE_KEY = "caregiver-app:push-device-id";
 const PUSH_SAVE_DIAGNOSTICS_STORAGE_KEY = "caregiver-app:last-push-save-diagnostics";
+const PUSH_REFRESH_DIAGNOSTICS_STORAGE_KEY = "caregiver-app:last-push-refresh-diagnostics";
 
 export type PushPreferences = {
   messages: boolean;
@@ -24,7 +25,10 @@ export type PushPreferences = {
   urgent_override_quiet_hours: boolean;
 };
 
-export type PushSaveDiagnostics = Record<string, string | boolean | number | null>;
+type PushDebugValue = string | boolean | number | null;
+
+export type PushSaveDiagnostics = Record<string, PushDebugValue>;
+export type PushRefreshDiagnostics = Record<string, PushDebugValue>;
 
 type PushSubscriptionSaveResponse = {
   error?: string;
@@ -255,16 +259,50 @@ export function getLastPushSaveDiagnostics() {
   }
 }
 
+export function getLastPushRefreshDiagnostics() {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(PUSH_REFRESH_DIAGNOSTICS_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PushRefreshDiagnostics;
+  } catch {
+    localStorage.removeItem(PUSH_REFRESH_DIAGNOSTICS_STORAGE_KEY);
+    return null;
+  }
+}
+
 function rememberPushSaveDiagnostics(diagnostics?: PushSaveDiagnostics | null) {
   if (typeof window === "undefined") return;
   if (!diagnostics) return;
   localStorage.setItem(PUSH_SAVE_DIAGNOSTICS_STORAGE_KEY, JSON.stringify(diagnostics));
 }
 
+function rememberPushRefreshDiagnostics(diagnostics?: PushRefreshDiagnostics | null) {
+  if (typeof window === "undefined") return;
+  if (!diagnostics) return;
+  localStorage.setItem(PUSH_REFRESH_DIAGNOSTICS_STORAGE_KEY, JSON.stringify(diagnostics));
+}
+
 function throwPushSaveError(message: string, diagnostics?: PushSaveDiagnostics | null): never {
   const error = new Error(message) as Error & { saveDiagnostics?: PushSaveDiagnostics | null };
   error.saveDiagnostics = diagnostics;
   throw error;
+}
+
+async function hashForDiagnostics(value: string) {
+  if (!globalThis.crypto?.subtle) return value.slice(-16);
+  const bytes = new TextEncoder().encode(value);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 16);
+}
+
+export function getPushSubscriptionApplicationServerKeyFingerprint(subscription: PushSubscription | null) {
+  const key = subscription?.options?.applicationServerKey;
+  if (!key) return null;
+  return getVapidFingerprint(bufferToBase64Url(key));
 }
 
 export async function disablePushNotifications() {
@@ -356,16 +394,51 @@ export async function refreshPushSubscription() {
   }
 
   const registration = await ensureServiceWorkerRegistration();
+  const refreshDiagnostics: PushRefreshDiagnostics = {
+    deviceId: getPushDeviceId(),
+    currentAppPublicKeyFingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+    browserSubscriptionApplicationServerKeyFingerprintBefore: null,
+    browserSubscriptionCreatedWithCurrentKeyBefore: null,
+    oldEndpointHashBeforeRefresh: null,
+    unsubscribeAttempted: false,
+    unsubscribeReturned: null,
+    getSubscriptionAfterUnsubscribeIsNull: null,
+    newSubscribeAttempted: false,
+    newEndpointHashAfterSubscribe: null,
+    newEndpointDiffersFromOldEndpoint: null,
+    browserSubscriptionApplicationServerKeyFingerprintAfter: null,
+    browserSubscriptionCreatedWithCurrentKeyAfter: null,
+    saveNewEndpointResult: "not_attempted",
+    warning: null,
+  };
   const existing = await registration.pushManager.getSubscription();
   if (existing) {
+    refreshDiagnostics.oldEndpointHashBeforeRefresh = await hashForDiagnostics(existing.endpoint);
+    const existingKeyFingerprint = getPushSubscriptionApplicationServerKeyFingerprint(existing);
+    refreshDiagnostics.browserSubscriptionApplicationServerKeyFingerprintBefore = existingKeyFingerprint;
+    refreshDiagnostics.browserSubscriptionCreatedWithCurrentKeyBefore =
+      existingKeyFingerprint === null
+        ? "Browser does not expose subscription applicationServerKey."
+        : existingKeyFingerprint === refreshDiagnostics.currentAppPublicKeyFingerprint;
+    refreshDiagnostics.unsubscribeAttempted = true;
     await fetch("/api/push/subscriptions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint: existing.endpoint, device_id: getPushDeviceId() }),
     }).catch(() => null);
-    await existing.unsubscribe().catch(() => false);
+    refreshDiagnostics.unsubscribeReturned = await existing.unsubscribe().catch(() => false);
   }
 
+  const afterUnsubscribe = await registration.pushManager.getSubscription();
+  refreshDiagnostics.getSubscriptionAfterUnsubscribeIsNull = afterUnsubscribe === null;
+  if (afterUnsubscribe) {
+    rememberPushRefreshDiagnostics(refreshDiagnostics);
+    throw new Error(
+      "The browser kept the old push subscription. Clear site data or browser notification permission and try again."
+    );
+  }
+
+  refreshDiagnostics.newSubscribeAttempted = true;
   const subscription = await withTimeout(
     registration.pushManager.subscribe({
       userVisibleOnly: true,
@@ -374,8 +447,32 @@ export async function refreshPushSubscription() {
     20_000,
     "Browser push subscription timed out."
   );
+  refreshDiagnostics.newEndpointHashAfterSubscribe = await hashForDiagnostics(subscription.endpoint);
+  refreshDiagnostics.newEndpointDiffersFromOldEndpoint =
+    refreshDiagnostics.oldEndpointHashBeforeRefresh
+      ? refreshDiagnostics.newEndpointHashAfterSubscribe !== refreshDiagnostics.oldEndpointHashBeforeRefresh
+      : null;
+  const newKeyFingerprint = getPushSubscriptionApplicationServerKeyFingerprint(subscription);
+  refreshDiagnostics.browserSubscriptionApplicationServerKeyFingerprintAfter = newKeyFingerprint;
+  refreshDiagnostics.browserSubscriptionCreatedWithCurrentKeyAfter =
+    newKeyFingerprint === null
+      ? "Browser does not expose subscription applicationServerKey."
+      : newKeyFingerprint === refreshDiagnostics.currentAppPublicKeyFingerprint;
+  if (refreshDiagnostics.newEndpointDiffersFromOldEndpoint === false) {
+    refreshDiagnostics.warning =
+      "Browser returned the same push endpoint after resubscribe. If test push fails, clear site data/notification permission and enable again.";
+  }
 
-  await saveCurrentPushSubscription(subscription);
+  try {
+    await saveCurrentPushSubscription(subscription);
+    refreshDiagnostics.saveNewEndpointResult = "saved";
+  } catch (error) {
+    refreshDiagnostics.saveNewEndpointResult =
+      error instanceof Error ? `failed: ${error.message}` : "failed";
+    rememberPushRefreshDiagnostics(refreshDiagnostics);
+    throw error;
+  }
+  rememberPushRefreshDiagnostics(refreshDiagnostics);
   return subscription;
 }
 

@@ -5,16 +5,19 @@ import {
   disablePushNotifications,
   enablePushNotifications,
   getCurrentBrowserPushSubscription,
+  getLastPushRefreshDiagnostics,
   getLastPushSaveDiagnostics,
   getPushDeviceId,
   getPushDeviceStatus,
   getPushPreferences,
+  getPushSubscriptionApplicationServerKeyFingerprint,
   getPushSubscriptionKeys,
   isPushSupported,
   refreshPushSubscription,
   saveCurrentPushSubscription,
   savePushPreferences,
   type PushPreferences,
+  type PushRefreshDiagnostics,
   type PushSaveDiagnostics,
 } from "@/lib/push-client";
 import { playNotificationTone } from "@/lib/notification-sounds";
@@ -46,6 +49,8 @@ type PushDiagnostics = {
   endpointMatch: boolean | null;
   vapidKeyMatch: boolean;
   currentAppPublicKeyFingerprint: string;
+  browserSubscriptionApplicationServerKeyFingerprint: string | null;
+  browserSubscriptionCreatedWithCurrentKey: boolean | null;
   savedSubscriptionFingerprint: string | null;
   savedSubscriptionFingerprintStatus: string | null;
   serverSenderPublicKeyFingerprint: string | null;
@@ -61,6 +66,7 @@ type PushDiagnostics = {
   installedPwa: boolean;
   browser: string;
   lastSaveDiagnostics: PushSaveDiagnostics | null;
+  lastRefreshDiagnostics: PushRefreshDiagnostics | null;
 };
 
 export default function NotificationSettings({ 
@@ -93,6 +99,8 @@ export default function NotificationSettings({
     endpointMatch: null,
     vapidKeyMatch: false,
     currentAppPublicKeyFingerprint: "",
+    browserSubscriptionApplicationServerKeyFingerprint: null,
+    browserSubscriptionCreatedWithCurrentKey: null,
     savedSubscriptionFingerprint: null,
     savedSubscriptionFingerprintStatus: null,
     serverSenderPublicKeyFingerprint: null,
@@ -108,6 +116,7 @@ export default function NotificationSettings({
     installedPwa: false,
     browser: "unknown",
     lastSaveDiagnostics: null,
+    lastRefreshDiagnostics: null,
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
@@ -365,6 +374,7 @@ export default function NotificationSettings({
     const status = prefetchedStatus ?? (await getPushDeviceStatus(sub?.endpoint, browserKeys).catch(() => null));
     
     const currentFingerprint = getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
+    const browserApplicationServerKeyFingerprint = getPushSubscriptionApplicationServerKeyFingerprint(sub);
     const dbFingerprint = status?.vapidKeyFingerprint ?? null;
     const serverFingerprint = status?.serverPublicKeyFingerprint ?? null;
     const serverKeyPairValid = status?.serverKeyPairValid ?? false;
@@ -386,6 +396,7 @@ export default function NotificationSettings({
     const lastTest = localStorage.getItem("pwa_last_test_push_result");
     const lastProviderStatus = localStorage.getItem("pwa_last_test_push_provider_status");
     const lastSaveDiagnostics = getLastPushSaveDiagnostics();
+    const lastRefreshDiagnostics = getLastPushRefreshDiagnostics();
 
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
@@ -406,6 +417,11 @@ export default function NotificationSettings({
       endpointMatch: status?.endpointMatch ?? null,
       vapidKeyMatch,
       currentAppPublicKeyFingerprint: currentFingerprint || "Not configured",
+      browserSubscriptionApplicationServerKeyFingerprint: browserApplicationServerKeyFingerprint,
+      browserSubscriptionCreatedWithCurrentKey:
+        browserApplicationServerKeyFingerprint && currentFingerprint
+          ? browserApplicationServerKeyFingerprint === currentFingerprint
+          : null,
       savedSubscriptionFingerprint: dbFingerprint,
       savedSubscriptionFingerprintStatus: status?.fingerprintStatus ?? null,
       serverSenderPublicKeyFingerprint: serverFingerprint,
@@ -421,6 +437,7 @@ export default function NotificationSettings({
       installedPwa,
       browser,
       lastSaveDiagnostics,
+      lastRefreshDiagnostics,
     });
   }
 
@@ -435,6 +452,7 @@ export default function NotificationSettings({
       case "stale_subscription_key": return "Device subscription key changed";
       case "saved_subscription_inactive": return "Saved subscription inactive";
       case "saved_subscription_keys_stale": return "Saved subscription keys stale";
+      case "provider_rejected_subscription": return "Provider rejected subscription";
       case "no_active_matching_subscription": return "No active matching subscription";
       case "rejected_by_push_service": return "Rejected by browser push service (400)";
       case "permission_denied": return "Permission denied";
@@ -488,6 +506,7 @@ export default function NotificationSettings({
       hasMismatch ||
       lastTest === "invalid_vapid_key" ||
       lastTest === "saved_subscription_keys_stale" ||
+      lastTest === "provider_rejected_subscription" ||
       lastTest === "expired_subscription" ||
       diagnostics.lastSubscriptionUpdate === "invalid_key"
     ) {
@@ -565,6 +584,25 @@ export default function NotificationSettings({
         ["After-save row ID", diagnostics.lastSaveDiagnostics.afterSaveRowId],
         ["Updated row equals after-save row", diagnostics.lastSaveDiagnostics.updatedRowEqualsAfterRow],
         ["Policy/RLS warning", diagnostics.lastSaveDiagnostics.policyWarning],
+      ]
+    : [];
+  const refreshDiagnosticsRows = diagnostics.lastRefreshDiagnostics
+    ? [
+        ["Current device ID", diagnostics.lastRefreshDiagnostics.deviceId],
+        ["Current app public key fingerprint", diagnostics.lastRefreshDiagnostics.currentAppPublicKeyFingerprint],
+        ["Browser subscription app key before", diagnostics.lastRefreshDiagnostics.browserSubscriptionApplicationServerKeyFingerprintBefore],
+        ["Browser subscription used current key before", diagnostics.lastRefreshDiagnostics.browserSubscriptionCreatedWithCurrentKeyBefore],
+        ["Old endpoint hash before refresh", diagnostics.lastRefreshDiagnostics.oldEndpointHashBeforeRefresh],
+        ["Unsubscribe attempted", diagnostics.lastRefreshDiagnostics.unsubscribeAttempted],
+        ["Unsubscribe returned", diagnostics.lastRefreshDiagnostics.unsubscribeReturned],
+        ["getSubscription after unsubscribe is null", diagnostics.lastRefreshDiagnostics.getSubscriptionAfterUnsubscribeIsNull],
+        ["New subscribe attempted", diagnostics.lastRefreshDiagnostics.newSubscribeAttempted],
+        ["New endpoint hash after subscribe", diagnostics.lastRefreshDiagnostics.newEndpointHashAfterSubscribe],
+        ["New endpoint differs from old endpoint", diagnostics.lastRefreshDiagnostics.newEndpointDiffersFromOldEndpoint],
+        ["Browser subscription app key after", diagnostics.lastRefreshDiagnostics.browserSubscriptionApplicationServerKeyFingerprintAfter],
+        ["Browser subscription used current key after", diagnostics.lastRefreshDiagnostics.browserSubscriptionCreatedWithCurrentKeyAfter],
+        ["Save new endpoint result", diagnostics.lastRefreshDiagnostics.saveNewEndpointResult],
+        ["Refresh warning", diagnostics.lastRefreshDiagnostics.warning],
       ]
     : [];
 
@@ -654,6 +692,8 @@ export default function NotificationSettings({
             <Diag label="Subscription keys match current browser subscription" value={diagnostics.subscriptionKeysMatch === null ? "Not checked" : diagnostics.subscriptionKeysMatch ? "Yes" : "No"} />
             <Diag label="VAPID key match" value={diagnostics.vapidKeyMatch ? "Yes" : "No"} />
             <Diag label="App public key fingerprint" value={diagnostics.currentAppPublicKeyFingerprint || "Not configured"} />
+            <Diag label="Browser subscription app key" value={diagnostics.browserSubscriptionApplicationServerKeyFingerprint || "Browser does not expose subscription applicationServerKey"} />
+            <Diag label="Browser subscription used current key" value={diagnostics.browserSubscriptionCreatedWithCurrentKey === null ? "Not checked" : diagnostics.browserSubscriptionCreatedWithCurrentKey ? "Yes" : "No"} />
             <Diag label="Saved subscription fingerprint" value={diagnostics.savedSubscriptionFingerprint || "Not saved"} />
             <Diag label="Saved fingerprint status" value={diagnostics.savedSubscriptionFingerprintStatus || "Not checked"} />
             <Diag label="Server sender fingerprint" value={diagnostics.serverSenderPublicKeyFingerprint || "Not configured"} />
@@ -675,6 +715,16 @@ export default function NotificationSettings({
               <p className="font-semibold text-ink-800 mb-2">Last save attempt</p>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                 {saveDiagnosticsRows.map(([label, value]) => (
+                  <Diag key={String(label)} label={String(label)} value={formatDiagnosticValue(value)} />
+                ))}
+              </dl>
+            </div>
+          )}
+          {refreshDiagnosticsRows.length > 0 && (
+            <div className="mt-4 border-t border-cream-200 pt-3">
+              <p className="font-semibold text-ink-800 mb-2">Last refresh attempt</p>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                {refreshDiagnosticsRows.map(([label, value]) => (
                   <Diag key={String(label)} label={String(label)} value={formatDiagnosticValue(value)} />
                 ))}
               </dl>

@@ -210,10 +210,13 @@ export async function POST(request: Request) {
       if (status === 404 || status === 410) {
         errorCode = "expired_subscription";
       } else if (status === 401 || status === 403) {
-        errorCode = "saved_subscription_keys_stale";
+        errorCode =
+          browserKeysProvided && browserKeysMatch && serverVapid.keyPairValid
+            ? "provider_rejected_subscription"
+            : "saved_subscription_keys_stale";
       }
 
-      const error = describePushFailure(status, firstFailure?.reason);
+      const error = describePushFailure(status, firstFailure?.reason, errorCode);
       return NextResponse.json(
         {
           error,
@@ -368,11 +371,14 @@ async function findCurrentDeviceSubscription(
   return { subscription: null, diagnostics };
 }
 
-function describePushFailure(status?: number, reason?: string) {
+function describePushFailure(status?: number, reason?: string, code?: string) {
   if (status === 404 || status === 410) {
     return "The saved push subscription has expired. Refresh notifications or enable alerts again on this device.";
   }
   if (status === 401 || status === 403) {
+    if (code === "provider_rejected_subscription") {
+      return "The browser push service rejected this subscription. Refresh notifications should create a new browser subscription. If it still fails, clear this site's notification permission/site data and enable alerts again.";
+    }
     return "The saved push subscription keys for this device are stale. Refresh notifications needs to update the saved subscription keys.";
   }
   if (status === 400) {

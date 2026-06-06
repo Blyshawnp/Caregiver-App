@@ -44,10 +44,15 @@ export async function POST(request: Request) {
     );
 
     if (!lookup.subscription) {
+      const savedSubscriptionInactive =
+        lookup.diagnostics?.savedSubscriptionInactive === true ||
+        lookup.diagnostics?.exactEndpointActive === false;
       return NextResponse.json(
         {
-          error: "No active matching push subscription was found for this device. Refresh notifications to save this device's current subscription.",
-          code: "no_active_matching_subscription",
+          error: savedSubscriptionInactive
+            ? "The app saved this device's subscription, but it is marked inactive. Refresh should reactivate it."
+            : "No active matching push subscription was found for this device. Refresh notifications to save this device's current subscription.",
+          code: savedSubscriptionInactive ? "saved_subscription_inactive" : "no_active_matching_subscription",
           diagnostics: {
             browserSubscriptionExists: payload.browserSubscriptionExists ?? null,
             browserEndpointProvided: Boolean(payload.endpoint),
@@ -274,6 +279,13 @@ async function findCurrentDeviceSubscription(
       .order("updated_at", { ascending: false })
       .limit(1);
     const row = (endpointRows?.[0] ?? null) as PushSubscriptionRow | null;
+    diagnostics.exactEndpointRowFound = Boolean(row);
+    diagnostics.exactEndpointActive = row?.is_active ?? null;
+    diagnostics.savedSubscriptionInactive = Boolean(row && !row.is_active);
+    diagnostics.endpointMatch = row ? true : diagnostics.endpointMatch;
+    diagnostics.latestRowActive = row?.is_active ?? diagnostics.latestRowActive;
+    diagnostics.latestRowFingerprintStatus =
+      row ? describeFingerprintStatus(row.vapid_key_fingerprint ?? null) : diagnostics.latestRowFingerprintStatus;
     diagnostics.serverRowExistsWithDifferentDeviceId = Boolean(
       row && deviceId && row.device_id !== deviceId
     );

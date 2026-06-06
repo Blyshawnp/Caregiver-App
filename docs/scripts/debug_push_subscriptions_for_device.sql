@@ -1,6 +1,9 @@
 -- Read-only push subscription diagnostics for one browser device.
 -- Replace with the device id shown in notification diagnostics:
--- '5307f3d4-d830-4c16-a587-500da5093fed'
+-- 'a232758d-0082-4a57-b052-dc98a6f9150b'
+--
+-- If the current endpoint matches the browser endpoint but active = false,
+-- the save route is not reactivating the current subscription.
 --
 -- This query intentionally does not select auth, p256dh, service-role keys,
 -- private VAPID keys, or full endpoints.
@@ -18,5 +21,5 @@ select
   last_seen_at,
   disabled_at
 from public.push_subscriptions
-where device_id = '5307f3d4-d830-4c16-a587-500da5093fed'
+where device_id = 'a232758d-0082-4a57-b052-dc98a6f9150b'
 order by updated_at desc nulls last, created_at desc;

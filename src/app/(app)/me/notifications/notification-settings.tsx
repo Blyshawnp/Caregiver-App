@@ -399,6 +399,7 @@ export default function NotificationSettings({
         return trueServerMismatch ? "Server notification key mismatch" : "Saved subscription stale or inactive";
       case "server_push_not_configured": return "Server push not configured";
       case "stale_subscription_key": return "Device subscription key changed";
+      case "saved_subscription_inactive": return "Saved subscription inactive";
       case "no_active_matching_subscription": return "No active matching subscription";
       case "rejected_by_push_service": return "Rejected by browser push service (400)";
       case "permission_denied": return "Permission denied";
@@ -512,7 +513,7 @@ export default function NotificationSettings({
 
         {showInactiveWarning && (
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800 font-semibold mb-4">
-            Browser subscription exists, but the saved server subscription is inactive. Refresh notifications to save a new active subscription.
+            The app saved this device&apos;s subscription, but it is marked inactive. Refresh should reactivate it.
           </div>
         )}
 

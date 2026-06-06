@@ -233,13 +233,41 @@ export async function POST(request: Request) {
     .eq("endpoint", payload.endpoint)
     .maybeSingle();
 
+  const endpointMatch = saved?.endpoint === payload.endpoint;
+  const active = saved?.is_active === true;
+  const fingerprintMatch = saved?.vapid_key_fingerprint === savedFingerprint;
+
+  if (!saved || !endpointMatch || !active || !fingerprintMatch) {
+    console.error("[push-subscriptions] save verification failed", {
+      userId: user.id,
+      saved: Boolean(saved),
+      endpointMatch,
+      active,
+      fingerprintMatch,
+    });
+    return NextResponse.json(
+      {
+        error: active
+          ? "Push subscription was saved, but the current endpoint could not be verified."
+          : "Push subscription was saved, but the current endpoint is still marked inactive.",
+        code: !active ? "saved_subscription_inactive" : "subscription_save_verification_failed",
+        endpointMatch,
+        active,
+        fingerprintMatch,
+        deviceId: saved?.device_id ?? null,
+        savedFingerprint: saved?.vapid_key_fingerprint ?? null,
+      },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({
     ok: true,
     subscription: saved,
-    endpointMatch: saved?.endpoint === payload.endpoint,
-    active: saved?.is_active === true,
-    deviceId: saved?.device_id ?? null,
-    savedFingerprint: saved?.vapid_key_fingerprint ?? null,
+    endpointMatch,
+    active,
+    deviceId: saved.device_id ?? null,
+    savedFingerprint: saved.vapid_key_fingerprint ?? null,
   });
 }
 

@@ -121,7 +121,6 @@ export async function sendPushForNotifications(
   }
 
   const disabledIds: string[] = [];
-  const invalidKeyIds: string[] = [];
   const failures: PushDeliveryResult["failures"] = [];
   let attempted = 0;
   let delivered = 0;
@@ -170,8 +169,6 @@ export async function sendPushForNotifications(
 
         if (result.status === 404 || result.status === 410) {
           disabledIds.push(subscription.id);
-        } else if (result.status === 401 || result.status === 403) {
-          invalidKeyIds.push(subscription.id);
         }
         if (result.ok) {
           delivered += 1;
@@ -197,22 +194,11 @@ export async function sendPushForNotifications(
       .in("id", disabledIds);
   }
 
-  if (invalidKeyIds.length > 0) {
-    await admin
-      .from("push_subscriptions")
-      .update({
-        is_active: false,
-        disabled_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .in("id", invalidKeyIds);
-  }
-
   return {
     attempted,
     delivered,
     failed: failures.length,
-    disabled: disabledIds.length + invalidKeyIds.length,
+    disabled: disabledIds.length,
     skipped: null,
     failures,
     configuration: vapid.status,
@@ -240,9 +226,8 @@ export async function sendPushToSubscription(
 
   const result = await sendWebPush(subscription, payload, vapid.details);
   const shouldDisable = result.status === 404 || result.status === 410;
-  const invalidKey = result.status === 401 || result.status === 403;
 
-  if (shouldDisable || invalidKey) {
+  if (shouldDisable) {
     const update: Record<string, string | boolean> = {
       is_active: false,
       disabled_at: new Date().toISOString(),
@@ -259,7 +244,7 @@ export async function sendPushToSubscription(
     attempted: 1,
     delivered: result.ok ? 1 : 0,
     failed: result.ok ? 0 : 1,
-    disabled: shouldDisable || invalidKey ? 1 : 0,
+    disabled: shouldDisable ? 1 : 0,
     skipped: null,
     failures: result.ok
       ? []
@@ -336,7 +321,7 @@ async function sendWebPush(
 function reasonForPushStatus(status: number) {
   if (status === 404 || status === 410) return "Subscription expired or was removed by the browser push service.";
   if (status === 400) return "Browser push service rejected the subscription or payload.";
-  if (status === 401 || status === 403) return "VAPID authentication failed or the subscription was created with older notification keys.";
+  if (status === 401 || status === 403) return "Browser push service rejected the current subscription. Refresh notifications, then verify VAPID configuration if it continues.";
   if (status === 429) return "Browser push service rate-limited this endpoint.";
   return "Browser push service rejected the test notification.";
 }

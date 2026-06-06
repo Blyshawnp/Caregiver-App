@@ -191,6 +191,11 @@ export async function getPushDeviceStatus(endpoint?: string | null) {
     updatedAt?: string | null;
     platform?: string | null;
     vapidKeyFingerprint?: string | null;
+    serverPublicKeyFingerprint?: string | null;
+    serverPrivateKeyConfigured?: boolean;
+    vapidSubjectConfigured?: boolean;
+    serverKeyPairValid?: boolean;
+    serverVapidError?: string | null;
   };
 }
 

@@ -35,8 +35,17 @@ type PushDiagnostics = {
   subscriptionKeysPresent: boolean;
   endpointMatch: boolean | null;
   vapidKeyMatch: boolean;
+  currentAppPublicKeyFingerprint: string;
+  savedSubscriptionFingerprint: string | null;
+  serverSenderPublicKeyFingerprint: string | null;
+  serverPrivateKeyConfigured: boolean;
+  vapidSubjectConfigured: boolean;
+  serverKeyPairValid: boolean;
+  serverVapidError: string | null;
+  serverVapidMismatch: boolean;
   lastSubscriptionUpdate: string | null;
   lastTestPushResult: string | null;
+  lastTestProviderStatus: string | null;
   platform: string;
   installedPwa: boolean;
   browser: string;
@@ -65,8 +74,17 @@ export default function NotificationSettings({
     subscriptionKeysPresent: false,
     endpointMatch: null,
     vapidKeyMatch: false,
+    currentAppPublicKeyFingerprint: "",
+    savedSubscriptionFingerprint: null,
+    serverSenderPublicKeyFingerprint: null,
+    serverPrivateKeyConfigured: false,
+    vapidSubjectConfigured: false,
+    serverKeyPairValid: false,
+    serverVapidError: null,
+    serverVapidMismatch: false,
     lastSubscriptionUpdate: null,
     lastTestPushResult: "Not run",
+    lastTestProviderStatus: null,
     platform: "unknown",
     installedPwa: false,
     browser: "unknown",
@@ -226,12 +244,19 @@ export default function NotificationSettings({
       const d = await res.json().catch(() => null);
       if (res.ok) {
         localStorage.setItem("pwa_last_test_push_result", "success");
+        localStorage.removeItem("pwa_last_test_push_provider_status");
         setTestMessage(
           `Test push accepted by browser push service (${d?.diagnostics?.delivered ?? 1} delivered). If it does not appear, check OS/browser notification settings, battery optimization, or Focus/Do Not Disturb.`
         );
       } else {
         const errCode = d?.code || "unknown_error";
+        const providerStatus = d?.diagnostics?.failures?.[0]?.status;
         localStorage.setItem("pwa_last_test_push_result", errCode);
+        if (providerStatus) {
+          localStorage.setItem("pwa_last_test_push_provider_status", String(providerStatus));
+        } else {
+          localStorage.removeItem("pwa_last_test_push_provider_status");
+        }
         throw new Error(d?.error || "Failed to send test push.");
       }
     } catch (err: any) {
@@ -272,12 +297,19 @@ export default function NotificationSettings({
       const testData = await testRes.json().catch(() => null);
       if (testRes.ok) {
         localStorage.setItem("pwa_last_test_push_result", "success");
+        localStorage.removeItem("pwa_last_test_push_provider_status");
         setTestMessage(
           `Subscription refreshed and test push accepted (${testData?.diagnostics?.delivered ?? 1} delivered).`
         );
       } else {
         const errCode = testData?.code || "unknown_error";
+        const providerStatus = testData?.diagnostics?.failures?.[0]?.status;
         localStorage.setItem("pwa_last_test_push_result", errCode);
+        if (providerStatus) {
+          localStorage.setItem("pwa_last_test_push_provider_status", String(providerStatus));
+        } else {
+          localStorage.removeItem("pwa_last_test_push_provider_status");
+        }
         throw new Error(testData?.error || "Subscription refreshed, but test push failed.");
       }
     } catch (err: any) {
@@ -306,14 +338,25 @@ export default function NotificationSettings({
     const status = prefetchedStatus ?? (await getPushDeviceStatus(sub?.endpoint).catch(() => null));
     
     const currentFingerprint = getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
-    const dbFingerprint = status?.vapidKeyFingerprint;
-    const vapidKeyMatch = status?.enabled && dbFingerprint ? dbFingerprint === currentFingerprint : false;
+    const dbFingerprint = status?.vapidKeyFingerprint ?? null;
+    const serverFingerprint = status?.serverPublicKeyFingerprint ?? null;
+    const serverKeyPairValid = status?.serverKeyPairValid ?? false;
+    const savedKeyMatchesApp = Boolean(status?.enabled && dbFingerprint && currentFingerprint && dbFingerprint === currentFingerprint);
+    const serverKeyMatchesApp = Boolean(serverFingerprint && currentFingerprint && serverFingerprint === currentFingerprint);
+    const serverVapidMismatch = Boolean(
+      status &&
+        ((serverFingerprint && currentFingerprint && serverFingerprint !== currentFingerprint) ||
+          (!serverKeyPairValid &&
+            (status.serverPrivateKeyConfigured || status.vapidSubjectConfigured || Boolean(serverFingerprint))))
+    );
+    const vapidKeyMatch = savedKeyMatchesApp && serverKeyMatchesApp && serverKeyPairValid;
     
     const endpointPresent = !!sub?.endpoint;
     const browserKeysPresent = !!sub?.getKey?.("p256dh") && !!sub?.getKey?.("auth");
     const serverKeysPresent = status?.keysPresent ?? false;
     
     const lastTest = localStorage.getItem("pwa_last_test_push_result");
+    const lastProviderStatus = localStorage.getItem("pwa_last_test_push_provider_status");
 
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
@@ -327,8 +370,17 @@ export default function NotificationSettings({
       subscriptionKeysPresent: browserKeysPresent && serverKeysPresent,
       endpointMatch: status?.endpointMatch ?? null,
       vapidKeyMatch,
+      currentAppPublicKeyFingerprint: currentFingerprint || "Not configured",
+      savedSubscriptionFingerprint: dbFingerprint,
+      serverSenderPublicKeyFingerprint: serverFingerprint,
+      serverPrivateKeyConfigured: status?.serverPrivateKeyConfigured ?? false,
+      vapidSubjectConfigured: status?.vapidSubjectConfigured ?? false,
+      serverKeyPairValid,
+      serverVapidError: status?.serverVapidError ?? null,
+      serverVapidMismatch,
       lastSubscriptionUpdate: status?.lastSeenAt ?? status?.updatedAt ?? null,
       lastTestPushResult: lastTest ? describeTestResult(lastTest) : "Not run",
+      lastTestProviderStatus: lastProviderStatus,
       platform: status?.platform ?? nav.userAgentData?.platform ?? (browser.includes("Android") ? "android" : browser.includes("iPhone") || browser.includes("iPad") ? "ios" : "desktop"),
       installedPwa,
       browser,
@@ -340,6 +392,9 @@ export default function NotificationSettings({
       case "success": return "Success";
       case "expired_subscription": return "Subscription expired (404/410)";
       case "invalid_vapid_key": return "Notification key mismatch (401/403)";
+      case "server_vapid_mismatch": return "Server notification key mismatch";
+      case "server_push_not_configured": return "Server push not configured";
+      case "stale_subscription_key": return "Device subscription key changed";
       case "rejected_by_push_service": return "Rejected by browser push service (400)";
       case "permission_denied": return "Permission denied";
       case "no_subscription":
@@ -362,6 +417,12 @@ export default function NotificationSettings({
     }
 
     const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
+    if (diagnostics.serverVapidMismatch || lastTest === "server_vapid_mismatch") {
+      return { label: "Server key mismatch", color: "text-terracotta-600 font-semibold" };
+    }
+    if (lastTest === "server_push_not_configured") {
+      return { label: "Server push not configured", color: "text-terracotta-600 font-semibold" };
+    }
     const hasMismatch =
       deviceEnabled &&
       diagnostics.subscriptionSaved &&
@@ -394,7 +455,9 @@ export default function NotificationSettings({
   }
 
   const overallStatus = getOverallStatus();
-  const showMismatchWarning = deviceEnabled && diagnostics.subscriptionSaved && diagnostics.vapidKeyMatch === false;
+  const showServerMismatchWarning = deviceEnabled && diagnostics.serverVapidMismatch;
+  const showMismatchWarning =
+    !showServerMismatchWarning && deviceEnabled && diagnostics.subscriptionSaved && diagnostics.vapidKeyMatch === false;
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto space-y-6">
@@ -408,6 +471,12 @@ export default function NotificationSettings({
         <p className="text-xs text-ink-500 mb-4">
           Enable native notifications on this device to stay updated instantly.
         </p>
+
+        {showServerMismatchWarning && (
+          <div className="bg-terracotta-50 border border-terracotta-200 p-4 rounded-2xl text-xs text-terracotta-700 font-semibold mb-4">
+            Server notification key does not match the app notification key. Check deployment environment variables.
+          </div>
+        )}
 
         {showMismatchWarning && (
           <div className="bg-terracotta-50 border border-terracotta-200 p-4 rounded-2xl text-xs text-terracotta-700 font-semibold mb-4 animate-pulse">
@@ -445,11 +514,19 @@ export default function NotificationSettings({
             <Diag label="Endpoint match" value={diagnostics.endpointMatch === null ? "Not checked" : diagnostics.endpointMatch ? "Yes" : "No"} />
             <Diag label="Subscription keys present" value={diagnostics.subscriptionKeysPresent ? "Yes" : "No"} />
             <Diag label="VAPID key match" value={diagnostics.vapidKeyMatch ? "Yes" : "No"} />
+            <Diag label="App public key fingerprint" value={diagnostics.currentAppPublicKeyFingerprint || "Not configured"} />
+            <Diag label="Saved subscription fingerprint" value={diagnostics.savedSubscriptionFingerprint || "Not saved"} />
+            <Diag label="Server sender fingerprint" value={diagnostics.serverSenderPublicKeyFingerprint || "Not configured"} />
+            <Diag label="Server private key configured" value={diagnostics.serverPrivateKeyConfigured ? "Yes" : "No"} />
+            <Diag label="VAPID subject configured" value={diagnostics.vapidSubjectConfigured ? "Yes" : "No"} />
+            <Diag label="Server VAPID key pair valid" value={diagnostics.serverKeyPairValid ? "Yes" : "No"} />
+            <Diag label="Server VAPID error" value={diagnostics.serverVapidError || "None"} />
             <Diag
               label="Last subscription update"
               value={diagnostics.lastSubscriptionUpdate ? new Date(diagnostics.lastSubscriptionUpdate).toLocaleString() : "Not recorded"}
             />
             <Diag label="Last test push result" value={diagnostics.lastTestPushResult || "Not run"} />
+            <Diag label="Last provider status" value={diagnostics.lastTestProviderStatus || "Not recorded"} />
             <Diag label="Platform/browser" value={`${diagnostics.platform} · ${diagnostics.browser.slice(0, 42)}`} />
             <Diag label="Installed PWA mode" value={diagnostics.installedPwa ? "Yes" : "No"} />
           </dl>

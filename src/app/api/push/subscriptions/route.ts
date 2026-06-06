@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getServerVapidStatus } from "@/lib/vapid-server";
 
 type PushSubscriptionPayload = {
   endpoint: string;
@@ -71,6 +72,7 @@ export async function GET(request: Request) {
 
   const row = activeRow ?? anyDeviceRow ?? endpointRow;
   const endpointMatch = endpoint && activeRow ? activeRow.endpoint === endpoint : endpoint ? false : null;
+  const serverVapid = getServerVapidStatus();
 
   return NextResponse.json({
     enabled: Boolean(activeRow && (!endpoint || activeRow.endpoint === endpoint)),
@@ -84,6 +86,11 @@ export async function GET(request: Request) {
     updatedAt: row?.updated_at ?? null,
     platform: row?.platform ?? null,
     vapidKeyFingerprint: row?.vapid_key_fingerprint ?? null,
+    serverPublicKeyFingerprint: serverVapid.serverPublicKeyFingerprint,
+    serverPrivateKeyConfigured: serverVapid.privateKeyPresent,
+    vapidSubjectConfigured: serverVapid.subjectPresent,
+    serverKeyPairValid: serverVapid.keyPairValid,
+    serverVapidError: serverVapid.error,
   });
 }
 

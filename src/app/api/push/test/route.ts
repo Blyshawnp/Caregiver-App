@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushToSubscription } from "@/lib/web-push";
+import { getServerVapidStatus, type ServerVapidStatus } from "@/lib/vapid-server";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
     const payload = (await request.json().catch(() => ({}))) as TestPushRequest;
+    const serverVapid = getServerVapidStatus();
     const lookup = await findCurrentDeviceSubscription(
       admin,
       user.id,
@@ -50,6 +52,7 @@ export async function POST(request: Request) {
             browserSubscriptionExists: payload.browserSubscriptionExists ?? null,
             deviceIdProvided: Boolean(payload.deviceId),
             endpointProvided: Boolean(payload.endpoint),
+            serverVapid: getSafeServerVapidDiagnostics(serverVapid),
             ...lookup.diagnostics,
           },
         },
@@ -69,6 +72,51 @@ export async function POST(request: Request) {
             serverRowExists: true,
             serverRowActive: lookup.subscription.is_active,
             subscriptionKeysPresent: false,
+            serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    if (!serverVapid.publicKeyPresent || !serverVapid.privateKeyPresent || !serverVapid.subjectPresent) {
+      return NextResponse.json(
+        {
+          error: "Push notifications are not configured on the server.",
+          code: "server_push_not_configured",
+          diagnostics: {
+            serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!serverVapid.keyPairValid) {
+      return NextResponse.json(
+        {
+          error: "The server notification key appears to be different from the app notification key. The app owner needs to check VAPID environment variables and redeploy.",
+          code: "server_vapid_mismatch",
+          diagnostics: {
+            serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    if (
+      lookup.subscription.vapid_key_fingerprint &&
+      serverVapid.serverPublicKeyFingerprint &&
+      lookup.subscription.vapid_key_fingerprint !== serverVapid.serverPublicKeyFingerprint
+    ) {
+      return NextResponse.json(
+        {
+          error: "This device subscription was created with a different app notification key. Refresh notifications on this device.",
+          code: "stale_subscription_key",
+          diagnostics: {
+            savedSubscriptionFingerprint: lookup.subscription.vapid_key_fingerprint,
+            serverVapid: getSafeServerVapidDiagnostics(serverVapid),
           },
         },
         { status: 409 }
@@ -106,7 +154,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: "Push notifications are not configured on the server.",
-          code: "unknown_error",
+          code: "server_push_not_configured",
           diagnostics: result,
         },
         { status: 500 }
@@ -120,7 +168,7 @@ export async function POST(request: Request) {
       if (status === 404 || status === 410) {
         errorCode = "expired_subscription";
       } else if (status === 401 || status === 403) {
-        errorCode = "invalid_vapid_key";
+        errorCode = "server_vapid_mismatch";
       }
 
       const error = describePushFailure(status, firstFailure?.reason);
@@ -238,10 +286,21 @@ function describePushFailure(status?: number, reason?: string) {
     return "The saved push subscription has expired. Refresh notifications or enable alerts again on this device.";
   }
   if (status === 401 || status === 403) {
-    return "The browser push service rejected the notification keys. Refresh notifications to create a new subscription with the current VAPID key.";
+    return "The server notification key appears to be different from the app notification key. The app owner needs to check VAPID environment variables and redeploy.";
   }
   if (status === 400) {
     return "The browser push service rejected the subscription payload. Refresh notifications, then send another test.";
   }
   return reason || "The browser push service did not accept the test notification. Check OS/browser notification settings, Focus or Do Not Disturb, battery optimization, and installed PWA state.";
+}
+
+function getSafeServerVapidDiagnostics(status: ServerVapidStatus) {
+  return {
+    publicKeyPresent: status.publicKeyPresent,
+    privateKeyPresent: status.privateKeyPresent,
+    subjectPresent: status.subjectPresent,
+    serverPublicKeyFingerprint: status.serverPublicKeyFingerprint || null,
+    keyPairValid: status.keyPairValid,
+    error: status.error,
+  };
 }

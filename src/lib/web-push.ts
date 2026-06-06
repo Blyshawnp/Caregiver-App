@@ -8,6 +8,7 @@ import {
   type NotificationCategoryPreferenceMap,
 } from "@/lib/notification-preferences";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { getServerVapidDetails, type ServerVapidDetails, type ServerVapidStatus } from "@/lib/vapid-server";
 
 type PushSubscriptionRow = {
   id: string;
@@ -46,6 +47,7 @@ export type PushDeliveryResult = {
   disabled: number;
   skipped: "not_configured" | "no_notifications" | "no_subscriptions" | null;
   failures: Array<{ status: number; endpointHost: string; reason?: string }>;
+  configuration?: ServerVapidStatus;
 };
 
 const DEFAULT_PREFS: NotificationPreferenceRow = {
@@ -65,12 +67,9 @@ export async function sendPushForNotifications(
   admin: SupabaseAdmin,
   notifications: NotificationRow[]
 ): Promise<PushDeliveryResult> {
-  const publicKey =
-    process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT;
+  const vapid = getServerVapidDetails();
 
-  if (!publicKey || !privateKey || !subject || notifications.length === 0) {
+  if (!vapid.details || notifications.length === 0) {
     return {
       attempted: 0,
       delivered: 0,
@@ -78,6 +77,7 @@ export async function sendPushForNotifications(
       disabled: 0,
       skipped: notifications.length === 0 ? "no_notifications" : "not_configured",
       failures: [],
+      configuration: vapid.status,
     };
   }
 
@@ -151,18 +151,22 @@ export async function sendPushForNotifications(
         const payloadTone = categoryPref.inAppSoundEnabled
           ? categoryPref.tone
           : "silent";
-        const result = await sendWebPush(subscription, {
-          title: notification.title,
-          body:
-            prefs.privacy_safe_bodies === false
-              ? notification.body ?? ""
-              : "Open the app to view details.",
-          url: notification.link ?? "/notifications",
-          tag: notification.kind,
-          sound: payloadTone === "default" ? toneForNotificationKind(notification.kind) : payloadTone,
-          legacySound: soundForNotificationKind(notification.kind),
-          relatedShiftId: notification.related_shift_id ?? null,
-        });
+        const result = await sendWebPush(
+          subscription,
+          {
+            title: notification.title,
+            body:
+              prefs.privacy_safe_bodies === false
+                ? notification.body ?? ""
+                : "Open the app to view details.",
+            url: notification.link ?? "/notifications",
+            tag: notification.kind,
+            sound: payloadTone === "default" ? toneForNotificationKind(notification.kind) : payloadTone,
+            legacySound: soundForNotificationKind(notification.kind),
+            relatedShiftId: notification.related_shift_id ?? null,
+          },
+          vapid.details
+        );
 
         if (result.status === 404 || result.status === 410) {
           disabledIds.push(subscription.id);
@@ -212,6 +216,7 @@ export async function sendPushForNotifications(
     disabled: disabledIds.length + invalidKeyIds.length,
     skipped: null,
     failures,
+    configuration: vapid.status,
   };
 }
 
@@ -220,12 +225,9 @@ export async function sendPushToSubscription(
   subscription: PushSubscriptionRow,
   payload: Record<string, unknown>
 ): Promise<PushDeliveryResult> {
-  const publicKey =
-    process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT;
+  const vapid = getServerVapidDetails();
 
-  if (!publicKey || !privateKey || !subject) {
+  if (!vapid.details) {
     return {
       attempted: 0,
       delivered: 0,
@@ -233,10 +235,11 @@ export async function sendPushToSubscription(
       disabled: 0,
       skipped: "not_configured",
       failures: [],
+      configuration: vapid.status,
     };
   }
 
-  const result = await sendWebPush(subscription, payload);
+  const result = await sendWebPush(subscription, payload, vapid.details);
   const shouldDisable = result.status === 404 || result.status === 410;
   const invalidKey = result.status === 401 || result.status === 403;
 
@@ -271,6 +274,7 @@ export async function sendPushToSubscription(
             reason: reasonForPushStatus(result.status),
           },
         ],
+    configuration: vapid.status,
   };
 }
 
@@ -295,13 +299,10 @@ function toMinutes(value: string) {
 
 async function sendWebPush(
   subscription: PushSubscriptionRow,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  vapid: ServerVapidDetails
 ) {
   const endpoint = new URL(subscription.endpoint);
-  const vapidPublicKey =
-    process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
-  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY!;
-  const subject = process.env.VAPID_SUBJECT!;
   let body: Buffer;
   try {
     body = encryptPayload(
@@ -316,7 +317,7 @@ async function sendWebPush(
     });
   }
 
-  const jwt = createVapidJwt(endpoint.origin, subject, vapidPublicKey, vapidPrivateKey);
+  const jwt = createVapidJwt(endpoint.origin, vapid.subject, vapid.publicKey, vapid.privateKey);
 
   const response = await fetch(subscription.endpoint, {
     method: "POST",
@@ -324,7 +325,7 @@ async function sendWebPush(
       TTL: "2419200",
       "Content-Encoding": "aes128gcm",
       "Content-Type": "application/octet-stream",
-      Authorization: `vapid t=${jwt}, k=${vapidPublicKey}`,
+      Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
       Urgency:
         payload.sound === "urgent" || payload.sound === "urgent_alert"
           ? "high"

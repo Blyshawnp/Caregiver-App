@@ -101,8 +101,7 @@ Deno.serve(async (req) => {
   const startedAt = new Date().toISOString();
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY") ??
-    Deno.env.get("NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+  const publicKey = Deno.env.get("NEXT_PUBLIC_VAPID_PUBLIC_KEY");
   const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
   const subject = Deno.env.get("VAPID_SUBJECT");
   const edgeSecret = Deno.env.get("AUTO_CHECKOUT_EDGE_SECRET");

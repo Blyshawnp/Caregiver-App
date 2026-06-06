@@ -5,6 +5,7 @@ import {
   disablePushNotifications,
   enablePushNotifications,
   getCurrentBrowserPushSubscription,
+  getLastPushSaveDiagnostics,
   getPushDeviceId,
   getPushDeviceStatus,
   getPushPreferences,
@@ -14,6 +15,7 @@ import {
   saveCurrentPushSubscription,
   savePushPreferences,
   type PushPreferences,
+  type PushSaveDiagnostics,
 } from "@/lib/push-client";
 import { playNotificationTone } from "@/lib/notification-sounds";
 import {
@@ -58,6 +60,7 @@ type PushDiagnostics = {
   platform: string;
   installedPwa: boolean;
   browser: string;
+  lastSaveDiagnostics: PushSaveDiagnostics | null;
 };
 
 export default function NotificationSettings({ 
@@ -104,6 +107,7 @@ export default function NotificationSettings({
     platform: "unknown",
     installedPwa: false,
     browser: "unknown",
+    lastSaveDiagnostics: null,
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
@@ -381,6 +385,7 @@ export default function NotificationSettings({
     
     const lastTest = localStorage.getItem("pwa_last_test_push_result");
     const lastProviderStatus = localStorage.getItem("pwa_last_test_push_provider_status");
+    const lastSaveDiagnostics = getLastPushSaveDiagnostics();
 
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
@@ -415,6 +420,7 @@ export default function NotificationSettings({
       platform: status?.platform ?? nav.userAgentData?.platform ?? (browser.includes("Android") ? "android" : browser.includes("iPhone") || browser.includes("iPad") ? "ios" : "desktop"),
       installedPwa,
       browser,
+      lastSaveDiagnostics,
     });
   }
 
@@ -531,6 +537,36 @@ export default function NotificationSettings({
     deviceEnabled &&
     diagnostics.subscriptionSaved &&
     diagnostics.vapidKeyMatch === false;
+  const saveDiagnosticsRows = diagnostics.lastSaveDiagnostics
+    ? [
+        ["App commit/version", diagnostics.lastSaveDiagnostics.appCommit],
+        ["Current device ID", diagnostics.lastSaveDiagnostics.deviceId],
+        ["Current browser endpoint hash", diagnostics.lastSaveDiagnostics.browserEndpointHash],
+        ["Current browser p256dh hash", diagnostics.lastSaveDiagnostics.browserP256dhHash],
+        ["Current browser auth hash", diagnostics.lastSaveDiagnostics.browserAuthHash],
+        ["Selected DB row before save", diagnostics.lastSaveDiagnostics.selectedDbRowBeforeSave],
+        ["DB row is_active before save", diagnostics.lastSaveDiagnostics.dbRowIsActiveBeforeSave],
+        ["DB row endpoint hash before save", diagnostics.lastSaveDiagnostics.dbRowEndpointHashBeforeSave],
+        ["DB row p256dh hash before save", diagnostics.lastSaveDiagnostics.dbRowP256dhHashBeforeSave],
+        ["DB row auth hash before save", diagnostics.lastSaveDiagnostics.dbRowAuthHashBeforeSave],
+        ["Update by ID attempted", diagnostics.lastSaveDiagnostics.updateByIdAttempted],
+        ["Supabase update error", diagnostics.lastSaveDiagnostics.supabaseUpdateError],
+        ["Before-read error", diagnostics.lastSaveDiagnostics.beforeReadError],
+        ["After-read error", diagnostics.lastSaveDiagnostics.afterReadError],
+        ["Updated row ID returned by Supabase", diagnostics.lastSaveDiagnostics.updatedRowIdReturnedBySupabase],
+        ["DB row is_active after save", diagnostics.lastSaveDiagnostics.dbRowIsActiveAfterSave],
+        ["DB row endpoint hash after save", diagnostics.lastSaveDiagnostics.dbRowEndpointHashAfterSave],
+        ["DB row p256dh hash after save", diagnostics.lastSaveDiagnostics.dbRowP256dhHashAfterSave],
+        ["DB row auth hash after save", diagnostics.lastSaveDiagnostics.dbRowAuthHashAfterSave],
+        ["Endpoint matches after save", diagnostics.lastSaveDiagnostics.endpointMatchesAfterSave],
+        ["p256dh matches after save", diagnostics.lastSaveDiagnostics.p256dhMatchesAfterSave],
+        ["auth matches after save", diagnostics.lastSaveDiagnostics.authMatchesAfterSave],
+        ["Fingerprint matches after save", diagnostics.lastSaveDiagnostics.fingerprintMatchesAfterSave],
+        ["After-save row ID", diagnostics.lastSaveDiagnostics.afterSaveRowId],
+        ["Updated row equals after-save row", diagnostics.lastSaveDiagnostics.updatedRowEqualsAfterRow],
+        ["Policy/RLS warning", diagnostics.lastSaveDiagnostics.policyWarning],
+      ]
+    : [];
 
   return (
     <main className="px-5 py-6 max-w-2xl mx-auto space-y-6">
@@ -634,6 +670,16 @@ export default function NotificationSettings({
             <Diag label="Platform/browser" value={`${diagnostics.platform} · ${diagnostics.browser.slice(0, 42)}`} />
             <Diag label="Installed PWA mode" value={diagnostics.installedPwa ? "Yes" : "No"} />
           </dl>
+          {saveDiagnosticsRows.length > 0 && (
+            <div className="mt-4 border-t border-cream-200 pt-3">
+              <p className="font-semibold text-ink-800 mb-2">Last save attempt</p>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                {saveDiagnosticsRows.map(([label, value]) => (
+                  <Diag key={String(label)} label={String(label)} value={formatDiagnosticValue(value)} />
+                ))}
+              </dl>
+            </div>
+          )}
           <p className="mt-3 text-[11px] text-ink-500">
             If a test is accepted but does not appear, check OS notification permission, Focus or Do Not Disturb,
             Android battery optimization, expired subscriptions, and whether iPhone/iPad users opened the installed Home Screen app.
@@ -900,6 +946,12 @@ function normalizePrefs(prefs: PushPreferences): PushPreferences {
     quiet_hours_end: prefs.quiet_hours_end ?? null,
     urgent_override_quiet_hours: prefs.urgent_override_quiet_hours ?? true,
   };
+}
+
+function formatDiagnosticValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Not recorded";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
 }
 
 function Diag({ label, value }: { label: string; value: string }) {

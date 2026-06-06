@@ -6,6 +6,7 @@ import type {
 import { getVapidFingerprint } from "@/lib/vapid-helper";
 
 const PUSH_DEVICE_ID_STORAGE_KEY = "caregiver-app:push-device-id";
+const PUSH_SAVE_DIAGNOSTICS_STORAGE_KEY = "caregiver-app:last-push-save-diagnostics";
 
 export type PushPreferences = {
   messages: boolean;
@@ -21,6 +22,16 @@ export type PushPreferences = {
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   urgent_override_quiet_hours: boolean;
+};
+
+export type PushSaveDiagnostics = Record<string, string | boolean | number | null>;
+
+type PushSubscriptionSaveResponse = {
+  error?: string;
+  active?: boolean;
+  endpointMatch?: boolean;
+  keysMatch?: boolean;
+  saveDiagnostics?: PushSaveDiagnostics;
 };
 
 export function isPushSupported() {
@@ -140,19 +151,18 @@ export async function enablePushNotifications() {
       "Saving push subscription timed out."
     );
 
-    const saveResult = (await response.json().catch(() => null)) as {
-      error?: string;
-      active?: boolean;
-      endpointMatch?: boolean;
-      keysMatch?: boolean;
-    } | null;
+    const saveResult = (await response.json().catch(() => null)) as PushSubscriptionSaveResponse | null;
+    rememberPushSaveDiagnostics(saveResult?.saveDiagnostics);
     if (!response.ok) {
       const data = saveResult;
       console.error("[push-enable] database save failed", data);
-      throw new Error(data?.error ?? "Could not save push subscription.");
+      throwPushSaveError(data?.error ?? "Could not save push subscription.", data?.saveDiagnostics);
     }
     if (!saveResult?.active || !saveResult.endpointMatch || saveResult.keysMatch === false) {
-      throw new Error("Browser subscription exists, but the server could not save it.");
+      throwPushSaveError(
+        "Browser subscription exists, but the server could not save it.",
+        saveResult?.saveDiagnostics
+      );
     }
 
     logStep("verifying saved subscription");
@@ -223,18 +233,38 @@ export async function saveCurrentPushSubscription(subscription: PushSubscription
     },
     body: JSON.stringify(buildSubscriptionSavePayload(subscription)),
   });
-  const data = (await response.json().catch(() => null)) as {
-    error?: string;
-    active?: boolean;
-    endpointMatch?: boolean;
-    keysMatch?: boolean;
-  } | null;
+  const data = (await response.json().catch(() => null)) as PushSubscriptionSaveResponse | null;
+  rememberPushSaveDiagnostics(data?.saveDiagnostics);
   if (!response.ok) {
-    throw new Error(data?.error ?? "Could not save push subscription.");
+    throwPushSaveError(data?.error ?? "Could not save push subscription.", data?.saveDiagnostics);
   }
   if (!data?.active || !data.endpointMatch || data.keysMatch === false) {
-    throw new Error("Browser subscription exists, but the server could not save it.");
+    throwPushSaveError("Browser subscription exists, but the server could not save it.", data?.saveDiagnostics);
   }
+}
+
+export function getLastPushSaveDiagnostics() {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(PUSH_SAVE_DIAGNOSTICS_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PushSaveDiagnostics;
+  } catch {
+    localStorage.removeItem(PUSH_SAVE_DIAGNOSTICS_STORAGE_KEY);
+    return null;
+  }
+}
+
+function rememberPushSaveDiagnostics(diagnostics?: PushSaveDiagnostics | null) {
+  if (typeof window === "undefined") return;
+  if (!diagnostics) return;
+  localStorage.setItem(PUSH_SAVE_DIAGNOSTICS_STORAGE_KEY, JSON.stringify(diagnostics));
+}
+
+function throwPushSaveError(message: string, diagnostics?: PushSaveDiagnostics | null): never {
+  const error = new Error(message) as Error & { saveDiagnostics?: PushSaveDiagnostics | null };
+  error.saveDiagnostics = diagnostics;
+  throw error;
 }
 
 export async function disablePushNotifications() {

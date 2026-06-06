@@ -11,6 +11,7 @@ import {
   getPushSubscriptionKeys,
   isPushSupported,
   refreshPushSubscription,
+  saveCurrentPushSubscription,
   savePushPreferences,
   type PushPreferences,
 } from "@/lib/push-client";
@@ -248,6 +249,9 @@ export default function NotificationSettings({
     try {
       const currentSubscription = await getCurrentBrowserPushSubscription();
       const currentKeys = getPushSubscriptionKeys(currentSubscription);
+      if (currentSubscription) {
+        await saveCurrentPushSubscription(currentSubscription);
+      }
       const res = await fetch("/api/push/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

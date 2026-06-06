@@ -134,13 +134,7 @@ export async function enablePushNotifications() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...subscription.toJSON(),
-          device_id: getPushDeviceId(),
-          platform: getClientPlatform(),
-          vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
-          vapid_public_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
-        }),
+        body: JSON.stringify(buildSubscriptionSavePayload(subscription)),
       }),
       15_000,
       "Saving push subscription timed out."
@@ -150,18 +144,19 @@ export async function enablePushNotifications() {
       error?: string;
       active?: boolean;
       endpointMatch?: boolean;
+      keysMatch?: boolean;
     } | null;
     if (!response.ok) {
       const data = saveResult;
       console.error("[push-enable] database save failed", data);
       throw new Error(data?.error ?? "Could not save push subscription.");
     }
-    if (!saveResult?.active || !saveResult.endpointMatch) {
+    if (!saveResult?.active || !saveResult.endpointMatch || saveResult.keysMatch === false) {
       throw new Error("Browser subscription exists, but the server could not save it.");
     }
 
     logStep("verifying saved subscription");
-    const status = await getPushDeviceStatus(subscription.endpoint);
+    const status = await getPushDeviceStatus(subscription.endpoint, getPushSubscriptionKeys(subscription));
     if (!status.enabled) {
       console.error("[push-enable] saved subscription was not found in database");
       throw new Error("Push subscription was not saved for this device.");
@@ -175,11 +170,16 @@ export async function enablePushNotifications() {
   }
 }
 
-export async function getPushDeviceStatus(endpoint?: string | null) {
+export async function getPushDeviceStatus(
+  endpoint?: string | null,
+  currentKeys?: { p256dh: string; auth: string } | null
+) {
   const params = new URLSearchParams();
   const deviceId = getPushDeviceId();
   if (deviceId) params.set("deviceId", deviceId);
   if (endpoint) params.set("endpoint", endpoint);
+  if (currentKeys?.p256dh) params.set("p256dh", currentKeys.p256dh);
+  if (currentKeys?.auth) params.set("auth", currentKeys.auth);
   const query = params.toString() ? `?${params.toString()}` : "";
   const response = await fetch(`/api/push/subscriptions${query}`, {
     cache: "no-store",
@@ -196,6 +196,7 @@ export async function getPushDeviceStatus(endpoint?: string | null) {
     serverSubscriptionExists: boolean;
     endpointMatch: boolean | null;
     keysPresent: boolean;
+    keysMatch: boolean | null;
     lastSeenAt?: string | null;
     updatedAt?: string | null;
     platform?: string | null;
@@ -215,23 +216,18 @@ export async function saveCurrentPushSubscription(subscription: PushSubscription
     headers: {
       "Content-Type": "application/json",
     },
-        body: JSON.stringify({
-      ...subscription.toJSON(),
-      device_id: getPushDeviceId(),
-      platform: getClientPlatform(),
-      vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
-      vapid_public_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY)
-    }),
+    body: JSON.stringify(buildSubscriptionSavePayload(subscription)),
   });
   const data = (await response.json().catch(() => null)) as {
     error?: string;
     active?: boolean;
     endpointMatch?: boolean;
+    keysMatch?: boolean;
   } | null;
   if (!response.ok) {
     throw new Error(data?.error ?? "Could not save push subscription.");
   }
-  if (!data?.active || !data.endpointMatch) {
+  if (!data?.active || !data.endpointMatch || data.keysMatch === false) {
     throw new Error("Browser subscription exists, but the server could not save it.");
   }
 }
@@ -380,6 +376,25 @@ export async function getCurrentBrowserPushSubscription() {
   return registration.pushManager.getSubscription();
 }
 
+export function getPushSubscriptionKeys(subscription: PushSubscription | null) {
+  if (!subscription) return null;
+  const json = subscription.toJSON();
+  const p256dh = json.keys?.p256dh || bufferToBase64Url(subscription.getKey("p256dh"));
+  const auth = json.keys?.auth || bufferToBase64Url(subscription.getKey("auth"));
+  if (!p256dh || !auth) return null;
+  return { p256dh, auth };
+}
+
+function buildSubscriptionSavePayload(subscription: PushSubscription) {
+  return {
+    ...subscription.toJSON(),
+    device_id: getPushDeviceId(),
+    platform: getClientPlatform(),
+    vapid_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+    vapid_public_key_fingerprint: getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+  };
+}
+
 function getClientPlatform() {
   if (typeof navigator === "undefined") return "unknown";
   const ua = navigator.userAgent.toLowerCase();
@@ -429,6 +444,16 @@ function urlBase64ToUint8Array(base64String: string) {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
+}
+
+function bufferToBase64Url(buffer: ArrayBuffer | null) {
+  if (!buffer) return "";
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function getApplicationServerKey(): ArrayBuffer {

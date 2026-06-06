@@ -8,6 +8,7 @@ import {
   getPushDeviceId,
   getPushDeviceStatus,
   getPushPreferences,
+  getPushSubscriptionKeys,
   isPushSupported,
   refreshPushSubscription,
   savePushPreferences,
@@ -33,6 +34,7 @@ type PushDiagnostics = {
   subscriptionActive: boolean;
   subscriptionEndpointPresent: boolean;
   subscriptionKeysPresent: boolean;
+  subscriptionKeysMatch: boolean | null;
   endpointMatch: boolean | null;
   vapidKeyMatch: boolean;
   currentAppPublicKeyFingerprint: string;
@@ -73,6 +75,7 @@ export default function NotificationSettings({
     subscriptionActive: false,
     subscriptionEndpointPresent: false,
     subscriptionKeysPresent: false,
+    subscriptionKeysMatch: null,
     endpointMatch: null,
     vapidKeyMatch: false,
     currentAppPublicKeyFingerprint: "",
@@ -139,8 +142,8 @@ export default function NotificationSettings({
         setDeviceEnabled(false);
         await refreshDiagnostics();
       } else {
-        await enablePushNotifications();
-        const status = await getPushDeviceStatus();
+        const subscription = await enablePushNotifications();
+        const status = await getPushDeviceStatus(subscription.endpoint, getPushSubscriptionKeys(subscription));
         setDeviceEnabled(status.enabled);
         await refreshDiagnostics(status);
         if (!status.enabled) {
@@ -234,12 +237,14 @@ export default function NotificationSettings({
     setTestMessage(null);
     try {
       const currentSubscription = await getCurrentBrowserPushSubscription();
+      const currentKeys = getPushSubscriptionKeys(currentSubscription);
       const res = await fetch("/api/push/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           deviceId: getPushDeviceId(),
           endpoint: currentSubscription?.endpoint ?? null,
+          keys: currentKeys,
           browserSubscriptionExists: Boolean(currentSubscription),
         }),
       });
@@ -276,7 +281,7 @@ export default function NotificationSettings({
     try {
       const subscription = await refreshPushSubscription();
 
-      const status = await getPushDeviceStatus(subscription.endpoint);
+      const status = await getPushDeviceStatus(subscription.endpoint, getPushSubscriptionKeys(subscription));
       if (!status.enabled) {
         throw new Error("Refresh did not complete. Please enable alerts again.");
       }
@@ -293,6 +298,7 @@ export default function NotificationSettings({
         body: JSON.stringify({
           deviceId: getPushDeviceId(),
           endpoint: subscription.endpoint,
+          keys: getPushSubscriptionKeys(subscription),
           browserSubscriptionExists: true,
         }),
       });
@@ -337,13 +343,14 @@ export default function NotificationSettings({
         sub = await registration.pushManager.getSubscription();
       }
     }
-    const status = prefetchedStatus ?? (await getPushDeviceStatus(sub?.endpoint).catch(() => null));
+    const browserKeys = getPushSubscriptionKeys(sub);
+    const status = prefetchedStatus ?? (await getPushDeviceStatus(sub?.endpoint, browserKeys).catch(() => null));
     
     const currentFingerprint = getVapidFingerprint(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
     const dbFingerprint = status?.vapidKeyFingerprint ?? null;
     const serverFingerprint = status?.serverPublicKeyFingerprint ?? null;
     const serverKeyPairValid = status?.serverKeyPairValid ?? false;
-    const savedKeyMatchesApp = Boolean(status?.enabled && dbFingerprint && currentFingerprint && dbFingerprint === currentFingerprint);
+    const savedKeyMatchesApp = Boolean(dbFingerprint && currentFingerprint && dbFingerprint === currentFingerprint);
     const serverKeyMatchesApp = Boolean(serverFingerprint && currentFingerprint && serverFingerprint === currentFingerprint);
     const serverVapidMismatch = Boolean(
       status &&
@@ -356,6 +363,7 @@ export default function NotificationSettings({
     const endpointPresent = !!sub?.endpoint;
     const browserKeysPresent = !!sub?.getKey?.("p256dh") && !!sub?.getKey?.("auth");
     const serverKeysPresent = status?.keysPresent ?? false;
+    const subscriptionKeysMatch = status?.keysMatch ?? (browserKeysPresent && serverKeysPresent ? null : false);
     
     const lastTest = localStorage.getItem("pwa_last_test_push_result");
     const lastProviderStatus = localStorage.getItem("pwa_last_test_push_provider_status");
@@ -370,6 +378,7 @@ export default function NotificationSettings({
       subscriptionActive: !!status?.active,
       subscriptionEndpointPresent: endpointPresent,
       subscriptionKeysPresent: browserKeysPresent && serverKeysPresent,
+      subscriptionKeysMatch,
       endpointMatch: status?.endpointMatch ?? null,
       vapidKeyMatch,
       currentAppPublicKeyFingerprint: currentFingerprint || "Not configured",
@@ -400,6 +409,7 @@ export default function NotificationSettings({
       case "server_push_not_configured": return "Server push not configured";
       case "stale_subscription_key": return "Device subscription key changed";
       case "saved_subscription_inactive": return "Saved subscription inactive";
+      case "saved_subscription_keys_stale": return "Saved subscription keys stale";
       case "no_active_matching_subscription": return "No active matching subscription";
       case "rejected_by_push_service": return "Rejected by browser push service (400)";
       case "permission_denied": return "Permission denied";
@@ -435,6 +445,9 @@ export default function NotificationSettings({
     if (diagnostics.browserSubscriptionExists && diagnostics.endpointMatch === false) {
       return { label: "Endpoint mismatch", color: "text-amber-600 font-semibold" };
     }
+    if (diagnostics.browserSubscriptionExists && diagnostics.endpointMatch && diagnostics.subscriptionKeysMatch === false) {
+      return { label: "Saved subscription keys stale", color: "text-amber-600 font-semibold" };
+    }
     if (diagnostics.savedSubscriptionFingerprintStatus === "invalid_key") {
       return { label: "Needs refresh", color: "text-amber-600 font-semibold" };
     }
@@ -443,11 +456,13 @@ export default function NotificationSettings({
       diagnostics.subscriptionSaved &&
       (diagnostics.vapidKeyMatch === false ||
         diagnostics.endpointMatch === false ||
+        diagnostics.subscriptionKeysMatch === false ||
         !diagnostics.subscriptionActive);
 
     if (
       hasMismatch ||
       lastTest === "invalid_vapid_key" ||
+      lastTest === "saved_subscription_keys_stale" ||
       lastTest === "expired_subscription" ||
       diagnostics.lastSubscriptionUpdate === "invalid_key"
     ) {
@@ -480,6 +495,11 @@ export default function NotificationSettings({
     !showServerMismatchWarning &&
     diagnostics.browserSubscriptionExists &&
     diagnostics.endpointMatch === false;
+  const showKeysStaleWarning =
+    !showServerMismatchWarning &&
+    diagnostics.browserSubscriptionExists &&
+    diagnostics.endpointMatch === true &&
+    diagnostics.subscriptionKeysMatch === false;
   const showInvalidFingerprintWarning =
     !showServerMismatchWarning &&
     diagnostics.savedSubscriptionFingerprintStatus === "invalid_key";
@@ -487,6 +507,7 @@ export default function NotificationSettings({
     !showServerMismatchWarning &&
     !showInactiveWarning &&
     !showEndpointMismatchWarning &&
+    !showKeysStaleWarning &&
     !showInvalidFingerprintWarning &&
     deviceEnabled &&
     diagnostics.subscriptionSaved &&
@@ -520,6 +541,12 @@ export default function NotificationSettings({
         {showEndpointMismatchWarning && (
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800 font-semibold mb-4">
             Browser subscription exists, but the saved server endpoint does not match this device. Refresh notifications needs to save the current endpoint.
+          </div>
+        )}
+
+        {showKeysStaleWarning && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800 font-semibold mb-4">
+            The saved push subscription keys for this device are stale. Refresh notifications needs to update the saved subscription keys.
           </div>
         )}
 
@@ -564,6 +591,7 @@ export default function NotificationSettings({
             <Diag label="Device ID" value={diagnostics.deviceId || "Not available"} />
             <Diag label="Endpoint match" value={diagnostics.endpointMatch === null ? "Not checked" : diagnostics.endpointMatch ? "Yes" : "No"} />
             <Diag label="Subscription keys present" value={diagnostics.subscriptionKeysPresent ? "Yes" : "No"} />
+            <Diag label="Subscription keys match current browser subscription" value={diagnostics.subscriptionKeysMatch === null ? "Not checked" : diagnostics.subscriptionKeysMatch ? "Yes" : "No"} />
             <Diag label="VAPID key match" value={diagnostics.vapidKeyMatch ? "Yes" : "No"} />
             <Diag label="App public key fingerprint" value={diagnostics.currentAppPublicKeyFingerprint || "Not configured"} />
             <Diag label="Saved subscription fingerprint" value={diagnostics.savedSubscriptionFingerprint || "Not saved"} />

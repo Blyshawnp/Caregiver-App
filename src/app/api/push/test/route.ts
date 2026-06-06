@@ -9,6 +9,12 @@ export const dynamic = "force-dynamic";
 type TestPushRequest = {
   deviceId?: string;
   endpoint?: string;
+  keys?: {
+    p256dh?: string;
+    auth?: string;
+  };
+  p256dh?: string;
+  auth?: string;
   browserSubscriptionExists?: boolean;
 };
 
@@ -78,6 +84,36 @@ export async function POST(request: Request) {
             serverRowExists: true,
             serverRowActive: lookup.subscription.is_active,
             subscriptionKeysPresent: false,
+            serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    const currentP256dh = payload.keys?.p256dh || payload.p256dh || null;
+    const currentAuth = payload.keys?.auth || payload.auth || null;
+    const browserKeysProvided = Boolean(currentP256dh && currentAuth);
+    const browserKeysMatch =
+      browserKeysProvided &&
+      lookup.subscription.p256dh === currentP256dh &&
+      lookup.subscription.auth === currentAuth;
+
+    if (browserKeysProvided && !browserKeysMatch) {
+      return NextResponse.json(
+        {
+          error: "The saved push subscription keys for this device are stale. Refresh notifications needs to update the saved subscription keys.",
+          code: "saved_subscription_keys_stale",
+          diagnostics: {
+            browserSubscriptionExists: payload.browserSubscriptionExists ?? null,
+            browserEndpointProvided: Boolean(payload.endpoint),
+            deviceIdProvided: Boolean(payload.deviceId),
+            endpointProvided: Boolean(payload.endpoint),
+            serverRowExists: true,
+            serverRowActive: lookup.subscription.is_active,
+            endpointMatch: payload.endpoint ? lookup.subscription.endpoint === payload.endpoint : null,
+            subscriptionKeysPresent: true,
+            subscriptionKeysMatch: false,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
           },
         },
@@ -174,7 +210,7 @@ export async function POST(request: Request) {
       if (status === 404 || status === 410) {
         errorCode = "expired_subscription";
       } else if (status === 401 || status === 403) {
-        errorCode = "stale_subscription_key";
+        errorCode = "saved_subscription_keys_stale";
       }
 
       const error = describePushFailure(status, firstFailure?.reason);
@@ -307,7 +343,7 @@ function describePushFailure(status?: number, reason?: string) {
     return "The saved push subscription has expired. Refresh notifications or enable alerts again on this device.";
   }
   if (status === 401 || status === 403) {
-    return "The saved push subscription for this device is stale or inactive. Refresh notifications to save this device's current subscription.";
+    return "The saved push subscription keys for this device are stale. Refresh notifications needs to update the saved subscription keys.";
   }
   if (status === 400) {
     return "The browser push service rejected the subscription payload. Refresh notifications, then send another test.";

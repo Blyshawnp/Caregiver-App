@@ -5,8 +5,8 @@
 -- If the current endpoint matches the browser endpoint but active = false,
 -- the save route is not reactivating the current subscription.
 --
--- This query intentionally does not select auth, p256dh, service-role keys,
--- private VAPID keys, or full endpoints.
+-- This query intentionally does not select full auth, full p256dh,
+-- service-role keys, private VAPID keys, or full endpoints.
 
 select
   id,
@@ -15,6 +15,10 @@ select
   is_active as active,
   left(endpoint, 32) || '...' || right(endpoint, 16) as endpoint_masked,
   encode(digest(endpoint, 'sha256'), 'hex') as endpoint_sha256,
+  left(p256dh, 10) || '...' as p256dh_masked,
+  encode(digest(p256dh, 'sha256'), 'hex') as p256dh_sha256,
+  left(auth, 6) || '...' as auth_masked,
+  encode(digest(auth, 'sha256'), 'hex') as auth_sha256,
   vapid_key_fingerprint,
   created_at,
   updated_at,

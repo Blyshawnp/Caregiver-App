@@ -28,6 +28,8 @@ export async function GET(request: Request) {
   const searchParams = new URL(request.url).searchParams;
   const endpoint = searchParams.get("endpoint");
   const deviceId = searchParams.get("deviceId");
+  const currentP256dh = searchParams.get("p256dh");
+  const currentAuth = searchParams.get("auth");
   const admin = createAdminClient();
 
   const selectFields = "id, device_id, endpoint, p256dh, auth, is_active, last_seen_at, updated_at, platform, vapid_key_fingerprint";
@@ -76,6 +78,12 @@ export async function GET(request: Request) {
   const activeEndpointRow = exactEndpointRow?.is_active ? exactEndpointRow : null;
   const row = activeEndpointRow ?? activeRow ?? exactEndpointRow ?? anyDeviceRow;
   const endpointMatch = endpoint && row ? row.endpoint === endpoint : endpoint ? false : null;
+  const keysMatch =
+    currentP256dh && currentAuth && row?.p256dh && row?.auth
+      ? row.p256dh === currentP256dh && row.auth === currentAuth
+      : currentP256dh || currentAuth
+        ? false
+        : null;
   const serverVapid = getServerVapidStatus();
 
   return NextResponse.json({
@@ -86,6 +94,7 @@ export async function GET(request: Request) {
     endpoint: row?.endpoint ?? null,
     endpointMatch,
     keysPresent: Boolean(row?.p256dh && row?.auth),
+    keysMatch,
     lastSeenAt: row?.last_seen_at ?? null,
     updatedAt: row?.updated_at ?? null,
     platform: row?.platform ?? null,
@@ -228,7 +237,7 @@ export async function POST(request: Request) {
   console.info("[push-subscriptions] save succeeded", { userId: user.id });
   const { data: saved } = await admin
     .from("push_subscriptions")
-    .select("id, device_id, endpoint, is_active, updated_at, vapid_key_fingerprint")
+    .select("id, device_id, endpoint, p256dh, auth, is_active, updated_at, vapid_key_fingerprint")
     .eq("user_id", user.id)
     .eq("endpoint", payload.endpoint)
     .maybeSingle();
@@ -236,24 +245,33 @@ export async function POST(request: Request) {
   const endpointMatch = saved?.endpoint === payload.endpoint;
   const active = saved?.is_active === true;
   const fingerprintMatch = saved?.vapid_key_fingerprint === savedFingerprint;
+  const keysMatch = saved?.p256dh === payload.keys.p256dh && saved?.auth === payload.keys.auth;
 
-  if (!saved || !endpointMatch || !active || !fingerprintMatch) {
+  if (!saved || !endpointMatch || !active || !fingerprintMatch || !keysMatch) {
     console.error("[push-subscriptions] save verification failed", {
       userId: user.id,
       saved: Boolean(saved),
       endpointMatch,
       active,
       fingerprintMatch,
+      keysMatch,
     });
     return NextResponse.json(
       {
-        error: active
-          ? "Push subscription was saved, but the current endpoint could not be verified."
-          : "Push subscription was saved, but the current endpoint is still marked inactive.",
-        code: !active ? "saved_subscription_inactive" : "subscription_save_verification_failed",
+        error: !active
+          ? "Push subscription was saved, but the current endpoint is still marked inactive."
+          : !keysMatch
+            ? "Push subscription was saved, but the current browser keys were not updated."
+            : "Push subscription was saved, but the current endpoint could not be verified.",
+        code: !active
+          ? "saved_subscription_inactive"
+          : !keysMatch
+            ? "saved_subscription_keys_stale"
+            : "subscription_save_verification_failed",
         endpointMatch,
         active,
         fingerprintMatch,
+        keysMatch,
         deviceId: saved?.device_id ?? null,
         savedFingerprint: saved?.vapid_key_fingerprint ?? null,
       },
@@ -266,6 +284,7 @@ export async function POST(request: Request) {
     subscription: saved,
     endpointMatch,
     active,
+    keysMatch,
     deviceId: saved.device_id ?? null,
     savedFingerprint: saved.vapid_key_fingerprint ?? null,
   });

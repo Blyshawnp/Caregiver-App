@@ -97,7 +97,13 @@ type PushDiagnostics = {
   installPromptCurrentRoute: string | null;
   installPromptReasonHidden: string | null;
   installPromptAuthenticated: boolean | null;
+  installPromptAppShellReady: boolean | null;
   installPromptDismissedUntilExpired: boolean | null;
+  installPromptManualFallbackAllowed: boolean | null;
+  installPromptNotificationPromptOpen: boolean | null;
+  installPromptBlockingModalOpen: boolean | null;
+  installPromptLastAction: string | null;
+  installPromptStorageKeysUsed: string | null;
   installPromptShouldShowInstallPrompt: boolean | null;
   installPromptHiddenReason: string | null;
 
@@ -244,7 +250,13 @@ export default function NotificationSettings({
     installPromptCurrentRoute: null,
     installPromptReasonHidden: null,
     installPromptAuthenticated: null,
+    installPromptAppShellReady: null,
     installPromptDismissedUntilExpired: null,
+    installPromptManualFallbackAllowed: null,
+    installPromptNotificationPromptOpen: null,
+    installPromptBlockingModalOpen: null,
+    installPromptLastAction: null,
+    installPromptStorageKeysUsed: null,
     installPromptShouldShowInstallPrompt: null,
     installPromptHiddenReason: null,
 
@@ -887,9 +899,11 @@ export default function NotificationSettings({
     const lastSaveDiagnostics = getLastPushSaveDiagnostics();
     const lastRefreshDiagnostics = getLastPushRefreshDiagnostics();
 
-    const dismissedUntil = localStorage.getItem("caregiver-app:pwa-install-dismissed-until") ||
+    const dismissedUntil = localStorage.getItem("cvp_install_prompt_dismissed_until") ||
+      localStorage.getItem("caregiver-app:pwa-install-dismissed-until") ||
       localStorage.getItem("caregiver_app_pwa_install_dismissed_until");
-    const neverShow = localStorage.getItem("caregiver-app:pwa-install-never-show") === "true" ||
+    const neverShow = localStorage.getItem("cvp_install_prompt_never_show") === "true" ||
+      localStorage.getItem("caregiver-app:pwa-install-never-show") === "true" ||
       localStorage.getItem("caregiver_app_pwa_install_never_show") === "true";
 
     // Load Local Display Test diagnostics
@@ -922,7 +936,9 @@ export default function NotificationSettings({
     // Load Install Prompt advanced diagnostics
     let installDiag: any = {};
     try {
-      const stored = localStorage.getItem("caregiver-app:install-prompt-diagnostics");
+      const stored =
+        localStorage.getItem("cvp_install_prompt_diagnostics") ||
+        localStorage.getItem("caregiver-app:install-prompt-diagnostics");
       if (stored) {
         installDiag = JSON.parse(stored);
       }
@@ -1112,13 +1128,21 @@ export default function NotificationSettings({
       // Install Prompt Advanced fields
       installPromptInstalledPwaModeDetected: installDiag.installedPwaModeDetected ?? null,
       installPromptBeforeinstallpromptAvailable: installDiag.beforeinstallpromptAvailable ?? null,
-      installPromptNeverShowVal: installDiag.neverShow ?? null,
-      installPromptDismissedUntilVal: installDiag.dismissedUntil ? new Date(installDiag.dismissedUntil).toLocaleString() : null,
-      installPromptSessionDismissed: installDiag.sessionDismissed ?? null,
+      installPromptNeverShowVal: installDiag.installPromptNeverShow ?? installDiag.neverShow ?? null,
+      installPromptDismissedUntilVal: installDiag.installPromptDismissedUntil ?? (installDiag.dismissedUntil ? new Date(installDiag.dismissedUntil).toLocaleString() : null),
+      installPromptSessionDismissed: installDiag.installPromptSessionDismissed ?? installDiag.sessionDismissed ?? null,
       installPromptCurrentRoute: installDiag.currentRoute ?? null,
       installPromptReasonHidden: installDiag.hiddenReason ?? null,
       installPromptAuthenticated: installDiag.authenticated ?? null,
+      installPromptAppShellReady: installDiag.appShellReady ?? null,
       installPromptDismissedUntilExpired: installDiag.dismissedUntilExpired ?? null,
+      installPromptManualFallbackAllowed: installDiag.manualFallbackAllowed ?? null,
+      installPromptNotificationPromptOpen: installDiag.notificationPromptOpen ?? null,
+      installPromptBlockingModalOpen: installDiag.blockingModalOpen ?? null,
+      installPromptLastAction: installDiag.lastInstallPromptAction ?? null,
+      installPromptStorageKeysUsed: Array.isArray(installDiag.storageKeysUsed)
+        ? installDiag.storageKeysUsed.join(", ")
+        : null,
       installPromptShouldShowInstallPrompt: installDiag.shouldShowInstallPrompt ?? null,
       installPromptHiddenReason: installDiag.hiddenReason ?? null,
 
@@ -1730,15 +1754,21 @@ export default function NotificationSettings({
 
                 {/* Install Prompt advanced diagnostics */}
                 <Diag label="Install prompt authenticated?" value={diagnostics.installPromptAuthenticated === null ? "Not checked" : diagnostics.installPromptAuthenticated ? "Yes" : "No"} />
+                <Diag label="Install prompt app shell ready?" value={diagnostics.installPromptAppShellReady === null ? "Not checked" : diagnostics.installPromptAppShellReady ? "Yes" : "No"} />
                 <Diag label="Install prompt PWA mode detected" value={diagnostics.installPromptInstalledPwaModeDetected === null ? "Not checked" : diagnostics.installPromptInstalledPwaModeDetected ? "Yes" : "No"} />
                 <Diag label="Install prompt beforeinstallprompt" value={diagnostics.installPromptBeforeinstallpromptAvailable === null ? "Not checked" : diagnostics.installPromptBeforeinstallpromptAvailable ? "Yes" : "No"} />
+                <Diag label="Install prompt manual fallback" value={diagnostics.installPromptManualFallbackAllowed === null ? "Not checked" : diagnostics.installPromptManualFallbackAllowed ? "Yes" : "No"} />
                 <Diag label="Install prompt neverShow" value={diagnostics.installPromptNeverShowVal === null ? "Not checked" : diagnostics.installPromptNeverShowVal ? "Yes" : "No"} />
                 <Diag label="Install prompt dismissedUntil" value={diagnostics.installPromptDismissedUntilVal || "None"} />
                 <Diag label="Install prompt dismissedUntilExpired?" value={diagnostics.installPromptDismissedUntilExpired === null ? "Not checked" : diagnostics.installPromptDismissedUntilExpired ? "Yes" : "No"} />
                 <Diag label="Install prompt sessionDismissed" value={diagnostics.installPromptSessionDismissed === null ? "Not checked" : diagnostics.installPromptSessionDismissed ? "Yes" : "No"} />
+                <Diag label="Install prompt notification open" value={diagnostics.installPromptNotificationPromptOpen === null ? "Not checked" : diagnostics.installPromptNotificationPromptOpen ? "Yes" : "No"} />
+                <Diag label="Install prompt blocking modal" value={diagnostics.installPromptBlockingModalOpen === null ? "Not checked" : diagnostics.installPromptBlockingModalOpen ? "Yes" : "No"} />
                 <Diag label="Install prompt current route" value={diagnostics.installPromptCurrentRoute || "None"} />
                 <Diag label="Install prompt should show?" value={diagnostics.installPromptShouldShowInstallPrompt === null ? "Not checked" : diagnostics.installPromptShouldShowInstallPrompt ? "Yes" : "No"} />
                 <Diag label="Install prompt hidden reason" value={diagnostics.installPromptHiddenReason || "None"} />
+                <Diag label="Install prompt last action" value={diagnostics.installPromptLastAction || "None"} />
+                <Diag label="Install prompt storage keys" value={diagnostics.installPromptStorageKeysUsed || "None"} />
               </dl>
 
               {/* Service Worker Scope & Registrations Details (Phase 7) */}

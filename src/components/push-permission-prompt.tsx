@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { enablePushNotifications, isPushSupported } from "@/lib/push-client";
 
-const PROMPT_KEY = "caregiver-push-prompt";
+export const ALERT_PROMPT_DISMISSED_UNTIL_KEY = "cvp_alert_prompt_dismissed_until";
+export const ALERT_PROMPT_SESSION_DISMISSED_KEY = "cvp_alert_prompt_session_dismissed";
+export const ALERT_PROMPT_DISMISSED_EVENT = "cvp-alert-prompt-dismissed";
+
+const LEGACY_PROMPT_KEY = "caregiver-push-prompt";
 const SNOOZE_DAYS = 7;
 
 type PromptState = "hidden" | "ready" | "saving" | "denied" | "unsupported";
@@ -34,6 +38,7 @@ export default function PushPermissionPrompt() {
     try {
       await enablePushNotifications();
       setState("hidden");
+      notifyPromptClosed();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not enable notifications.";
@@ -47,6 +52,7 @@ export default function PushPermissionPrompt() {
   function dismiss() {
     markPrompted();
     setState("hidden");
+    notifyPromptClosed();
   }
 
   if (state === "hidden" || state === "unsupported") return null;
@@ -101,10 +107,20 @@ export default function PushPermissionPrompt() {
 
 function recentlyPrompted() {
   try {
-    const raw = localStorage.getItem(PROMPT_KEY);
-    if (!raw) return false;
-    const days = (Date.now() - Number(raw)) / 86_400_000;
-    return days < SNOOZE_DAYS;
+    if (sessionStorage.getItem(ALERT_PROMPT_SESSION_DISMISSED_KEY) === "true") {
+      return true;
+    }
+
+    const dismissedUntil = localStorage.getItem(ALERT_PROMPT_DISMISSED_UNTIL_KEY);
+    if (dismissedUntil) {
+      const until = Number(dismissedUntil);
+      if (!Number.isNaN(until) && Date.now() < until) return true;
+    }
+
+    const legacyRaw = localStorage.getItem(LEGACY_PROMPT_KEY);
+    if (!legacyRaw) return false;
+    const legacyDays = (Date.now() - Number(legacyRaw)) / 86_400_000;
+    return legacyDays < SNOOZE_DAYS;
   } catch {
     return false;
   }
@@ -112,8 +128,18 @@ function recentlyPrompted() {
 
 function markPrompted() {
   try {
-    localStorage.setItem(PROMPT_KEY, String(Date.now()));
+    sessionStorage.setItem(ALERT_PROMPT_SESSION_DISMISSED_KEY, "true");
+    localStorage.setItem(
+      ALERT_PROMPT_DISMISSED_UNTIL_KEY,
+      String(Date.now() + SNOOZE_DAYS * 86_400_000)
+    );
   } catch {
     /* ignore */
   }
+}
+
+function notifyPromptClosed() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(ALERT_PROMPT_DISMISSED_EVENT));
+  window.dispatchEvent(new Event("push-prompt-dismissed"));
 }

@@ -211,9 +211,10 @@ export async function POST(request: Request) {
       },
       {
         title: "Test notification",
-        body: "This is a test alert from your settings page.",
-        url: "/me/notifications",
-        tag: "general",
+        body: "Push alerts are working.",
+        tag: "test-push",
+        url: "/alerts",
+        type: "test",
         sound: "normal",
       }
     );

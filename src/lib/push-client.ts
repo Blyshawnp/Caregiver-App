@@ -356,10 +356,32 @@ async function ensureServiceWorkerRegistration() {
       throw new Error("Service worker is still starting. Please try again in a moment.");
     }
 
+    // Wait for controller if not yet controlling (with a timeout of 2 seconds)
+    if (!navigator.serviceWorker.controller) {
+      await new Promise<void>((resolve) => {
+        const handleControllerChange = () => {
+          if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+            resolve();
+          }
+        };
+        navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+        // Timeout after 2 seconds
+        setTimeout(() => {
+          navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+          resolve();
+        }, 2000);
+      });
+    }
+
+    if (!navigator.serviceWorker.controller) {
+      throw new Error("page_not_controlled");
+    }
+
     return readyRegistration;
   } catch (error) {
     console.error("[push-enable] service worker registration failed", error);
-    if (error instanceof Error && error.message.includes("still starting")) {
+    if (error instanceof Error && (error.message.includes("still starting") || error.message === "page_not_controlled")) {
       throw error;
     }
     throw new Error("Service worker registration failed. Refresh the app and try again.");

@@ -17,30 +17,65 @@ const STATIC_ASSETS = [
   "/favicon-32.png",
 ];
 
+// Helper for saving service worker trace logs
+async function saveSwTrace(traceData) {
+  try {
+    const cache = await caches.open("sw-trace-cache");
+    const existingResponse = await cache.match("https://caregiver-app/sw-trace.json");
+    let existingData = {};
+    if (existingResponse) {
+      try {
+        existingData = await existingResponse.json();
+      } catch (e) {
+        existingData = {};
+      }
+    }
+    const newData = {
+      ...existingData,
+      ...traceData,
+      lastUpdateTime: new Date().toISOString(),
+    };
+    await cache.put(
+      "https://caregiver-app/sw-trace.json",
+      new Response(JSON.stringify(newData), {
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+  } catch (err) {
+    console.warn("[sw-trace] failed to save trace", err);
+  }
+}
+
 // Install: pre-cache static assets
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) =>
-      cache.addAll(STATIC_ASSETS).catch(() => {
-        /* tolerate any 404s during install */
-      })
-    )
+    Promise.all([
+      caches.open(STATIC_CACHE).then((cache) =>
+        cache.addAll(STATIC_ASSETS).catch(() => {
+          /* tolerate any 404s during install */
+        })
+      ),
+      saveSwTrace({ installTime: new Date().toISOString() })
+    ])
   );
   self.skipWaiting();
 });
 
-// Activate: clean up old caches
+// Activate: clean up old caches and claim clients
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => k !== STATIC_CACHE && k !== RUNTIME_CACHE)
-          .map((k) => caches.delete(k))
-      )
-    )
+    Promise.all([
+      caches.keys().then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k !== STATIC_CACHE && k !== RUNTIME_CACHE && k !== "sw-trace-cache")
+            .map((k) => caches.delete(k))
+        )
+      ),
+      self.clients.claim(),
+      saveSwTrace({ activateTime: new Date().toISOString() })
+    ])
   );
-  self.clients.claim();
 });
 
 // Fetch strategy:
@@ -113,6 +148,7 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("push", (event) => {
+  const receiveTime = new Date().toISOString();
   let payload = {
     title: "Carer Vista Pro",
     body: "You have a new notification.",
@@ -121,28 +157,63 @@ self.addEventListener("push", (event) => {
     sound: "normal",
   };
 
+  let parseResult = "default_fallback";
+  let parseError = null;
   try {
     if (event.data) {
       payload = { ...payload, ...event.data.json() };
+      parseResult = "success";
     }
-  } catch {
-    /* use default payload */
+  } catch (err) {
+    parseResult = "failure";
+    parseError = err instanceof Error ? err.message : String(err);
   }
 
-  event.waitUntil(
-    self.registration.showNotification(payload.title || "Carer Vista Pro", {
-      body: payload.body || "",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: payload.tag || "caregiver-notification",
-      renotify: payload.sound === "urgent" || payload.sound === "urgent_alert",
-      requireInteraction: payload.sound === "urgent" || payload.sound === "urgent_alert",
-      data: {
-        url: payload.url || "/notifications",
-        sound: payload.sound || "normal",
-      },
-    })
-  );
+  const traceData = {
+    lastPushReceivedTime: receiveTime,
+    lastPushPayload: JSON.stringify(payload),
+    lastPushParseResult: parseResult,
+    lastPushParseError: parseError,
+    lastNotificationTitle: payload.title || "Carer Vista Pro",
+    lastNotificationTag: payload.tag || "caregiver-notification",
+  };
+
+  const showPromise = async () => {
+    const attemptTime = new Date().toISOString();
+    let showResult = "attempted";
+    let showError = null;
+    try {
+      await self.registration.showNotification(payload.title || "Carer Vista Pro", {
+        body: payload.body || "",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: payload.tag || "caregiver-notification",
+        renotify: payload.sound === "urgent" || payload.sound === "urgent_alert",
+        requireInteraction: payload.sound === "urgent" || payload.sound === "urgent_alert",
+        data: {
+          url: payload.url || "/notifications",
+          sound: payload.sound || "normal",
+        },
+      });
+      showResult = "success";
+    } catch (err) {
+      showResult = "failure";
+      showError = err instanceof Error ? err.message : String(err);
+    }
+
+    await saveSwTrace({
+      ...traceData,
+      lastShowNotificationAttemptedTime: attemptTime,
+      lastShowNotificationResult: showResult,
+      lastShowNotificationError: showError,
+    });
+
+    if (showError) {
+      throw new Error(showError);
+    }
+  };
+
+  event.waitUntil(showPromise());
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -153,15 +224,21 @@ self.addEventListener("notificationclick", (event) => {
   ).href;
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ("focus" in client && client.url === targetUrl) {
-          return client.focus();
+    Promise.all([
+      clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          if ("focus" in client && client.url === targetUrl) {
+            return client.focus();
+          }
         }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
-    })
+        if (clients.openWindow) {
+          return clients.openWindow(targetUrl);
+        }
+      }),
+      saveSwTrace({
+        lastClickTime: new Date().toISOString(),
+        lastClickUrl: targetUrl,
+      })
+    ])
   );
 });

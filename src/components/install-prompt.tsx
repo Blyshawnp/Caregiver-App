@@ -7,6 +7,7 @@ export const PWA_INSTALL_NEVER_SHOW_KEY = "caregiver-app:pwa-install-never-show"
 export const PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver-app:pwa-install-dismissed-until";
 export const PWA_INSTALL_DISMISSED_SESSION_KEY = "caregiver-app:pwa-install-dismissed-session";
 export const PWA_INSTALL_LAST_PROMPTED_KEY = "caregiver-app:pwa-install-last-prompted-at";
+export const PWA_INSTALL_NOT_NOW_COOLDOWN_KEY = "caregiver-app:pwa-install-not-now-cooldown";
 
 const LEGACY_PWA_INSTALL_NEVER_SHOW_KEY = "caregiver_app_pwa_install_never_show";
 const LEGACY_PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver_app_pwa_install_dismissed_until";
@@ -37,22 +38,25 @@ function isStandalone(): boolean {
 function isPromptSuppressed(pathname?: string | null): boolean {
   if (typeof window === "undefined") return true;
   try {
-    // 7. Do not show install prompt if installed PWA mode is detected
+    // 1. If installed PWA mode is detected, never show install prompt
     if (isStandalone()) return true;
 
-    // 6. Do not show install prompt on the Notifications page
+    // 8. Do not show install prompt on the Notifications page
     if (pathname === "/me/notifications" || pathname?.endsWith("/notifications")) {
       return true;
     }
 
+    // 2. If localStorage installPromptNeverShow = true, never show install prompt
     const neverShow =
       localStorage.getItem(PWA_INSTALL_NEVER_SHOW_KEY) ??
       localStorage.getItem(LEGACY_PWA_INSTALL_NEVER_SHOW_KEY);
     if (neverShow === "true") return true;
 
+    // 6. If user clicked Not now previously in the same session, hide repeatedly
     const sessionDismissed = sessionStorage.getItem(PWA_INSTALL_DISMISSED_SESSION_KEY);
     if (sessionDismissed === "true") return true;
 
+    // 3. If localStorage installPromptDismissedUntil exists and Date.now() is before it, do not show
     const dismissedUntil =
       localStorage.getItem(PWA_INSTALL_DISMISS_UNTIL_KEY) ??
       localStorage.getItem(LEGACY_PWA_INSTALL_DISMISS_UNTIL_KEY);
@@ -61,13 +65,27 @@ function isPromptSuppressed(pathname?: string | null): boolean {
       if (!isNaN(until) && Date.now() < until) return true;
     }
 
-    // Avoid prompting repeatedly on every single page load
+    // 6. Not now 1-hour cooldown check
+    const notNowCooldown = localStorage.getItem(PWA_INSTALL_NOT_NOW_COOLDOWN_KEY);
+    if (notNowCooldown) {
+      const cooldownTime = parseInt(notNowCooldown, 10);
+      if (!isNaN(cooldownTime) && Date.now() < cooldownTime) return true;
+    }
+
+    // 8. Do not show while notification permission prompt is active
+    const isPushPromptActive = document.body.innerHTML.includes("Get important alerts");
+    if (isPushPromptActive) return true;
+
+    // 8. Do not show while modal dialogs are open
+    const isModalOpen = !!document.querySelector('[role="dialog"]') || !!document.querySelector('[aria-modal="true"]');
+    if (isModalOpen) return true;
+
+    // Avoid prompting repeatedly on every single page load (cooldown of 15 min unless forced)
     const lastPrompt =
       localStorage.getItem(PWA_INSTALL_LAST_PROMPTED_KEY) ??
       localStorage.getItem(LEGACY_PWA_INSTALL_LAST_PROMPTED_KEY);
     if (lastPrompt) {
       const last = parseInt(lastPrompt, 10);
-      // Wait at least 15 minutes between page load auto-prompts
       if (!isNaN(last) && Date.now() - last < 900_000) return true;
     }
 
@@ -82,7 +100,18 @@ export default function InstallPrompt() {
   const [platform, setPlatform] = useState<Platform>("unsupported");
   const [show, setShow] = useState(false);
   const [showIosSheet, setShowIosSheet] = useState(false);
+  const [showManualSheet, setShowManualSheet] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+
+  // Initialize first sign-in session flag
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hasSeenFirstSignIn = localStorage.getItem("caregiver-app:first-signin-seen") === "true";
+    if (!hasSeenFirstSignIn) {
+      localStorage.setItem("caregiver-app:first-signin-seen", "true");
+      sessionStorage.setItem("caregiver-app:is-first-signin-session", "true");
+    }
+  }, []);
 
   // Register beforeinstallprompt globally once on mount
   useEffect(() => {
@@ -123,27 +152,97 @@ export default function InstallPrompt() {
         localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
       } catch {}
     }
+
+    // 9. If beforeinstallprompt is not available, show guidance card once after first sign-in
+    if ((platform === "android" || platform === "desktop") && !deferredPrompt && !show) {
+      const isFirstSession = sessionStorage.getItem("caregiver-app:is-first-signin-session") === "true";
+      if (isFirstSession) {
+        const t = setTimeout(() => {
+          if (isPromptSuppressed(pathname)) return;
+          setShow(true);
+          try {
+            localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
+          } catch {}
+        }, 5000);
+        return () => clearTimeout(t);
+      }
+    }
   }, [pathname, platform, deferredPrompt, show]);
 
+  // Keep advanced diagnostics written to localStorage so the Notifications settings page can read it
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const neverShow =
+        localStorage.getItem(PWA_INSTALL_NEVER_SHOW_KEY) === "true" ||
+        localStorage.getItem(LEGACY_PWA_INSTALL_NEVER_SHOW_KEY) === "true";
+      const sessionDismissed = sessionStorage.getItem(PWA_INSTALL_DISMISSED_SESSION_KEY) === "true";
+      const dismissedUntil =
+        localStorage.getItem(PWA_INSTALL_DISMISS_UNTIL_KEY) ??
+        localStorage.getItem(LEGACY_PWA_INSTALL_DISMISS_UNTIL_KEY);
+
+      let reason = "None";
+      if (isStandalone()) reason = "Installed PWA mode detected";
+      else if (pathname === "/me/notifications" || pathname?.endsWith("/notifications")) reason = "On Notifications page";
+      else if (neverShow) reason = "installPromptNeverShow is true";
+      else if (sessionDismissed) reason = "sessionDismissed is true";
+      else if (dismissedUntil && Date.now() < parseInt(dismissedUntil, 10)) {
+        reason = `installPromptDismissedUntil is active (until ${new Date(parseInt(dismissedUntil, 10)).toLocaleString()})`;
+      } else {
+        const notNowCooldown = localStorage.getItem(PWA_INSTALL_NOT_NOW_COOLDOWN_KEY);
+        if (notNowCooldown && Date.now() < parseInt(notNowCooldown, 10)) {
+          reason = `Not now 1-hour cooldown active (until ${new Date(parseInt(notNowCooldown, 10)).toLocaleString()})`;
+        } else if (document.body.innerHTML.includes("Get important alerts")) {
+          reason = "Notification permission prompt is active";
+        } else if (!!document.querySelector('[role="dialog"]') || !!document.querySelector('[aria-modal="true"]')) {
+          reason = "Modal dialog is open";
+        } else if (!deferredPrompt && platform !== "ios") {
+          const isFirstSession = sessionStorage.getItem("caregiver-app:is-first-signin-session") === "true";
+          if (!isFirstSession) {
+            reason = "beforeinstallprompt not available and not first sign-in session";
+          }
+        }
+      }
+
+      const details = {
+        installedPwaModeDetected: isStandalone(),
+        beforeinstallpromptAvailable: !!deferredPrompt,
+        installPromptNeverShow: neverShow,
+        installPromptDismissedUntil: dismissedUntil ? new Date(parseInt(dismissedUntil, 10)).toISOString() : null,
+        sessionDismissed,
+        currentRoute: pathname || "/",
+        reasonPromptIsHidden: reason,
+      };
+
+      localStorage.setItem("caregiver-app:install-prompt-diagnostics", JSON.stringify(details));
+    } catch {}
+  }, [pathname, platform, deferredPrompt, show, showIosSheet, showManualSheet]);
+
+  // 6. Not now dismiss handler (current session only + 1 hour cooldown)
   function handleNotNow() {
     setShow(false);
+    setShowManualSheet(false);
     try {
       sessionStorage.setItem(PWA_INSTALL_DISMISSED_SESSION_KEY, "true");
+      localStorage.setItem(PWA_INSTALL_NOT_NOW_COOLDOWN_KEY, String(Date.now() + 3600_000));
     } catch {}
   }
 
+  // 5. Don't show for 24 hours handler
   function handleRemindTomorrow() {
     setShow(false);
     setShowIosSheet(false);
-    // Suppress for 24 hours
+    setShowManualSheet(false);
     try {
       localStorage.setItem(PWA_INSTALL_DISMISS_UNTIL_KEY, String(Date.now() + 24 * 3600_000));
     } catch {}
   }
 
+  // 4. Don't show again handler
   function handleNeverShow() {
     setShow(false);
     setShowIosSheet(false);
+    setShowManualSheet(false);
     try {
       localStorage.setItem(PWA_INSTALL_NEVER_SHOW_KEY, "true");
     } catch {}
@@ -163,16 +262,19 @@ export default function InstallPrompt() {
       } else {
         handleRemindTomorrow();
       }
+    } else {
+      // 9. If beforeinstallprompt is missing, show manual guidance sheet
+      setShowManualSheet(true);
     }
   }
 
   if (isPromptSuppressed(pathname)) return null;
-  if (!show && !showIosSheet) return null;
+  if (!show && !showIosSheet && !showManualSheet) return null;
 
   return (
     <>
       {/* Install banner */}
-      {show && !showIosSheet && (
+      {show && !showIosSheet && !showManualSheet && (
         <div className="fixed bottom-24 left-3 right-3 z-40 max-w-md mx-auto pb-[env(safe-area-inset-bottom)] animate-slide-up">
           <div className="bg-forest-600 text-cream-50 rounded-3xl shadow-lifted p-5 flex flex-col gap-3.5 border border-forest-500/30">
             <div className="flex items-start justify-between">
@@ -206,10 +308,10 @@ export default function InstallPrompt() {
 
             <div className="flex justify-between items-center border-t border-cream-50/10 pt-2 text-[10px] text-cream-50/60 font-medium">
               <button onClick={handleRemindTomorrow} className="hover:text-cream-50 hover:underline">
-                Don't show for 24 hours
+                Don&apos;t show for 24 hours
               </button>
               <button onClick={handleNeverShow} className="hover:text-cream-50 hover:underline">
-                Don't show again
+                Don&apos;t show again
               </button>
             </div>
           </div>
@@ -259,13 +361,66 @@ export default function InstallPrompt() {
                   onClick={handleRemindTomorrow}
                   className="bg-cream-200 hover:bg-cream-300 text-ink-700 px-4 py-3 rounded-2xl text-xs font-semibold transition"
                 >
-                  Don't show for 24 hours
+                  Don&apos;t show for 24 hours
                 </button>
                 <button
                   onClick={handleNeverShow}
                   className="bg-cream-100 hover:bg-cream-200 text-ink-500 px-4 py-3 rounded-2xl text-xs font-medium transition"
                 >
-                  Don't show again
+                  Don&apos;t show again
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual guidance instruction sheet for desktop/android when beforeinstallprompt is missing */}
+      {showManualSheet && (
+        <div
+          className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-sm flex items-end justify-center px-3 pb-3 animate-fade-in"
+          onClick={() => setShowManualSheet(false)}
+        >
+          <div
+            className="bg-cream-50 rounded-3xl shadow-lifted w-full max-w-md p-6 pb-8 grain-overlay relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative">
+              <div className="w-12 h-1 bg-cream-200 rounded-full mx-auto mb-5" />
+              <h2 className="font-display text-2xl text-ink-900 mb-1">Add to Home Screen</h2>
+              <p className="text-sm text-ink-500 mb-5">
+                Add Carer Vista Pro to your device using your browser settings:
+              </p>
+              <ol className="space-y-3.5 mb-6">
+                <Step n={1}>
+                  Open your browser menu (usually three dots or menu icon at the top/bottom)
+                </Step>
+                <Step n={2}>
+                  Look for <strong className="font-semibold text-ink-950">Add to Home Screen</strong> or <strong className="font-semibold text-ink-950">Install App</strong>
+                </Step>
+                <Step n={3}>
+                  Tap it to install Carer Vista Pro on your device.
+                </Step>
+              </ol>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowManualSheet(false)}
+                  className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-3 rounded-2xl text-xs font-semibold transition"
+                >
+                  Got it
+                </button>
+                <button
+                  onClick={handleRemindTomorrow}
+                  className="bg-cream-200 hover:bg-cream-300 text-ink-700 px-4 py-3 rounded-2xl text-xs font-semibold transition"
+                >
+                  Don&apos;t show for 24 hours
+                </button>
+                <button
+                  onClick={handleNeverShow}
+                  className="bg-cream-100 hover:bg-cream-200 text-ink-500 px-4 py-3 rounded-2xl text-xs font-medium transition"
+                >
+                  Don&apos;t show again
                 </button>
               </div>
             </div>

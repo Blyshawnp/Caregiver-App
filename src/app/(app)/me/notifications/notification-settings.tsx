@@ -70,6 +70,32 @@ type PushDiagnostics = {
   installPromptDismissedUntil?: string | null;
   installPromptNeverShow?: boolean;
   installedPwaMode?: boolean;
+  // Local display test fields
+  localDisplayTestAttempted: string;
+  localDisplayTestResult: string;
+  localDisplayTestError: string | null;
+  // Service Worker Trace fields
+  swInstallTime: string;
+  swActivateTime: string;
+  lastSwPushReceivedTime: string;
+  lastSwPushPayload: string;
+  lastSwPushParseResult: string;
+  lastSwPushParseError: string | null;
+  lastSwShowNotificationAttemptedTime: string;
+  lastSwShowNotificationResult: string;
+  lastSwShowNotificationError: string | null;
+  lastSwNotificationTitle: string;
+  lastSwNotificationTag: string;
+  lastSwClickTime: string;
+  lastSwClickUrl: string;
+  // Install Prompt Advanced fields
+  installPromptInstalledPwaModeDetected: boolean | null;
+  installPromptBeforeinstallpromptAvailable: boolean | null;
+  installPromptNeverShowVal: boolean | null;
+  installPromptDismissedUntilVal: string | null;
+  installPromptSessionDismissed: boolean | null;
+  installPromptCurrentRoute: string | null;
+  installPromptReasonHidden: string | null;
 };
 
 export default function NotificationSettings({ 
@@ -84,6 +110,19 @@ export default function NotificationSettings({
   const [error, setError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<PushPreferences>(normalizePrefs(initialPreferences));
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [swStatus, setSwStatus] = useState<
+    | "checking"
+    | "unsupported"
+    | "installing"
+    | "needs_refresh"
+    | "ready"
+    | "permission_needed"
+    | "ready_to_subscribe"
+  >("checking");
+
+  const [localTestLoading, setLocalTestLoading] = useState(false);
+  const [localTestMessage, setLocalTestMessage] = useState<string | null>(null);
+
   const [diagnostics, setDiagnostics] = useState<PushDiagnostics>({
     browserPermission: "unknown",
     serviceWorkerRegistered: false,
@@ -124,11 +163,104 @@ export default function NotificationSettings({
     installPromptDismissedUntil: null,
     installPromptNeverShow: false,
     installedPwaMode: false,
+    // Local display test fields
+    localDisplayTestAttempted: "None",
+    localDisplayTestResult: "Not run",
+    localDisplayTestError: null,
+    // Service Worker Trace fields
+    swInstallTime: "Not recorded",
+    swActivateTime: "Not recorded",
+    lastSwPushReceivedTime: "Not recorded",
+    lastSwPushPayload: "None",
+    lastSwPushParseResult: "Not run",
+    lastSwPushParseError: null,
+    lastSwShowNotificationAttemptedTime: "Not recorded",
+    lastSwShowNotificationResult: "Not run",
+    lastSwShowNotificationError: null,
+    lastSwNotificationTitle: "None",
+    lastSwNotificationTag: "None",
+    lastSwClickTime: "Not recorded",
+    lastSwClickUrl: "None",
+    // Install Prompt Advanced fields
+    installPromptInstalledPwaModeDetected: null,
+    installPromptBeforeinstallpromptAvailable: null,
+    installPromptNeverShowVal: null,
+    installPromptDismissedUntilVal: null,
+    installPromptSessionDismissed: null,
+    installPromptCurrentRoute: null,
+    installPromptReasonHidden: null,
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
   const [inAppAlertVolume, setInAppAlertVolume] = useState(0.8);
   const [urgentAlertsRepeat, setUrgentAlertsRepeat] = useState(true);
+
+  // Monitor service worker controller change and readiness
+  async function updateSwStatus() {
+    if (!isPushSupported()) {
+      setSwStatus("unsupported");
+      return;
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/");
+      if (!reg) {
+        setSwStatus("installing");
+        navigator.serviceWorker.register("/sw.js")
+          .then(() => updateSwStatus())
+          .catch(() => setSwStatus("unsupported"));
+        return;
+      }
+
+      if (reg.installing) {
+        setSwStatus("installing");
+        reg.installing.addEventListener("statechange", () => updateSwStatus());
+        return;
+      }
+
+      if (reg.waiting && !reg.active) {
+        setSwStatus("installing");
+        reg.waiting.addEventListener("statechange", () => updateSwStatus());
+        return;
+      }
+
+      if (!reg.active) {
+        setSwStatus("installing");
+        return;
+      }
+
+      // Active. Check controller.
+      if (!navigator.serviceWorker.controller) {
+        setSwStatus("needs_refresh");
+        return;
+      }
+
+      // Controller is ready. Check notification permission.
+      if (Notification.permission === "default") {
+        setSwStatus("permission_needed");
+      } else if (Notification.permission === "denied") {
+        setSwStatus("unsupported");
+      } else {
+        setSwStatus("ready_to_subscribe");
+      }
+    } catch {
+      setSwStatus("unsupported");
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    updateSwStatus();
+    const handleControllerChange = () => {
+      updateSwStatus();
+      refreshDiagnostics();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+    };
+  }, []);
 
   useEffect(() => {
     setPushSupported(isPushSupported());
@@ -164,6 +296,19 @@ export default function NotificationSettings({
     init();
   }, []);
 
+  function mapErrorToSafeReason(err: any): string {
+    const msg = err?.message || String(err);
+    if (msg.includes("unsupported") || msg.includes("not supported")) return "unsupported";
+    if (msg.includes("HTTPS")) return "unsupported";
+    if (msg.includes("blocked") || msg.includes("dismissed") || msg.includes("permission")) return "permission denied";
+    if (msg.includes("registration") || msg.includes("timed out") && msg.includes("register")) return "registration failed";
+    if (msg.includes("still starting") || msg.includes("active worker missing")) return "active worker missing";
+    if (msg === "page_not_controlled" || msg.includes("controller")) return "page not controlled yet";
+    if (msg.includes("subscribe") || msg.includes("subscription timed out")) return "subscribe failed";
+    if (msg.includes("save") || msg.includes("Save") || msg.includes("database") || msg.includes("server could not save")) return "save failed";
+    return msg;
+  }
+
   async function toggleDevice() {
     setSaving(true);
     setError(null);
@@ -182,9 +327,10 @@ export default function NotificationSettings({
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update device.");
+      setError(mapErrorToSafeReason(err));
     } finally {
       setSaving(false);
+      updateSwStatus();
     }
   }
 
@@ -357,10 +503,48 @@ export default function NotificationSettings({
         throw new Error(testData?.error || "Subscription refreshed, but test push failed.");
       }
     } catch (err: any) {
-      setError(err.message || "Refresh did not complete. Please enable alerts again.");
+      setError(mapErrorToSafeReason(err));
       localStorage.setItem("pwa_last_test_push_result", "unknown_error");
     } finally {
       setLoading(false);
+      await refreshDiagnostics();
+    }
+  }
+
+  async function handleLocalDisplayTest() {
+    setLocalTestLoading(true);
+    setLocalTestMessage(null);
+    try {
+      if (!isPushSupported()) {
+        throw new Error("Push notifications are not supported on this device.");
+      }
+      const reg = await navigator.serviceWorker.ready;
+      if (!reg) {
+        throw new Error("Service worker registration not found.");
+      }
+
+      await reg.showNotification("Test notification", {
+        body: "Local notification display works.",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: "local-display-test",
+      });
+
+      localStorage.setItem("pwa_local_test_attempted", new Date().toISOString());
+      localStorage.setItem("pwa_local_test_result", "success");
+      localStorage.removeItem("pwa_local_test_error");
+
+      setLocalTestMessage(
+        "Local notification display request sent successfully! If it did not appear, check Windows/Chrome notification settings."
+      );
+    } catch (err: any) {
+      const errMsg = err.message || String(err);
+      localStorage.setItem("pwa_local_test_attempted", new Date().toISOString());
+      localStorage.setItem("pwa_local_test_result", "failed");
+      localStorage.setItem("pwa_local_test_error", errMsg);
+      setLocalTestMessage(`❌ Local display test failed: ${errMsg}`);
+    } finally {
+      setLocalTestLoading(false);
       await refreshDiagnostics();
     }
   }
@@ -412,6 +596,34 @@ export default function NotificationSettings({
     const neverShow = localStorage.getItem("caregiver-app:pwa-install-never-show") === "true" ||
       localStorage.getItem("caregiver_app_pwa_install_never_show") === "true";
 
+    // Load Local Display Test diagnostics
+    const localAttempted = localStorage.getItem("pwa_local_test_attempted") || "None";
+    const localResult = localStorage.getItem("pwa_local_test_result") || "Not run";
+    const localError = localStorage.getItem("pwa_local_test_error") || "None";
+
+    // Load Service Worker trace logs from caches
+    let swTrace: Record<string, any> = {};
+    if ("caches" in window) {
+      try {
+        const cache = await window.caches.open("sw-trace-cache");
+        const match = await cache.match("https://caregiver-app/sw-trace.json");
+        if (match) {
+          swTrace = await match.json().catch(() => ({}));
+        }
+      } catch (err) {
+        console.warn("Could not read SW trace cache", err);
+      }
+    }
+
+    // Load Install Prompt advanced diagnostics
+    let installDiag: any = {};
+    try {
+      const stored = localStorage.getItem("caregiver-app:install-prompt-diagnostics");
+      if (stored) {
+        installDiag = JSON.parse(stored);
+      }
+    } catch {}
+
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
       serviceWorkerRegistered: !!registration,
@@ -455,7 +667,46 @@ export default function NotificationSettings({
       installPromptDismissedUntil: dismissedUntil ? new Date(parseInt(dismissedUntil, 10)).toLocaleString() : "None",
       installPromptNeverShow: neverShow,
       installedPwaMode: installedPwa,
+      // Local display test fields
+      localDisplayTestAttempted: localAttempted,
+      localDisplayTestResult: localResult,
+      localDisplayTestError: localError === "None" ? null : localError,
+      // Service Worker Trace fields
+      swInstallTime: swTrace.installTime ? new Date(swTrace.installTime).toLocaleString() : "Not recorded",
+      swActivateTime: swTrace.activateTime ? new Date(swTrace.activateTime).toLocaleString() : "Not recorded",
+      lastSwPushReceivedTime: swTrace.lastPushReceivedTime ? new Date(swTrace.lastPushReceivedTime).toLocaleString() : "Not recorded",
+      lastSwPushPayload: swTrace.lastPushPayload || "None",
+      lastSwPushParseResult: swTrace.lastPushParseResult || "Not run",
+      lastSwPushParseError: swTrace.lastPushParseError || null,
+      lastSwShowNotificationAttemptedTime: swTrace.lastShowNotificationAttemptedTime ? new Date(swTrace.lastShowNotificationAttemptedTime).toLocaleString() : "Not recorded",
+      lastSwShowNotificationResult: swTrace.lastShowNotificationResult || "Not run",
+      lastSwShowNotificationError: swTrace.lastShowNotificationError || null,
+      lastSwNotificationTitle: swTrace.lastNotificationTitle || "None",
+      lastSwNotificationTag: swTrace.lastSwNotificationTag || swTrace.lastNotificationTag || "None",
+      lastSwClickTime: swTrace.lastClickTime ? new Date(swTrace.lastClickTime).toLocaleString() : "Not recorded",
+      lastSwClickUrl: swTrace.lastClickUrl || "None",
+      // Install Prompt Advanced fields
+      installPromptInstalledPwaModeDetected: installDiag.installedPwaModeDetected ?? null,
+      installPromptBeforeinstallpromptAvailable: installDiag.beforeinstallpromptAvailable ?? null,
+      installPromptNeverShowVal: installDiag.installPromptNeverShow ?? null,
+      installPromptDismissedUntilVal: installDiag.installPromptDismissedUntil ? new Date(installDiag.installPromptDismissedUntil).toLocaleString() : null,
+      installPromptSessionDismissed: installDiag.sessionDismissed ?? null,
+      installPromptCurrentRoute: installDiag.currentRoute ?? null,
+      installPromptReasonHidden: installDiag.reasonPromptIsHidden ?? null,
     });
+  }
+
+  function copyDiagnosticsToClipboard() {
+    try {
+      const dataToCopy = {
+        ...diagnostics,
+        swStatus,
+      };
+      navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
+      alert("Diagnostics copied to clipboard!");
+    } catch {
+      alert("Could not copy diagnostics.");
+    }
   }
 
   function describeTestResult(code: string, trueServerMismatch = false) {
@@ -485,7 +736,13 @@ export default function NotificationSettings({
     if (diagnostics.browserPermission === "denied") {
       return { label: "Permission denied", color: "text-terracotta-600 font-semibold" };
     }
-    if (!diagnostics.serviceWorkerRegistered || !diagnostics.serviceWorkerActive) {
+    if (swStatus === "installing") {
+      return { label: "Service worker installing", color: "text-amber-600 font-semibold animate-pulse" };
+    }
+    if (swStatus === "needs_refresh" || !diagnostics.serviceWorkerActive) {
+      return { label: "Service worker active but page needs refresh", color: "text-amber-600 font-semibold" };
+    }
+    if (!diagnostics.serviceWorkerRegistered) {
       return { label: "Service worker issue", color: "text-terracotta-600 font-semibold" };
     }
 
@@ -570,6 +827,18 @@ export default function NotificationSettings({
     deviceEnabled &&
     diagnostics.subscriptionSaved &&
     diagnostics.vapidKeyMatch === false;
+
+  const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
+  const hasPushNoTrace =
+    lastTest === "success" &&
+    (!diagnostics.lastSwPushReceivedTime || diagnostics.lastSwPushReceivedTime === "Not recorded");
+
+  const hasPushTraceButNoDisplay =
+    lastTest === "success" &&
+    diagnostics.lastSwPushReceivedTime &&
+    diagnostics.lastSwPushReceivedTime !== "Not recorded" &&
+    diagnostics.lastSwShowNotificationResult === "success";
+
   const saveDiagnosticsRows = diagnostics.lastSaveDiagnostics
     ? [
         ["App commit/version", diagnostics.lastSaveDiagnostics.appCommit],
@@ -669,6 +938,24 @@ export default function NotificationSettings({
           </div>
         )}
 
+        {hasPushNoTrace && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-850 mb-4 leading-relaxed">
+            📢 <strong>Notice:</strong> The push provider accepted the message, but this browser did not report receiving the push event yet. Try with the app closed, then opened, and check OS/browser notification settings.
+          </div>
+        )}
+
+        {hasPushTraceButNoDisplay && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-850 mb-4 leading-relaxed">
+            📢 <strong>Notice:</strong> The browser reports that it displayed the notification, but the OS/browser may be suppressing it. Check system-level Focus/Do Not Disturb settings.
+          </div>
+        )}
+
+        {diagnostics.localDisplayTestResult === "success" && (
+          <div className="bg-cream-50 border border-cream-200 p-4 rounded-2xl text-xs text-ink-700 mb-4 leading-relaxed">
+            ℹ️ <strong>Notice:</strong> Your browser accepted the display request, but Windows/Chrome may be suppressing notifications. Check Windows notification settings for Chrome and the installed app.
+          </div>
+        )}
+
         <div className="bg-cream-50 p-4 rounded-2xl text-xs space-y-2 mb-4 border border-cream-200">
           <p className="font-medium text-ink-700">
             <strong>Notification status:</strong>{" "}
@@ -684,6 +971,7 @@ export default function NotificationSettings({
         {loading && <p className="text-xs text-ink-500 mb-3">Checking this device...</p>}
         {error && <p className="text-xs text-terracotta-600 mb-3">{error}</p>}
         {testMessage && <p className="text-xs text-ink-700 font-semibold mb-3">{testMessage}</p>}
+        {localTestMessage && <p className="text-xs text-ink-700 font-semibold mb-3">{localTestMessage}</p>}
 
         {!supported ? (
           <div className="bg-cream-50 p-4 rounded-2xl text-sm text-ink-700">
@@ -691,9 +979,22 @@ export default function NotificationSettings({
           </div>
         ) : (
           <div className="space-y-2.5 mb-4">
+            {swStatus === "needs_refresh" && (
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800 font-semibold mb-2.5 space-y-2">
+                <p>Notifications are almost ready. Refresh this page once, then enable alerts.</p>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-xl text-xs font-semibold transition"
+                >
+                  🔄 Refresh page
+                </button>
+              </div>
+            )}
+
             <button
               onClick={toggleDevice}
-              disabled={saving}
+              disabled={saving || swStatus === "installing" || swStatus === "needs_refresh"}
               className={`w-full py-3.5 rounded-2xl font-medium transition active:scale-[0.98] ${
                 deviceEnabled
                   ? "bg-cream-200 text-ink-700 hover:bg-cream-300"
@@ -703,24 +1004,46 @@ export default function NotificationSettings({
               {saving ? "Updating..." : deviceEnabled ? "Disable on this device" : "Enable on this device"}
             </button>
 
-            {deviceEnabled && (
-              <div className="flex gap-2 pt-1.5">
+            {deviceEnabled && swStatus !== "needs_refresh" && (
+              <div className="flex flex-col gap-2 pt-1.5">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSendTest}
+                    disabled={testLoading}
+                    className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+                  >
+                    {testLoading ? "Sending test..." : "Send test notification"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleManualCheck}
+                    disabled={loading}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-4 py-2.5 rounded-xl text-xs font-semibold transition"
+                  >
+                    Refresh subscription
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={handleSendTest}
-                  disabled={testLoading}
-                  className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+                  onClick={handleLocalDisplayTest}
+                  disabled={localTestLoading}
+                  className="w-full bg-cream-250 hover:bg-cream-350 text-ink-750 py-2.5 rounded-xl text-xs font-semibold transition"
                 >
-                  {testLoading ? "Sending test..." : "Send test notification"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleManualCheck}
-                  className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-4 py-2.5 rounded-xl text-xs font-semibold transition"
-                >
-                  Refresh subscription
+                  {localTestLoading ? "Testing display..." : "Test local notification display"}
                 </button>
               </div>
+            )}
+
+            {!deviceEnabled && (swStatus === "ready_to_subscribe" || swStatus === "permission_needed") && (
+              <button
+                type="button"
+                onClick={handleLocalDisplayTest}
+                disabled={localTestLoading}
+                className="w-full bg-cream-250 hover:bg-cream-350 text-ink-750 py-2.5 rounded-xl text-xs font-semibold transition mt-2"
+              >
+                {localTestLoading ? "Testing display..." : "Test local notification display"}
+              </button>
             )}
           </div>
         )}
@@ -736,7 +1059,16 @@ export default function NotificationSettings({
           </button>
           {showAdvanced && (
             <div className="bg-white/70 border border-cream-200 rounded-2xl p-4 text-xs text-ink-600 mt-3">
-              <p className="font-semibold text-ink-800 mb-2">Notification diagnostics</p>
+              <div className="flex justify-between items-center mb-2.5">
+                <p className="font-semibold text-ink-800">Notification diagnostics</p>
+                <button
+                  type="button"
+                  onClick={copyDiagnosticsToClipboard}
+                  className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
+                >
+                  Copy diagnostics
+                </button>
+              </div>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                 <Diag label="Browser permission" value={diagnostics.browserPermission} />
                 <Diag label="Service worker registered" value={diagnostics.serviceWorkerRegistered ? "Yes" : "No"} />
@@ -776,6 +1108,35 @@ export default function NotificationSettings({
                 <Diag label="Install prompt dismissed until" value={diagnostics.installPromptDismissedUntil || "None"} />
                 <Diag label="Install prompt never show" value={diagnostics.installPromptNeverShow ? "Yes" : "No"} />
                 <Diag label="Installed PWA mode detected" value={diagnostics.installedPwaMode ? "Yes" : "No"} />
+
+                {/* Local Display Test Diagnostics */}
+                <Diag label="Local display test attempted" value={diagnostics.localDisplayTestAttempted} />
+                <Diag label="Local display test result" value={diagnostics.localDisplayTestResult} />
+                <Diag label="Local display test error" value={diagnostics.localDisplayTestError || "None"} />
+
+                {/* Service Worker Lifecycle & Trace Logs */}
+                <Diag label="SW install time" value={diagnostics.swInstallTime} />
+                <Diag label="SW activate time" value={diagnostics.swActivateTime} />
+                <Diag label="Last SW push received time" value={diagnostics.lastSwPushReceivedTime} />
+                <Diag label="Last SW push payload" value={diagnostics.lastSwPushPayload.slice(0, 50)} />
+                <Diag label="Last SW push parse result" value={diagnostics.lastSwPushParseResult} />
+                <Diag label="Last SW push parse error" value={diagnostics.lastSwPushParseError || "None"} />
+                <Diag label="Last SW show attempted time" value={diagnostics.lastSwShowNotificationAttemptedTime} />
+                <Diag label="Last SW show result" value={diagnostics.lastSwShowNotificationResult} />
+                <Diag label="Last SW show error" value={diagnostics.lastSwShowNotificationError || "None"} />
+                <Diag label="Last SW notification title" value={diagnostics.lastSwNotificationTitle} />
+                <Diag label="Last SW notification tag" value={diagnostics.lastSwNotificationTag} />
+                <Diag label="Last SW notification click time" value={diagnostics.lastSwClickTime} />
+                <Diag label="Last SW notification click url" value={diagnostics.lastSwClickUrl} />
+
+                {/* Install Prompt advanced diagnostics */}
+                <Diag label="Install prompt PWA mode detected" value={diagnostics.installPromptInstalledPwaModeDetected === null ? "Not checked" : diagnostics.installPromptInstalledPwaModeDetected ? "Yes" : "No"} />
+                <Diag label="Install prompt beforeinstallprompt" value={diagnostics.installPromptBeforeinstallpromptAvailable === null ? "Not checked" : diagnostics.installPromptBeforeinstallpromptAvailable ? "Yes" : "No"} />
+                <Diag label="Install prompt neverShow" value={diagnostics.installPromptNeverShowVal === null ? "Not checked" : diagnostics.installPromptNeverShowVal ? "Yes" : "No"} />
+                <Diag label="Install prompt dismissedUntil" value={diagnostics.installPromptDismissedUntilVal || "None"} />
+                <Diag label="Install prompt sessionDismissed" value={diagnostics.installPromptSessionDismissed === null ? "Not checked" : diagnostics.installPromptSessionDismissed ? "Yes" : "No"} />
+                <Diag label="Install prompt current route" value={diagnostics.installPromptCurrentRoute || "None"} />
+                <Diag label="Install prompt reason hidden" value={diagnostics.installPromptReasonHidden || "None"} />
               </dl>
               {saveDiagnosticsRows.length > 0 && (
                 <div className="mt-4 border-t border-cream-200 pt-3">

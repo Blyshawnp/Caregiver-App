@@ -32,6 +32,23 @@ export function getServerVapidStatus(): ServerVapidStatus {
     };
   }
 
+  // Validate subject: no spaces, starts with mailto: or https:
+  const isSubjectValid =
+    subject.trim() === subject &&
+    !/\s/.test(subject) &&
+    (subject.startsWith("mailto:") || subject.startsWith("https:"));
+
+  if (!isSubjectValid) {
+    return {
+      publicKeyPresent: true,
+      privateKeyPresent: true,
+      subjectPresent: true,
+      serverPublicKeyFingerprint: getVapidFingerprint(publicKey),
+      keyPairValid: false,
+      error: "invalid_vapid_subject",
+    };
+  }
+
   const validation = validateVapidKeyPair(publicKey, privateKey);
   return {
     publicKeyPresent: true,

@@ -209,7 +209,13 @@ export async function sendPushToSubscription(
   admin: SupabaseAdmin,
   subscription: PushSubscriptionRow,
   payload: Record<string, unknown>
-): Promise<PushDeliveryResult> {
+): Promise<PushDeliveryResult & {
+  providerStatus?: number;
+  providerBodySummary?: string;
+  providerEndpointOrigin?: string;
+  sendClassification?: string;
+  suggestedNextStep?: string;
+}> {
   const vapid = getServerVapidDetails();
 
   if (!vapid.details) {
@@ -240,6 +246,16 @@ export async function sendPushToSubscription(
       .eq("id", subscription.id);
   }
 
+  // Determine suggested next step
+  let suggestedNextStep = "Check network status or try again.";
+  if (result.classification === "expired_or_gone") {
+    suggestedNextStep = "The subscription is expired. Refresh notifications or re-enable alerts on this device.";
+  } else if (result.classification === "subscription_invalid") {
+    suggestedNextStep = "The subscription payload is invalid. Refresh notifications to create a new subscription.";
+  } else if (result.classification === "fcm_403" || result.classification === "vapid_auth_rejected") {
+    suggestedNextStep = "VAPID configuration or signature mismatch. Verify VAPID_PRIVATE_KEY and NEXT_PUBLIC_VAPID_PUBLIC_KEY match.";
+  }
+
   return {
     attempted: 1,
     delivered: result.ok ? 1 : 0,
@@ -251,11 +267,16 @@ export async function sendPushToSubscription(
       : [
           {
             status: result.status,
-            endpointHost: new URL(subscription.endpoint).host,
+            endpointHost: result.endpointHost,
             reason: reasonForPushStatus(result.status),
           },
         ],
     configuration: vapid.status,
+    providerStatus: result.status,
+    providerBodySummary: result.bodyText,
+    providerEndpointOrigin: result.endpointOrigin,
+    sendClassification: result.classification,
+    suggestedNextStep,
   };
 }
 
@@ -291,31 +312,71 @@ async function sendWebPush(
       subscription.p256dh,
       subscription.auth
     );
-  } catch {
-    return new Response("Invalid push subscription keys", {
+  } catch (err: any) {
+    return {
+      ok: false,
       status: 400,
-      statusText: "Invalid Subscription",
-    });
+      bodyText: "Invalid push subscription keys",
+      endpointOrigin: endpoint.origin,
+      endpointHost: endpoint.host,
+      classification: "subscription_invalid",
+    };
   }
 
   const jwt = createVapidJwt(endpoint.origin, vapid.subject, vapid.publicKey, vapid.privateKey);
 
-  const response = await fetch(subscription.endpoint, {
-    method: "POST",
-    headers: {
-      TTL: "2419200",
-      "Content-Encoding": "aes128gcm",
-      "Content-Type": "application/octet-stream",
-      Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
-      Urgency:
-        payload.sound === "urgent" || payload.sound === "urgent_alert"
-          ? "high"
-          : "normal",
-    },
-    body: new Uint8Array(body),
-  });
+  try {
+    const response = await fetch(subscription.endpoint, {
+      method: "POST",
+      headers: {
+        TTL: "2419200",
+        "Content-Encoding": "aes128gcm",
+        "Content-Type": "application/octet-stream",
+        Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
+        Urgency:
+          payload.sound === "urgent" || payload.sound === "urgent_alert"
+            ? "high"
+            : "normal",
+      },
+      body: new Uint8Array(body),
+    });
 
-  return response;
+    const bodyText = await response.text().catch(() => "");
+    
+    // Classify error
+    let classification = "unknown_provider_error";
+    if (response.ok) {
+      classification = "success";
+    } else if (response.status === 404 || response.status === 410) {
+      classification = "expired_or_gone";
+    } else if (response.status === 400) {
+      classification = "subscription_invalid";
+    } else if (response.status === 401 || response.status === 403) {
+      if (endpoint.host.includes("fcm.googleapis.com")) {
+        classification = "fcm_403";
+      } else {
+        classification = "vapid_auth_rejected";
+      }
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      bodyText,
+      endpointOrigin: endpoint.origin,
+      endpointHost: endpoint.host,
+      classification,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 500,
+      bodyText: err.message || "Network error",
+      endpointOrigin: endpoint.origin,
+      endpointHost: endpoint.host,
+      classification: "unknown_provider_error",
+    };
+  }
 }
 
 function reasonForPushStatus(status: number) {
@@ -390,7 +451,7 @@ function createVapidJwt(
       crv: "P-256",
       x: base64UrlEncode(publicKey.subarray(1, 33)),
       y: base64UrlEncode(publicKey.subarray(33, 65)),
-      d: privateKeyBase64Url,
+      d: base64UrlEncode(base64UrlToBuffer(privateKeyBase64Url)),
     },
     format: "jwk",
   });
@@ -412,14 +473,35 @@ function hmac(key: Buffer, data: Buffer) {
 }
 
 function derToJose(signature: Buffer) {
-  let offset = 3;
-  let rLength = signature[offset - 1];
-  if (rLength === 33) offset += 1;
-  const r = signature.subarray(offset, offset + Math.min(rLength, 32));
-  offset += rLength + 2;
-  let sLength = signature[offset - 1];
-  if (sLength === 33) offset += 1;
-  const s = signature.subarray(offset, offset + Math.min(sLength, 32));
+  let offset = 0;
+  if (signature[0] !== 0x30) return "";
+  offset += 2; // skip 0x30 and length
+  
+  if (signature[offset] !== 0x02) return "";
+  offset += 1;
+  const rLen = signature[offset];
+  offset += 1;
+  let rStart = offset;
+  let rLenActual = rLen;
+  if (signature[rStart] === 0x00) {
+    rStart += 1;
+    rLenActual -= 1;
+  }
+  const r = signature.subarray(rStart, rStart + rLenActual);
+  offset += rLen;
+  
+  if (signature[offset] !== 0x02) return "";
+  offset += 1;
+  const sLen = signature[offset];
+  offset += 1;
+  let sStart = offset;
+  let sLenActual = sLen;
+  if (signature[sStart] === 0x00) {
+    sStart += 1;
+    sLenActual -= 1;
+  }
+  const s = signature.subarray(sStart, sStart + sLenActual);
+  
   return base64UrlEncode(Buffer.concat([leftPad(r, 32), leftPad(s, 32)]));
 }
 

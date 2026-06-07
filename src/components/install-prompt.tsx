@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export const PWA_INSTALL_NEVER_SHOW_KEY = "caregiver-app:pwa-install-never-show";
 export const PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver-app:pwa-install-dismissed-until";
@@ -33,9 +34,17 @@ function isStandalone(): boolean {
   return window.matchMedia("(display-mode: standalone)").matches;
 }
 
-function isPromptSuppressed(): boolean {
+function isPromptSuppressed(pathname?: string | null): boolean {
   if (typeof window === "undefined") return true;
   try {
+    // 7. Do not show install prompt if installed PWA mode is detected
+    if (isStandalone()) return true;
+
+    // 6. Do not show install prompt on the Notifications page
+    if (pathname === "/me/notifications" || pathname?.endsWith("/notifications")) {
+      return true;
+    }
+
     const neverShow =
       localStorage.getItem(PWA_INSTALL_NEVER_SHOW_KEY) ??
       localStorage.getItem(LEGACY_PWA_INSTALL_NEVER_SHOW_KEY);
@@ -69,20 +78,37 @@ function isPromptSuppressed(): boolean {
 }
 
 export default function InstallPrompt() {
+  const pathname = usePathname();
   const [platform, setPlatform] = useState<Platform>("unsupported");
   const [show, setShow] = useState(false);
   const [showIosSheet, setShowIosSheet] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
+  // Register beforeinstallprompt globally once on mount
   useEffect(() => {
     const p = detectPlatform();
     setPlatform(p);
 
-    if (isStandalone()) return;
-    if (isPromptSuppressed()) return;
+    if (p === "android" || p === "desktop") {
+      const handler = (e: Event) => {
+        e.preventDefault();
+        setDeferredPrompt(e as BeforeInstallPromptEvent);
+      };
+      window.addEventListener("beforeinstallprompt", handler);
+      return () => window.removeEventListener("beforeinstallprompt", handler);
+    }
+  }, []);
 
-    if (p === "ios") {
+  // Handle display logic based on pathname, platform, deferred prompt, and suppression state
+  useEffect(() => {
+    if (isPromptSuppressed(pathname)) {
+      if (show) setShow(false);
+      return;
+    }
+
+    if (platform === "ios" && !show) {
       const t = setTimeout(() => {
+        if (isPromptSuppressed(pathname)) return;
         setShow(true);
         try {
           localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
@@ -91,19 +117,13 @@ export default function InstallPrompt() {
       return () => clearTimeout(t);
     }
 
-    if (p === "android" || p === "desktop") {
-      const handler = (e: Event) => {
-        e.preventDefault();
-        setDeferredPrompt(e as BeforeInstallPromptEvent);
-        setShow(true);
-        try {
-          localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
-        } catch {}
-      };
-      window.addEventListener("beforeinstallprompt", handler);
-      return () => window.removeEventListener("beforeinstallprompt", handler);
+    if ((platform === "android" || platform === "desktop") && deferredPrompt && !show) {
+      setShow(true);
+      try {
+        localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
+      } catch {}
     }
-  }, []);
+  }, [pathname, platform, deferredPrompt, show]);
 
   function handleNotNow() {
     setShow(false);
@@ -146,6 +166,7 @@ export default function InstallPrompt() {
     }
   }
 
+  if (isPromptSuppressed(pathname)) return null;
   if (!show && !showIosSheet) return null;
 
   return (

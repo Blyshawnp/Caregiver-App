@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushToSubscription } from "@/lib/web-push";
 import { getServerVapidStatus, type ServerVapidStatus } from "@/lib/vapid-server";
+import { createHash } from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ type TestPushRequest = {
   p256dh?: string;
   auth?: string;
   browserSubscriptionExists?: boolean;
+  appPublicKeyFingerprint?: string;
 };
 
 type PushSubscriptionRow = {
@@ -29,6 +31,11 @@ type PushSubscriptionRow = {
   vapid_key_fingerprint: string | null;
   updated_at: string | null;
 };
+
+function shortHash(value?: string | null) {
+  if (!value) return null;
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
 
 export async function POST(request: Request) {
   try {
@@ -49,16 +56,13 @@ export async function POST(request: Request) {
       payload.endpoint
     );
 
-    if (!lookup.subscription) {
-      const savedSubscriptionInactive =
-        lookup.diagnostics?.savedSubscriptionInactive === true ||
-        lookup.diagnostics?.exactEndpointActive === false;
+    const subscription = lookup.subscription;
+
+    if (!subscription) {
       return NextResponse.json(
         {
-          error: savedSubscriptionInactive
-            ? "The app saved this device's subscription, but it is marked inactive. Refresh should reactivate it."
-            : "No active matching push subscription was found for this device. Refresh notifications to save this device's current subscription.",
-          code: savedSubscriptionInactive ? "saved_subscription_inactive" : "no_active_matching_subscription",
+          error: "No matching push subscription was found for this device. Refresh notifications to save this device's current subscription.",
+          code: "no_active_matching_subscription",
           diagnostics: {
             browserSubscriptionExists: payload.browserSubscriptionExists ?? null,
             browserEndpointProvided: Boolean(payload.endpoint),
@@ -72,7 +76,29 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!lookup.subscription.p256dh || !lookup.subscription.auth) {
+    // Check is_active
+    if (!subscription.is_active) {
+      return NextResponse.json(
+        {
+          error: "The app saved this device's subscription, but it is marked inactive. Refresh should reactivate it.",
+          code: "saved_subscription_inactive",
+          diagnostics: {
+            browserSubscriptionExists: payload.browserSubscriptionExists ?? null,
+            browserEndpointProvided: Boolean(payload.endpoint),
+            deviceIdProvided: Boolean(payload.deviceId),
+            endpointProvided: Boolean(payload.endpoint),
+            serverRowExists: true,
+            serverRowActive: false,
+            serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            ...lookup.diagnostics,
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    // Check keys present
+    if (!subscription.p256dh || !subscription.auth) {
       return NextResponse.json(
         {
           error: "The saved push subscription is missing browser keys. Refresh notifications to save this device again.",
@@ -82,22 +108,23 @@ export async function POST(request: Request) {
             deviceIdProvided: Boolean(payload.deviceId),
             endpointProvided: Boolean(payload.endpoint),
             serverRowExists: true,
-            serverRowActive: lookup.subscription.is_active,
+            serverRowActive: subscription.is_active,
             subscriptionKeysPresent: false,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            ...lookup.diagnostics,
           },
         },
         { status: 409 }
       );
     }
 
+    // Check keys match
     const currentP256dh = payload.keys?.p256dh || payload.p256dh || null;
     const currentAuth = payload.keys?.auth || payload.auth || null;
     const browserKeysProvided = Boolean(currentP256dh && currentAuth);
-    const browserKeysMatch =
-      browserKeysProvided &&
-      lookup.subscription.p256dh === currentP256dh &&
-      lookup.subscription.auth === currentAuth;
+    const p256dhHashMatch = currentP256dh ? shortHash(subscription.p256dh) === shortHash(currentP256dh) : false;
+    const authHashMatch = currentAuth ? shortHash(subscription.auth) === shortHash(currentAuth) : false;
+    const browserKeysMatch = browserKeysProvided && p256dhHashMatch && authHashMatch;
 
     if (browserKeysProvided && !browserKeysMatch) {
       return NextResponse.json(
@@ -110,17 +137,21 @@ export async function POST(request: Request) {
             deviceIdProvided: Boolean(payload.deviceId),
             endpointProvided: Boolean(payload.endpoint),
             serverRowExists: true,
-            serverRowActive: lookup.subscription.is_active,
-            endpointMatch: payload.endpoint ? lookup.subscription.endpoint === payload.endpoint : null,
+            serverRowActive: subscription.is_active,
+            endpointMatch: payload.endpoint ? subscription.endpoint === payload.endpoint : null,
             subscriptionKeysPresent: true,
             subscriptionKeysMatch: false,
+            p256dhHashMatches: p256dhHashMatch,
+            authHashMatches: authHashMatch,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            ...lookup.diagnostics,
           },
         },
         { status: 409 }
       );
     }
 
+    // Check server VAPID configuration
     if (!serverVapid.publicKeyPresent || !serverVapid.privateKeyPresent || !serverVapid.subjectPresent) {
       return NextResponse.json(
         {
@@ -137,8 +168,10 @@ export async function POST(request: Request) {
     if (!serverVapid.keyPairValid) {
       return NextResponse.json(
         {
-          error: "The server notification key appears to be different from the app notification key. The app owner needs to check VAPID environment variables and redeploy.",
-          code: "server_vapid_mismatch",
+          error: serverVapid.error === "invalid_vapid_subject"
+            ? "Server VAPID subject is invalid (must start with mailto: or https: and contain no spaces)."
+            : "The server notification key appears to be different from the app notification key. The app owner needs to check VAPID environment variables and redeploy.",
+          code: serverVapid.error === "invalid_vapid_subject" ? "invalid_vapid_subject" : "server_vapid_mismatch",
           diagnostics: {
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
           },
@@ -147,31 +180,34 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      lookup.subscription.vapid_key_fingerprint &&
-      serverVapid.serverPublicKeyFingerprint &&
-      lookup.subscription.vapid_key_fingerprint !== serverVapid.serverPublicKeyFingerprint
-    ) {
+    // Verify fingerprint match
+    const fingerprintMatch = subscription.vapid_key_fingerprint && serverVapid.serverPublicKeyFingerprint && subscription.vapid_key_fingerprint === serverVapid.serverPublicKeyFingerprint;
+    const browserAppKeyMatch = payload.appPublicKeyFingerprint ? payload.appPublicKeyFingerprint === serverVapid.serverPublicKeyFingerprint : true;
+
+    if (!fingerprintMatch) {
       return NextResponse.json(
         {
           error: "This device subscription was created with a different app notification key. Refresh notifications on this device.",
           code: "stale_subscription_key",
           diagnostics: {
-            savedSubscriptionFingerprint: lookup.subscription.vapid_key_fingerprint,
+            savedSubscriptionFingerprint: subscription.vapid_key_fingerprint,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            fingerprintMatches: false,
+            ...lookup.diagnostics,
           },
         },
         { status: 409 }
       );
     }
 
+    // Send the push
     const result = await sendPushToSubscription(
       admin,
       {
-        id: lookup.subscription.id,
-        endpoint: lookup.subscription.endpoint,
-        p256dh: lookup.subscription.p256dh,
-        auth: lookup.subscription.auth,
+        id: subscription.id,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.p256dh,
+        auth: subscription.auth,
       },
       {
         title: "Test notification",
@@ -187,7 +223,17 @@ export async function POST(request: Request) {
         {
           error: "No active push subscription was found for this device. Refresh subscription or enable alerts again.",
           code: "no_subscription",
-          diagnostics: result,
+          diagnostics: {
+            ...result,
+            selectedRowId: subscription.id,
+            rowActive: subscription.is_active,
+            endpointHash: shortHash(subscription.endpoint),
+            p256dhHashMatches: p256dhHashMatch,
+            authHashMatches: authHashMatch,
+            fingerprintMatches: fingerprintMatch,
+            senderRuntime: "Vercel route handler",
+            vapidSubjectValid: true,
+          },
         },
         { status: 409 }
       );
@@ -197,37 +243,79 @@ export async function POST(request: Request) {
         {
           error: "Push notifications are not configured on the server.",
           code: "server_push_not_configured",
-          diagnostics: result,
+          diagnostics: {
+            ...result,
+            selectedRowId: subscription.id,
+            rowActive: subscription.is_active,
+            endpointHash: shortHash(subscription.endpoint),
+            p256dhHashMatches: p256dhHashMatch,
+            authHashMatches: authHashMatch,
+            fingerprintMatches: fingerprintMatch,
+            senderRuntime: "Vercel route handler",
+            vapidSubjectValid: false,
+          },
         },
         { status: 500 }
       );
     }
+
     if (result.delivered === 0) {
       const firstFailure = result.failures[0];
       const status = firstFailure?.status;
       
       let errorCode = "rejected_by_push_service";
+      let errorMsg = describePushFailure(status, firstFailure?.reason, errorCode);
+
       if (status === 404 || status === 410) {
         errorCode = "expired_subscription";
       } else if (status === 401 || status === 403) {
-        errorCode =
-          browserKeysProvided && browserKeysMatch && serverVapid.keyPairValid
-            ? "provider_rejected_subscription"
-            : "saved_subscription_keys_stale";
+        if (status === 403 && subscription.is_active && browserKeysMatch && browserAppKeyMatch && fingerprintMatch) {
+          errorCode = "push_provider_403_after_valid_subscription";
+          errorMsg = "The browser push provider rejected the signed push request. The saved subscription looks valid, so the send path or VAPID send configuration needs inspection.";
+        } else {
+          errorCode =
+            browserKeysProvided && browserKeysMatch && serverVapid.keyPairValid
+              ? "provider_rejected_subscription"
+              : "saved_subscription_keys_stale";
+          errorMsg = describePushFailure(status, firstFailure?.reason, errorCode);
+        }
       }
 
-      const error = describePushFailure(status, firstFailure?.reason, errorCode);
       return NextResponse.json(
         {
-          error,
+          error: errorMsg,
           code: errorCode,
-          diagnostics: result,
+          diagnostics: {
+            ...result,
+            selectedRowId: subscription.id,
+            rowActive: subscription.is_active,
+            endpointHash: shortHash(subscription.endpoint),
+            p256dhHashMatches: p256dhHashMatch,
+            authHashMatches: authHashMatch,
+            fingerprintMatches: fingerprintMatch,
+            senderRuntime: "Vercel route handler",
+            vapidSubjectValid: true,
+          },
         },
         { status: 502 }
       );
     }
 
-    return NextResponse.json({ ok: true, code: "success", diagnostics: result });
+    return NextResponse.json({
+      ok: true,
+      code: "success",
+      diagnostics: {
+        ...result,
+        selectedRowId: subscription.id,
+        rowActive: subscription.is_active,
+        endpointHash: shortHash(subscription.endpoint),
+        p256dhHashMatches: p256dhHashMatch,
+        authHashMatches: authHashMatch,
+        fingerprintMatches: fingerprintMatch,
+        senderRuntime: "Vercel route handler",
+        vapidSubjectValid: true,
+      }
+    });
   } catch (err: any) {
     console.error("[push-test] error", err);
     return NextResponse.json(
@@ -296,10 +384,6 @@ async function findCurrentDeviceSubscription(
       diagnostics.activeRowsForDevice = deviceRows?.filter((item) => item.is_active).length ?? 0;
     }
 
-    if (!row || !row.is_active || !row.p256dh || !row.auth) {
-      return { subscription: null, diagnostics };
-    }
-
     return { subscription: row, diagnostics };
   }
 
@@ -366,6 +450,8 @@ async function findCurrentDeviceSubscription(
       row && endpoint && row.endpoint !== endpoint
     );
     diagnostics.serverRowMissingKeys = Boolean(row && (!row.p256dh || !row.auth));
+    
+    return { subscription: row, diagnostics };
   }
 
   return { subscription: null, diagnostics };
@@ -387,9 +473,10 @@ function describePushFailure(status?: number, reason?: string, code?: string) {
   return reason || "The browser push service did not accept the test notification. Check OS/browser notification settings, Focus or Do Not Disturb, battery optimization, and installed PWA state.";
 }
 
-function describeFingerprintStatus(fingerprint: string | null) {
+function describeFingerprintStatus(fingerprint: string | null, serverFingerprint?: string | null) {
   if (!fingerprint) return "missing";
   if (fingerprint === "invalid_key") return "invalid_key";
+  if (serverFingerprint && fingerprint === serverFingerprint) return "match";
   return "present";
 }
 

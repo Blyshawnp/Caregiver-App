@@ -203,6 +203,12 @@ export async function POST(request: Request) {
 
     // Send the push
     const testPushId = payload.testPushId || `test_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${Math.random().toString(36).slice(2, 9)}`;
+    
+    const delay = (payload as any).delay ? parseInt(String((payload as any).delay), 10) : 0;
+    if (delay > 0 && delay <= 15) {
+      await new Promise(resolve => setTimeout(resolve, delay * 1000));
+    }
+
     const result = await sendPushToSubscription(
       admin,
       {
@@ -219,6 +225,9 @@ export async function POST(request: Request) {
         type: "test",
         testPushId: testPushId,
         sound: "normal",
+        ttl: 60,
+        urgency: "high",
+        topic: "test-push",
       }
     );
 
@@ -313,6 +322,7 @@ export async function POST(request: Request) {
             ttl: result.ttl,
             urgency: result.urgency,
             contentEncoding: result.contentEncoding,
+            topic: result.topic,
             selectedRowIdEqualsBrowserRowId: payload.deviceId ? subscription.device_id === payload.deviceId : false,
             selectedEndpointHashEqualsBrowserEndpointHash: payload.endpoint ? subscription.endpoint === payload.endpoint : false,
             selectedP256dhHashEqualsBrowserP256dhHash: p256dhHashMatch,
@@ -349,6 +359,7 @@ export async function POST(request: Request) {
         ttl: result.ttl,
         urgency: result.urgency,
         contentEncoding: result.contentEncoding,
+        topic: result.topic,
         selectedRowIdEqualsBrowserRowId: payload.deviceId ? subscription.device_id === payload.deviceId : false,
         selectedEndpointHashEqualsBrowserEndpointHash: payload.endpoint ? subscription.endpoint === payload.endpoint : false,
         selectedP256dhHashEqualsBrowserP256dhHash: p256dhHashMatch,

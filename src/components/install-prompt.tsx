@@ -156,9 +156,11 @@ export default function InstallPrompt() {
   // Handle display logic based on pathname, platform, deferred prompt, suppression state, and authentication
   useEffect(() => {
     if (!isAuthenticated || isPromptSuppressed(pathname)) {
-      if (show) setShow(false);
+      setShow(false);
       return;
     }
+
+    if (show) return;
 
     // Delay slightly (2 seconds) after page load and auth resolution
     const t = setTimeout(() => {
@@ -173,13 +175,11 @@ export default function InstallPrompt() {
       setShow(true);
       try {
         localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
-        // Ensure it doesn't repeatedly reappear in the same session on page changes/reloads
-        sessionStorage.setItem(PWA_INSTALL_DISMISSED_SESSION_KEY, "true");
       } catch {}
     }, 2000);
 
     return () => clearTimeout(t);
-  }, [pathname, platform, deferredPrompt, show, isAuthenticated]);
+  }, [pathname, platform, deferredPrompt, isAuthenticated, show]);
 
   // Keep advanced diagnostics written to localStorage so the Notifications settings page can read it
   useEffect(() => {

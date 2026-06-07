@@ -17,6 +17,8 @@ const STATIC_ASSETS = [
   "/favicon-32.png",
 ];
 
+const SW_VERSION = "20260607.01";
+
 // Helper for saving service worker trace logs
 async function saveSwTrace(traceData) {
   try {
@@ -33,6 +35,7 @@ async function saveSwTrace(traceData) {
     const newData = {
       ...existingData,
       ...traceData,
+      swVersion: SW_VERSION,
       lastUpdateTime: new Date().toISOString(),
     };
     await cache.put(
@@ -45,6 +48,13 @@ async function saveSwTrace(traceData) {
     console.warn("[sw-trace] failed to save trace", err);
   }
 }
+
+// Message listener to trigger skipWaiting
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
 
 // Install: pre-cache static assets
 self.addEventListener("install", (event) => {

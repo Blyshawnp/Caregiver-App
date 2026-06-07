@@ -135,7 +135,22 @@ type PushDiagnostics = {
   lastTestPushTtl: string | null;
   lastTestPushUrgency: string | null;
   lastTestPushContentEncoding: string | null;
+
+  // Trace storage and registration matching (Phase 2 & 3 & 4)
+  swVersion: string;
+  localTestTraceWriteTime: string;
+  localTestTraceReadTime: string;
+  traceStorageType: string;
+  traceStorageKey: string;
+  traceReadSuccess: string;
+  traceWriteSuccess: string;
+  readySubMatchesActiveSub: string;
+  readySubMatchesDbSub: string;
+  controllerMatchesActive: string;
+  swRegistrationsList: any[];
 };
+
+const APP_VERSION = "20260607.01";
 
 export default function NotificationSettings({ 
   initialPreferences 
@@ -267,6 +282,19 @@ export default function NotificationSettings({
     lastTestPushTtl: null,
     lastTestPushUrgency: null,
     lastTestPushContentEncoding: null,
+
+    // Trace storage and registration matching (Phase 2 & 3 & 4)
+    swVersion: "None",
+    localTestTraceWriteTime: "Not run",
+    localTestTraceReadTime: "Not run",
+    traceStorageType: "Cache Storage",
+    traceStorageKey: "sw-trace-cache / https://caregiver-app/sw-trace.json",
+    traceReadSuccess: "Not run",
+    traceWriteSuccess: "Not run",
+    readySubMatchesActiveSub: "Not checked",
+    readySubMatchesDbSub: "Not checked",
+    controllerMatchesActive: "Not checked",
+    swRegistrationsList: [],
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
@@ -332,8 +360,7 @@ export default function NotificationSettings({
 
     updateSwStatus();
     const handleControllerChange = () => {
-      updateSwStatus();
-      refreshDiagnostics();
+      window.location.reload();
     };
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
     return () => {
@@ -488,7 +515,73 @@ export default function NotificationSettings({
     }
   }, [deviceEnabled]);
 
-  async function handleSendTest() {
+  async function handleUpdateServiceWorker() {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/");
+      if (reg) {
+        await reg.update();
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        } else {
+          alert("Service worker update requested. If it is already updating, it will reload automatically.");
+        }
+      }
+    } catch (err) {
+      alert("Failed to update service worker: " + String(err));
+    }
+  }
+
+  async function runTestPushPolling(acceptedId: string) {
+    setTestOutcome("provider_accepted_waiting_for_sw");
+    setTestMessage("Push provider accepted the message. Waiting for this browser’s service worker to report receiving it.");
+    await refreshDiagnostics();
+
+    const startTime = Date.now();
+    const interval = setInterval(async () => {
+      const secondsChecked = Math.round((Date.now() - startTime) / 1000);
+      
+      let swTrace: Record<string, any> = {};
+      if (typeof window !== "undefined" && "caches" in window) {
+        try {
+          const cache = await window.caches.open("sw-trace-cache");
+          const match = await cache.match("https://caregiver-app/sw-trace.json");
+          if (match) {
+            swTrace = await match.json().catch(() => ({}));
+          }
+        } catch {}
+      }
+
+      const received = swTrace.receivedTestPushId === acceptedId;
+      const statusText = received ? "received" : "not received";
+
+      setTestMessage(`Waiting for service worker push event... checked ${secondsChecked} seconds (Status: ${statusText})`);
+
+      if (received) {
+        clearInterval(interval);
+        setTestOutcome("sw_received_after_delay");
+        
+        if (swTrace.lastShowNotificationResult === "success") {
+          setTestOutcome("sw_received_show_success");
+          setTestMessage(`Test notification received after ${secondsChecked} seconds and displayed successfully!`);
+        } else {
+          setTestOutcome("sw_received_show_failed");
+          setTestMessage(`Test notification received after ${secondsChecked} seconds, but the service worker failed to display it (Error: ${swTrace.lastShowNotificationError || "Unknown error"}).`);
+        }
+        await refreshDiagnostics();
+        return;
+      }
+
+      if (Date.now() - startTime > 60000) {
+        clearInterval(interval);
+        setTestOutcome("provider_accepted_but_no_sw_event_after_60s");
+        setTestMessage("Push provider accepted the message, but this browser did not report a matching service worker push event for testPushId within 60 seconds. Try with the app closed, then opened, and check OS/browser notification settings.");
+        await refreshDiagnostics();
+      }
+    }, 2000);
+  }
+
+  async function handleSendTest(options?: { delay?: number }) {
     setTestLoading(true);
     setTestMessage(null);
     setTestOutcome(null);
@@ -500,7 +593,13 @@ export default function NotificationSettings({
       }
       const testPushId = `test_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${Math.random().toString(36).slice(2, 9)}`;
       localStorage.setItem("pwa_last_requested_test_push_id", testPushId);
+      localStorage.setItem("pwa_last_requested_test_push_time", String(Date.now()));
       await refreshDiagnostics();
+
+      const delay = options?.delay ?? 0;
+      if (delay > 0) {
+        setTestMessage(`Please close or minimize the app immediately. Test push will be sent in ${delay} seconds.`);
+      }
 
       const res = await fetch("/api/push/test", {
         method: "POST",
@@ -512,6 +611,7 @@ export default function NotificationSettings({
           browserSubscriptionExists: Boolean(currentSubscription),
           appPublicKeyFingerprint: getPushSubscriptionApplicationServerKeyFingerprint(currentSubscription),
           testPushId,
+          delay,
         }),
       });
       const d = await res.json().catch(() => null);
@@ -524,44 +624,7 @@ export default function NotificationSettings({
           localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(d.diagnostics));
         }
         
-        setTestOutcome("provider_accepted_waiting_for_sw");
-        setTestMessage("Push provider accepted the message. Waiting for this browser’s service worker to report receiving it.");
-        await refreshDiagnostics();
-
-        // Start polling for service worker trace correlation match
-        const startTime = Date.now();
-        const interval = setInterval(async () => {
-          let swTrace: Record<string, any> = {};
-          if (typeof window !== "undefined" && "caches" in window) {
-            try {
-              const cache = await window.caches.open("sw-trace-cache");
-              const match = await cache.match("https://caregiver-app/sw-trace.json");
-              if (match) {
-                swTrace = await match.json().catch(() => ({}));
-              }
-            } catch {}
-          }
-
-          if (swTrace.receivedTestPushId === acceptedId) {
-            clearInterval(interval);
-            if (swTrace.lastShowNotificationResult === "success") {
-              setTestOutcome("sw_received_show_success");
-              setTestMessage("Test notification received and displayed successfully!");
-            } else {
-              setTestOutcome("sw_received_show_failed");
-              setTestMessage(`Test notification received, but the service worker failed to display it (Error: ${swTrace.lastShowNotificationError || "Unknown error"}).`);
-            }
-            await refreshDiagnostics();
-            return;
-          }
-
-          if (Date.now() - startTime > 10000) {
-            clearInterval(interval);
-            setTestOutcome("provider_accepted_but_no_sw_event");
-            setTestMessage("Push provider accepted the message, but this browser did not report a matching service worker push event for testPushId within 10 seconds. Try with the app closed, then opened, and check OS/browser notification settings.");
-            await refreshDiagnostics();
-          }
-        }, 1500);
+        await runTestPushPolling(acceptedId);
 
       } else {
         const errCode = d?.code || "unknown_error";
@@ -607,6 +670,7 @@ export default function NotificationSettings({
 
       const testPushId = `test_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${Math.random().toString(36).slice(2, 9)}`;
       localStorage.setItem("pwa_last_requested_test_push_id", testPushId);
+      localStorage.setItem("pwa_last_requested_test_push_time", String(Date.now()));
 
       const testRes = await fetch("/api/push/test", {
         method: "POST",
@@ -630,44 +694,7 @@ export default function NotificationSettings({
           localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(testData.diagnostics));
         }
 
-        setTestOutcome("provider_accepted_waiting_for_sw");
-        setTestMessage("Push provider accepted the message. Waiting for this browser’s service worker to report receiving it.");
-        await refreshDiagnostics();
-
-        // Start polling for service worker trace correlation match
-        const startTime = Date.now();
-        const interval = setInterval(async () => {
-          let swTrace: Record<string, any> = {};
-          if (typeof window !== "undefined" && "caches" in window) {
-            try {
-              const cache = await window.caches.open("sw-trace-cache");
-              const match = await cache.match("https://caregiver-app/sw-trace.json");
-              if (match) {
-                swTrace = await match.json().catch(() => ({}));
-              }
-            } catch {}
-          }
-
-          if (swTrace.receivedTestPushId === acceptedId) {
-            clearInterval(interval);
-            if (swTrace.lastShowNotificationResult === "success") {
-              setTestOutcome("sw_received_show_success");
-              setTestMessage("Test notification received and displayed successfully!");
-            } else {
-              setTestOutcome("sw_received_show_failed");
-              setTestMessage(`Test notification received, but the service worker failed to display it (Error: ${swTrace.lastShowNotificationError || "Unknown error"}).`);
-            }
-            await refreshDiagnostics();
-            return;
-          }
-
-          if (Date.now() - startTime > 10000) {
-            clearInterval(interval);
-            setTestOutcome("provider_accepted_but_no_sw_event");
-            setTestMessage("Push provider accepted the message, but this browser did not report a matching service worker push event for testPushId within 10 seconds. Try with the app closed, then opened, and check OS/browser notification settings.");
-            await refreshDiagnostics();
-          }
-        }, 1500);
+        await runTestPushPolling(acceptedId);
 
       } else {
         const errCode = testData?.code || "unknown_error";
@@ -716,6 +743,63 @@ export default function NotificationSettings({
       localStorage.setItem("pwa_local_test_attempted", new Date().toISOString());
       localStorage.setItem("pwa_local_test_result", "success");
       localStorage.removeItem("pwa_local_test_error");
+
+      // Phase 2: Trace Storage Shared Check
+      let writeSuccess = false;
+      let writeTime = "";
+      try {
+        if ("caches" in window) {
+          const cache = await window.caches.open("sw-trace-cache");
+          const existingResponse = await cache.match("https://caregiver-app/sw-trace.json");
+          let existingData = {};
+          if (existingResponse) {
+            existingData = await existingResponse.json().catch(() => ({}));
+          }
+          writeTime = new Date().toISOString();
+          const newData = {
+            ...existingData,
+            localTestTraceWriteTime: writeTime,
+            lastUpdateTime: writeTime,
+          };
+          await cache.put(
+            "https://caregiver-app/sw-trace.json",
+            new Response(JSON.stringify(newData), {
+              headers: { "Content-Type": "application/json" },
+            })
+          );
+          writeSuccess = true;
+          localStorage.setItem("pwa_local_trace_write_time", writeTime);
+          localStorage.setItem("pwa_local_trace_write_success", "true");
+        } else {
+          localStorage.setItem("pwa_local_trace_write_success", "false");
+        }
+      } catch (err) {
+        console.error("Local display test trace write error:", err);
+        localStorage.setItem("pwa_local_trace_write_success", "false");
+      }
+
+      let readSuccess = false;
+      let readTime = "";
+      try {
+        if ("caches" in window) {
+          const cache = await window.caches.open("sw-trace-cache");
+          readTime = new Date().toISOString();
+          const match = await cache.match("https://caregiver-app/sw-trace.json");
+          if (match) {
+            const data = await match.json().catch(() => ({}));
+            if (data.localTestTraceWriteTime === writeTime) {
+              readSuccess = true;
+            }
+          }
+          localStorage.setItem("pwa_local_trace_read_time", readTime);
+          localStorage.setItem("pwa_local_trace_read_success", readSuccess ? "true" : "false");
+        } else {
+          localStorage.setItem("pwa_local_trace_read_success", "false");
+        }
+      } catch (err) {
+        console.error("Local display test trace read error:", err);
+        localStorage.setItem("pwa_local_trace_read_success", "false");
+      }
 
       setLocalTestMessage(
         "Local notification display request sent successfully! If it did not appear, check Windows/Chrome notification settings."
@@ -813,6 +897,12 @@ export default function NotificationSettings({
     const localResult = localStorage.getItem("pwa_local_test_result") || "Not run";
     const localError = localStorage.getItem("pwa_local_test_error") || "None";
 
+    // Load Local display test trace results
+    const localTraceWriteTime = localStorage.getItem("pwa_local_trace_write_time") || "Not run";
+    const localTraceWriteSuccess = localStorage.getItem("pwa_local_trace_write_success") || "Not run";
+    const localTraceReadTime = localStorage.getItem("pwa_local_trace_read_time") || "Not run";
+    const localTraceReadSuccess = localStorage.getItem("pwa_local_trace_read_success") || "Not run";
+
     // Load Service Worker trace logs from caches
     let swTrace: Record<string, any> = {};
     if ("caches" in window) {
@@ -826,6 +916,8 @@ export default function NotificationSettings({
         console.warn("Could not read SW trace cache", err);
       }
     }
+
+    const swVersion = swTrace.swVersion || "None";
 
     // Load Install Prompt advanced diagnostics
     let installDiag: any = {};
@@ -857,6 +949,28 @@ export default function NotificationSettings({
     const readySub = readyReg ? await readyReg.pushManager.getSubscription() : null;
     const swReadyEndpointHash = readySub ? await clientShortHash(readySub.endpoint) : "None";
     const swReadyHasPushHandler = !!readyReg?.active;
+
+    const swRegistrationsList: any[] = [];
+    for (const r of regs) {
+      let rSub: PushSubscription | null = null;
+      try {
+        rSub = await r.pushManager.getSubscription();
+      } catch {}
+      swRegistrationsList.push({
+        scope: r.scope,
+        activeUrl: r.active?.scriptURL || "None",
+        installingUrl: r.installing?.scriptURL || "None",
+        waitingUrl: r.waiting?.scriptURL || "None",
+        hasSubscription: !!rSub,
+        endpointHash: rSub ? await clientShortHash(rSub.endpoint) : "None",
+      });
+    }
+
+    const readySubMatchesActiveSub = (sub && readySub) ? (sub.endpoint === readySub.endpoint) : (sub === null && readySub === null);
+    const readySubMatchesDbSub = (readySub && status?.endpoint) ? (readySub.endpoint === status.endpoint) : (readySub === null && !status?.endpoint);
+    const controllerMatchesActive = (navigator.serviceWorker?.controller && registration?.active) 
+      ? navigator.serviceWorker.controller.scriptURL === registration.active.scriptURL
+      : false;
 
     const auditMultipleRegistrations = swRegistrationsCount > 1 
       ? `Yes (${swRegistrationsCount} registrations detected)` 
@@ -907,6 +1021,32 @@ export default function NotificationSettings({
     const lastTestPushTtl = testDiag.ttl ?? null;
     const lastTestPushUrgency = testDiag.urgency ?? null;
     const lastTestPushContentEncoding = testDiag.contentEncoding ?? null;
+
+    // Auto recover test outcomes
+    const lastTestResult = localStorage.getItem("pwa_last_test_push_result");
+    if (lastTestResult === "success") {
+      if (providerAcceptedTestPushId !== "None" && lastSwReceivedTestPushId === providerAcceptedTestPushId) {
+        if (swTrace.lastShowNotificationResult === "success") {
+          setTestOutcome("sw_received_show_success");
+        } else {
+          setTestOutcome("sw_received_show_failed");
+        }
+      } else if (providerAcceptedTestPushId !== "None") {
+        const lastRequestedTime = localStorage.getItem("pwa_last_requested_test_push_time");
+        if (lastRequestedTime) {
+          const elapsed = Date.now() - parseInt(lastRequestedTime, 10);
+          if (elapsed > 60000) {
+            setTestOutcome("provider_accepted_but_no_sw_event_after_60s");
+          } else {
+            setTestOutcome("provider_accepted_waiting_for_sw");
+          }
+        }
+      }
+    } else if (lastTestResult && lastTestResult !== "success") {
+      setTestOutcome("provider_rejected");
+    } else if (localResult === "failed") {
+      setTestOutcome("local_display_failed");
+    }
 
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
@@ -1016,6 +1156,19 @@ export default function NotificationSettings({
       lastTestPushTtl,
       lastTestPushUrgency,
       lastTestPushContentEncoding,
+
+      // Trace Storage diagnostics (Phase 2 & 3 & 4)
+      swVersion,
+      localTestTraceWriteTime: localTraceWriteTime,
+      localTestTraceReadTime: localTraceReadTime,
+      traceStorageType: "Cache Storage",
+      traceStorageKey: "sw-trace-cache / https://caregiver-app/sw-trace.json",
+      traceReadSuccess: localTraceReadSuccess === "true" ? "Yes" : localTraceReadSuccess === "false" ? "No" : "Not run",
+      traceWriteSuccess: localTraceWriteSuccess === "true" ? "Yes" : localTraceWriteSuccess === "false" ? "No" : "Not run",
+      readySubMatchesActiveSub: readySubMatchesActiveSub ? "Yes" : "No",
+      readySubMatchesDbSub: readySubMatchesDbSub ? "Yes" : "No",
+      controllerMatchesActive: controllerMatchesActive ? "Yes" : "No",
+      swRegistrationsList,
     });
   }
 
@@ -1059,6 +1212,24 @@ export default function NotificationSettings({
     if (diagnostics.browserPermission === "denied") {
       return { label: "Permission denied", color: "text-terracotta-600 font-semibold" };
     }
+
+    const isSwStale = diagnostics.swVersion !== "None" && diagnostics.swVersion !== APP_VERSION;
+    if (isSwStale) {
+      return { label: "Service worker is stale. Refresh/update service worker.", color: "text-amber-600 font-semibold" };
+    }
+
+    if (diagnostics.traceWriteSuccess === "No" || diagnostics.traceReadSuccess === "No") {
+      return { label: "Trace storage failure", color: "text-terracotta-600 font-semibold" };
+    }
+
+    const hasScopeMismatch = diagnostics.swScope !== "None" && (
+      diagnostics.swScope !== "/" || 
+      (diagnostics.swControllerScriptUrl !== "None" && diagnostics.swControllerScriptUrl !== diagnostics.swScriptUrl)
+    );
+    if (hasScopeMismatch) {
+      return { label: "Service worker scope mismatch", color: "text-terracotta-600 font-semibold" };
+    }
+
     if (swStatus === "installing") {
       return { label: "Service worker installing", color: "text-amber-600 font-semibold animate-pulse" };
     }
@@ -1078,10 +1249,22 @@ export default function NotificationSettings({
       return { label: "Local display test failed", color: "text-terracotta-600 font-semibold" };
     }
 
-    const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
-    if (lastTest === "server_push_not_configured") {
-      return { label: "Server push not configured", color: "text-terracotta-600 font-semibold" };
+    if (testOutcome === "provider_rejected") {
+      return { label: "Provider rejected push", color: "text-terracotta-600 font-semibold" };
     }
+    if (testOutcome === "provider_accepted_waiting_for_sw") {
+      return { label: "Provider accepted, waiting for SW", color: "text-amber-600 font-semibold animate-pulse" };
+    }
+    if (testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") {
+      return { label: "Active, but remote delivery unconfirmed", color: "text-amber-600 font-semibold" };
+    }
+    if (testOutcome === "sw_received_show_failed") {
+      return { label: "Service worker received but display failed", color: "text-terracotta-600 font-semibold" };
+    }
+    if (testOutcome === "sw_received_show_success" || testOutcome === "sw_received_after_delay") {
+      return { label: "Active and test passed", color: "text-forest-700 font-semibold" };
+    }
+
     if (diagnostics.browserSubscriptionExists && diagnostics.subscriptionSaved && !diagnostics.subscriptionActive) {
       return { label: "Saved subscription inactive", color: "text-amber-600 font-semibold" };
     }
@@ -1094,6 +1277,7 @@ export default function NotificationSettings({
     if (diagnostics.savedSubscriptionFingerprintStatus === "invalid_key") {
       return { label: "Needs refresh", color: "text-amber-600 font-semibold" };
     }
+
     const hasMismatch =
       deviceEnabled &&
       diagnostics.subscriptionSaved &&
@@ -1104,10 +1288,6 @@ export default function NotificationSettings({
 
     if (
       hasMismatch ||
-      lastTest === "invalid_vapid_key" ||
-      lastTest === "saved_subscription_keys_stale" ||
-      lastTest === "provider_rejected_subscription" ||
-      lastTest === "expired_subscription" ||
       diagnostics.lastSubscriptionUpdate === "invalid_key"
     ) {
       return { label: "Needs refresh", color: "text-amber-600 font-semibold" };
@@ -1119,15 +1299,6 @@ export default function NotificationSettings({
 
     if (!deviceEnabled || !diagnostics.subscriptionSaved || !diagnostics.subscriptionActive) {
       return { label: "Not subscribed", color: "text-ink-500 font-semibold" };
-    }
-
-    if (lastTest === "success") {
-      const swTraceSuccess = diagnostics.lastSwShowNotificationResult === "success";
-      if (swTraceSuccess) {
-        return { label: "Active and test passed", color: "text-forest-700 font-semibold" };
-      } else {
-        return { label: "Active (provider accepted, visual display unconfirmed)", color: "text-amber-600 font-semibold" };
-      }
     }
 
     return { label: "Active but test not recently run", color: "text-forest-700 font-semibold" };
@@ -1278,13 +1449,26 @@ export default function NotificationSettings({
           </div>
         )}
 
+        {diagnostics.swVersion !== "None" && diagnostics.swVersion !== APP_VERSION && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-850 mb-4 space-y-2">
+            <p className="font-semibold">⚠️ Service worker is stale. Refresh/update service worker.</p>
+            <button
+              type="button"
+              onClick={handleUpdateServiceWorker}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-xl text-xs font-semibold transition"
+            >
+              Update service worker
+            </button>
+          </div>
+        )}
+
         {testOutcome && (
           <div className={`p-4 rounded-2xl border text-xs mb-4 space-y-1.5 ${
-            testOutcome === "sw_received_show_success"
+            testOutcome === "sw_received_show_success" || testOutcome === "sw_received_after_delay"
               ? "bg-forest-50 border-forest-200 text-forest-850"
               : testOutcome === "provider_accepted_waiting_for_sw"
               ? "bg-cream-50 border-cream-200 text-ink-750 animate-pulse"
-              : testOutcome === "provider_accepted_but_no_sw_event"
+              : testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event"
               ? "bg-amber-50 border-amber-200 text-amber-900"
               : testOutcome === "sw_received_show_failed" || testOutcome === "local_display_failed" || testOutcome === "provider_rejected"
               ? "bg-terracotta-50 border-terracotta-200 text-terracotta-900"
@@ -1296,9 +1480,10 @@ export default function NotificationSettings({
             <p className="leading-relaxed">
               {testOutcome === "provider_rejected" && "Provider rejected the push request."}
               {testOutcome === "provider_accepted_waiting_for_sw" && "Provider accepted the push. Waiting for this browser’s service worker to report receiving it."}
-              {testOutcome === "provider_accepted_but_no_sw_event" && "Provider accepted the push, but this browser did not report a matching service worker push event for testPushId within 10 seconds."}
+              {(testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") && "Provider accepted the push, but this browser did not report a matching service worker push event for testPushId within the timeout limits."}
               {testOutcome === "sw_received_show_failed" && "Service worker received the push, but showNotification failed."}
               {testOutcome === "sw_received_show_success" && "Service worker received the push and showNotification succeeded."}
+              {testOutcome === "sw_received_after_delay" && "Service worker received the push after a delay."}
               {testOutcome === "local_display_failed" && "Local notification display failed, so OS/browser display is likely blocked."}
             </p>
           </div>
@@ -1375,11 +1560,19 @@ export default function NotificationSettings({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={handleSendTest}
+                    onClick={() => handleSendTest()}
                     disabled={testLoading}
                     className="flex-1 bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-50"
                   >
                     {testLoading ? "Sending test..." : "Send test notification"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendTest({ delay: 10 })}
+                    disabled={testLoading}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-cream-50 py-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+                  >
+                    {testLoading ? "Sending delayed..." : "Send delayed test push"}
                   </button>
                   <button
                     type="button"
@@ -1428,6 +1621,24 @@ export default function NotificationSettings({
               {diagnostics.swRegistrationsCount > 1 && (
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-850 mb-3 font-semibold">
                   ⚠️ Multiple service worker registrations detected! This can cause push delivery conflicts. Do not blindly unregister all; verify scopes in Chrome DevTools under Application → Service Workers.
+                </div>
+              )}
+              {diagnostics.swRegistrationsList && diagnostics.swRegistrationsList.length > 0 && (
+                <div className="bg-cream-50 border border-cream-200 rounded-xl p-3 text-xs mb-3 space-y-2">
+                  <p className="font-semibold text-ink-800 text-[11px]">Detected Service Worker Registrations:</p>
+                  <ul className="space-y-2 text-[10px]">
+                    {diagnostics.swRegistrationsList.map((reg: any, idx: number) => (
+                      <li key={idx} className="border-b border-cream-100 last:border-0 pb-1.5 last:pb-0">
+                        <p className="font-semibold">Registration #{idx + 1}</p>
+                        <p><strong>Scope:</strong> {reg.scope}</p>
+                        <p><strong>Active URL:</strong> {reg.activeUrl}</p>
+                        {reg.installingUrl !== "None" && <p><strong>Installing URL:</strong> {reg.installingUrl}</p>}
+                        {reg.waitingUrl !== "None" && <p><strong>Waiting URL:</strong> {reg.waitingUrl}</p>}
+                        <p><strong>Has Push Subscription:</strong> {reg.hasSubscription ? "Yes" : "No"}</p>
+                        {reg.hasSubscription && <p><strong>Endpoint Hash:</strong> {reg.endpointHash}</p>}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               <div className="flex justify-between items-center mb-2.5">
@@ -1489,12 +1700,20 @@ export default function NotificationSettings({
                 <Diag label="Install prompt never show" value={diagnostics.installPromptNeverShow ? "Yes" : "No"} />
                 <Diag label="Installed PWA mode detected" value={diagnostics.installedPwaMode ? "Yes" : "No"} />
 
-                {/* Local Display Test Diagnostics */}
+                 {/* Local Display Test Diagnostics */}
                 <Diag label="Local display test attempted" value={diagnostics.localDisplayTestAttempted} />
                 <Diag label="Local display test result" value={diagnostics.localDisplayTestResult} />
                 <Diag label="Local display test error" value={diagnostics.localDisplayTestError || "None"} />
+                <Diag label="Trace storage type" value={diagnostics.traceStorageType} />
+                <Diag label="Trace storage key/name" value={diagnostics.traceStorageKey} />
+                <Diag label="Local trace write time" value={diagnostics.localTestTraceWriteTime} />
+                <Diag label="Local trace read time" value={diagnostics.localTestTraceReadTime} />
+                <Diag label="Trace write success" value={diagnostics.traceWriteSuccess} />
+                <Diag label="Trace read success" value={diagnostics.traceReadSuccess} />
 
                 {/* Service Worker Lifecycle & Trace Logs */}
+                <Diag label="App commit/version" value={APP_VERSION} />
+                <Diag label="Service worker version" value={diagnostics.swVersion} />
                 <Diag label="SW install time" value={diagnostics.swInstallTime} />
                 <Diag label="SW activate time" value={diagnostics.swActivateTime} />
                 <Diag label="Last SW push received time" value={diagnostics.lastSwPushReceivedTime} />
@@ -1537,6 +1756,9 @@ export default function NotificationSettings({
                   <Diag label="Script contains push handler?" value={diagnostics.auditScopeHasPushHandler || "No"} />
                   <Diag label="Installed PWA origin/scope match?" value={diagnostics.auditPwaOriginAndScope || "No"} />
                   <Diag label="Browser origin/scope match?" value={diagnostics.auditBrowserOriginAndScope || "No"} />
+                  <Diag label="Controller matches active SW?" value={diagnostics.controllerMatchesActive} />
+                  <Diag label="Ready sub matches active sub?" value={diagnostics.readySubMatchesActiveSub} />
+                  <Diag label="Ready sub matches DB sub?" value={diagnostics.readySubMatchesDbSub} />
                 </dl>
               </div>
 
@@ -1584,6 +1806,19 @@ export default function NotificationSettings({
                   </dl>
                 </div>
               )}
+              <div className="mt-4 border-t border-cream-200 pt-3">
+                <p className="font-semibold text-ink-800 mb-1">Chrome/Edge direct service worker push test:</p>
+                <ol className="list-decimal pl-4 space-y-0.5 text-[11px] text-ink-600">
+                  <li>Open browser DevTools.</li>
+                  <li>Go to <strong>Application</strong> tab, then <strong>Service Workers</strong> on the left.</li>
+                  <li>Find the active service worker for this app.</li>
+                  <li>Click the <strong>Push</strong> button.</li>
+                  <li>Return to this page and check if the SW trace updated below.</li>
+                </ol>
+                <p className="mt-1.5 text-[11px] text-ink-500 leading-normal">
+                  <strong>Expected:</strong> If DevTools Push updates the trace and shows a notification, the SW push handler is good. If it does not update, the SW handler/trace/scope is wrong. If DevTools Push works but remote push does not, the remote delivery path or server send options are the issue.
+                </p>
+              </div>
               <p className="mt-3 text-[11px] text-ink-500">
                 If a test is accepted but does not appear, check OS notification permission, Focus or Do Not Disturb,
                 Android battery optimization, expired subscriptions, and whether iPhone/iPad users opened the installed Home Screen app.

@@ -219,6 +219,7 @@ export async function sendPushToSubscription(
   ttl?: string;
   urgency?: string;
   contentEncoding?: string;
+  topic?: string;
   safeHeaders?: Record<string, string>;
   provider_accepted?: boolean;
 }> {
@@ -287,6 +288,7 @@ export async function sendPushToSubscription(
     ttl: result.ttl,
     urgency: result.urgency,
     contentEncoding: result.contentEncoding,
+    topic: result.topic,
     safeHeaders: result.safeHeaders,
     provider_accepted: result.ok,
   };
@@ -341,14 +343,12 @@ async function sendWebPush(
     const response = await fetch(subscription.endpoint, {
       method: "POST",
       headers: {
-        TTL: "2419200",
+        TTL: String(payload.ttl || "2419200"),
         "Content-Encoding": "aes128gcm",
         "Content-Type": "application/octet-stream",
         Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
-        Urgency:
-          payload.sound === "urgent" || payload.sound === "urgent_alert"
-            ? "high"
-            : "normal",
+        Urgency: String(payload.urgency || (payload.sound === "urgent" || payload.sound === "urgent_alert" ? "high" : "normal")),
+        ...(payload.topic ? { Topic: String(payload.topic) } : {}),
       },
       body: new Uint8Array(body),
     });
@@ -392,9 +392,10 @@ async function sendWebPush(
       endpointHost: endpoint.host,
       classification,
       payloadByteLength: body.length,
-      ttl: "2419200",
-      urgency: payload.sound === "urgent" || payload.sound === "urgent_alert" ? "high" : "normal",
+      ttl: String(payload.ttl || "2419200"),
+      urgency: String(payload.urgency || (payload.sound === "urgent" || payload.sound === "urgent_alert" ? "high" : "normal")),
       contentEncoding: "aes128gcm",
+      topic: payload.topic ? String(payload.topic) : undefined,
       safeHeaders,
     };
   } catch (err: any) {

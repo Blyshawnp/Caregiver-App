@@ -215,6 +215,12 @@ export async function sendPushToSubscription(
   providerEndpointOrigin?: string;
   sendClassification?: string;
   suggestedNextStep?: string;
+  payloadByteLength?: number;
+  ttl?: string;
+  urgency?: string;
+  contentEncoding?: string;
+  safeHeaders?: Record<string, string>;
+  provider_accepted?: boolean;
 }> {
   const vapid = getServerVapidDetails();
 
@@ -277,6 +283,12 @@ export async function sendPushToSubscription(
     providerEndpointOrigin: result.endpointOrigin,
     sendClassification: result.classification,
     suggestedNextStep,
+    payloadByteLength: result.payloadByteLength,
+    ttl: result.ttl,
+    urgency: result.urgency,
+    contentEncoding: result.contentEncoding,
+    safeHeaders: result.safeHeaders,
+    provider_accepted: result.ok,
   };
 }
 
@@ -359,6 +371,19 @@ async function sendWebPush(
       }
     }
 
+    const safeHeaders: Record<string, string> = {};
+    response.headers.forEach((val, key) => {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.startsWith("x-") ||
+        lowerKey === "location" ||
+        lowerKey === "content-length" ||
+        lowerKey === "date"
+      ) {
+        safeHeaders[key] = val;
+      }
+    });
+
     return {
       ok: response.ok,
       status: response.status,
@@ -366,6 +391,11 @@ async function sendWebPush(
       endpointOrigin: endpoint.origin,
       endpointHost: endpoint.host,
       classification,
+      payloadByteLength: body.length,
+      ttl: "2419200",
+      urgency: payload.sound === "urgent" || payload.sound === "urgent_alert" ? "high" : "normal",
+      contentEncoding: "aes128gcm",
+      safeHeaders,
     };
   } catch (err: any) {
     return {

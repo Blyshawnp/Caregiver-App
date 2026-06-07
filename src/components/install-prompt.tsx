@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export const PWA_INSTALL_NEVER_SHOW_KEY = "caregiver-app:pwa-install-never-show";
 export const PWA_INSTALL_DISMISS_UNTIL_KEY = "caregiver-app:pwa-install-dismissed-until";
@@ -41,8 +42,15 @@ function isPromptSuppressed(pathname?: string | null): boolean {
     // 1. If installed PWA mode is detected, never show install prompt
     if (isStandalone()) return true;
 
-    // 8. Do not show install prompt on the Notifications page
-    if (pathname === "/me/notifications" || pathname?.endsWith("/notifications")) {
+    // 8. Do not show install prompt on the Suppressed routes
+    if (
+      pathname === "/me/notifications" || 
+      pathname?.endsWith("/notifications") ||
+      pathname === "/login" ||
+      pathname?.startsWith("/auth/") ||
+      pathname === "/accept-invite" ||
+      pathname === "/onboarding"
+    ) {
       return true;
     }
 
@@ -102,6 +110,7 @@ export default function InstallPrompt() {
   const [showIosSheet, setShowIosSheet] = useState(false);
   const [showManualSheet, setShowManualSheet] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Initialize first sign-in session flag
   useEffect(() => {
@@ -111,6 +120,22 @@ export default function InstallPrompt() {
       localStorage.setItem("caregiver-app:first-signin-seen", "true");
       sessionStorage.setItem("caregiver-app:is-first-signin-session", "true");
     }
+  }, []);
+
+  // Monitor Supabase auth session
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Register beforeinstallprompt globally once on mount
@@ -128,95 +153,108 @@ export default function InstallPrompt() {
     }
   }, []);
 
-  // Handle display logic based on pathname, platform, deferred prompt, and suppression state
+  // Handle display logic based on pathname, platform, deferred prompt, suppression state, and authentication
   useEffect(() => {
-    if (isPromptSuppressed(pathname)) {
+    if (!isAuthenticated || isPromptSuppressed(pathname)) {
       if (show) setShow(false);
       return;
     }
 
-    if (platform === "ios" && !show) {
-      const t = setTimeout(() => {
-        if (isPromptSuppressed(pathname)) return;
-        setShow(true);
-        try {
-          localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
-        } catch {}
-      }, 5000);
-      return () => clearTimeout(t);
-    }
+    // Delay slightly (2 seconds) after page load and auth resolution
+    const t = setTimeout(() => {
+      if (isPromptSuppressed(pathname)) return;
 
-    if ((platform === "android" || platform === "desktop") && deferredPrompt && !show) {
+      // If beforeinstallprompt is not available, show manual guidance sheet once after first sign-in session
+      if (!deferredPrompt && platform !== "ios") {
+        const isFirstSession = sessionStorage.getItem("caregiver-app:is-first-signin-session") === "true";
+        if (!isFirstSession) return;
+      }
+
       setShow(true);
       try {
         localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
+        // Ensure it doesn't repeatedly reappear in the same session on page changes/reloads
+        sessionStorage.setItem(PWA_INSTALL_DISMISSED_SESSION_KEY, "true");
       } catch {}
-    }
+    }, 2000);
 
-    // 9. If beforeinstallprompt is not available, show guidance card once after first sign-in
-    if ((platform === "android" || platform === "desktop") && !deferredPrompt && !show) {
-      const isFirstSession = sessionStorage.getItem("caregiver-app:is-first-signin-session") === "true";
-      if (isFirstSession) {
-        const t = setTimeout(() => {
-          if (isPromptSuppressed(pathname)) return;
-          setShow(true);
-          try {
-            localStorage.setItem(PWA_INSTALL_LAST_PROMPTED_KEY, String(Date.now()));
-          } catch {}
-        }, 5000);
-        return () => clearTimeout(t);
-      }
-    }
-  }, [pathname, platform, deferredPrompt, show]);
+    return () => clearTimeout(t);
+  }, [pathname, platform, deferredPrompt, show, isAuthenticated]);
 
   // Keep advanced diagnostics written to localStorage so the Notifications settings page can read it
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const neverShow =
+      const neverShowVal =
         localStorage.getItem(PWA_INSTALL_NEVER_SHOW_KEY) === "true" ||
         localStorage.getItem(LEGACY_PWA_INSTALL_NEVER_SHOW_KEY) === "true";
-      const sessionDismissed = sessionStorage.getItem(PWA_INSTALL_DISMISSED_SESSION_KEY) === "true";
-      const dismissedUntil =
+      const sessionDismissedVal = sessionStorage.getItem(PWA_INSTALL_DISMISSED_SESSION_KEY) === "true";
+      const dismissedUntilVal =
         localStorage.getItem(PWA_INSTALL_DISMISS_UNTIL_KEY) ??
         localStorage.getItem(LEGACY_PWA_INSTALL_DISMISS_UNTIL_KEY);
 
-      let reason = "None";
-      if (isStandalone()) reason = "Installed PWA mode detected";
-      else if (pathname === "/me/notifications" || pathname?.endsWith("/notifications")) reason = "On Notifications page";
-      else if (neverShow) reason = "installPromptNeverShow is true";
-      else if (sessionDismissed) reason = "sessionDismissed is true";
-      else if (dismissedUntil && Date.now() < parseInt(dismissedUntil, 10)) {
-        reason = `installPromptDismissedUntil is active (until ${new Date(parseInt(dismissedUntil, 10)).toLocaleString()})`;
-      } else {
-        const notNowCooldown = localStorage.getItem(PWA_INSTALL_NOT_NOW_COOLDOWN_KEY);
-        if (notNowCooldown && Date.now() < parseInt(notNowCooldown, 10)) {
-          reason = `Not now 1-hour cooldown active (until ${new Date(parseInt(notNowCooldown, 10)).toLocaleString()})`;
-        } else if (document.body.innerHTML.includes("Get important alerts")) {
-          reason = "Notification permission prompt is active";
-        } else if (!!document.querySelector('[role="dialog"]') || !!document.querySelector('[aria-modal="true"]')) {
-          reason = "Modal dialog is open";
-        } else if (!deferredPrompt && platform !== "ios") {
-          const isFirstSession = sessionStorage.getItem("caregiver-app:is-first-signin-session") === "true";
-          if (!isFirstSession) {
-            reason = "beforeinstallprompt not available and not first sign-in session";
-          }
+      const dismissedUntilExpired = dismissedUntilVal 
+        ? Date.now() > parseInt(dismissedUntilVal, 10)
+        : true;
+
+      const notNowCooldownVal = localStorage.getItem(PWA_INSTALL_NOT_NOW_COOLDOWN_KEY);
+      const notNowCooldownExpired = notNowCooldownVal
+        ? Date.now() > parseInt(notNowCooldownVal, 10)
+        : true;
+
+      const isSuppressedRoute = 
+        pathname === "/me/notifications" || 
+        pathname?.endsWith("/notifications") ||
+        pathname === "/login" ||
+        pathname?.startsWith("/auth/") ||
+        pathname === "/accept-invite" ||
+        pathname === "/onboarding";
+
+      const isModalOpen = !!document.querySelector('[role="dialog"]') || !!document.querySelector('[aria-modal="true"]');
+
+      let reason = "showing";
+      if (!isAuthenticated) reason = "auth_not_ready";
+      else if (isStandalone()) reason = "installed";
+      else if (neverShowVal) reason = "never_show";
+      else if (dismissedUntilVal && !dismissedUntilExpired) reason = "dismissed_until_future";
+      else if (notNowCooldownVal && !notNowCooldownExpired) reason = "dismissed_until_future";
+      else if (sessionDismissedVal) reason = "session_dismissed";
+      else if (isSuppressedRoute) reason = "route_suppressed";
+      else if (isModalOpen) reason = "modal_open";
+      else if (!deferredPrompt && platform !== "ios") {
+        const isFirstSession = sessionStorage.getItem("caregiver-app:is-first-signin-session") === "true";
+        if (!isFirstSession) {
+          reason = "prompt_event_missing";
         }
       }
 
+      const shouldShowInstallPrompt = 
+        isAuthenticated &&
+        !isStandalone() &&
+        !isSuppressedRoute &&
+        !neverShowVal &&
+        dismissedUntilExpired &&
+        notNowCooldownExpired &&
+        !sessionDismissedVal &&
+        !isModalOpen &&
+        (!!deferredPrompt || platform === "ios" || sessionStorage.getItem("caregiver-app:is-first-signin-session") === "true");
+
       const details = {
+        currentRoute: pathname || "/",
+        authenticated: isAuthenticated,
         installedPwaModeDetected: isStandalone(),
         beforeinstallpromptAvailable: !!deferredPrompt,
-        installPromptNeverShow: neverShow,
-        installPromptDismissedUntil: dismissedUntil ? new Date(parseInt(dismissedUntil, 10)).toISOString() : null,
-        sessionDismissed,
-        currentRoute: pathname || "/",
-        reasonPromptIsHidden: reason,
+        neverShow: neverShowVal,
+        dismissedUntil: dismissedUntilVal ? new Date(parseInt(dismissedUntilVal, 10)).toISOString() : null,
+        dismissedUntilExpired,
+        sessionDismissed: sessionDismissedVal,
+        shouldShowInstallPrompt,
+        hiddenReason: shouldShowInstallPrompt ? "showing" : reason,
       };
 
       localStorage.setItem("caregiver-app:install-prompt-diagnostics", JSON.stringify(details));
     } catch {}
-  }, [pathname, platform, deferredPrompt, show, showIosSheet, showManualSheet]);
+  }, [pathname, platform, deferredPrompt, show, showIosSheet, showManualSheet, isAuthenticated]);
 
   // 6. Not now dismiss handler (current session only + 1 hour cooldown)
   function handleNotNow() {

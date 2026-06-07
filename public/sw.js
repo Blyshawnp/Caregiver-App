@@ -176,6 +176,7 @@ self.addEventListener("push", (event) => {
     lastPushParseError: parseError,
     lastNotificationTitle: payload.title || "Carer Vista Pro",
     lastNotificationTag: payload.tag || "caregiver-notification",
+    receivedTestPushId: payload.testPushId || null,
   };
 
   const showPromise = async () => {

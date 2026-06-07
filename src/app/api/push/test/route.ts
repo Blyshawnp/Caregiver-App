@@ -18,6 +18,7 @@ type TestPushRequest = {
   auth?: string;
   browserSubscriptionExists?: boolean;
   appPublicKeyFingerprint?: string;
+  testPushId?: string;
 };
 
 type PushSubscriptionRow = {
@@ -201,6 +202,7 @@ export async function POST(request: Request) {
     }
 
     // Send the push
+    const testPushId = payload.testPushId || `test_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${Math.random().toString(36).slice(2, 9)}`;
     const result = await sendPushToSubscription(
       admin,
       {
@@ -212,9 +214,10 @@ export async function POST(request: Request) {
       {
         title: "Test notification",
         body: "Push alerts are working.",
-        tag: "test-push",
-        url: "/alerts",
+        tag: `test-push-${testPushId}`,
+        url: "/me/notifications",
         type: "test",
+        testPushId: testPushId,
         sound: "normal",
       }
     );
@@ -224,6 +227,7 @@ export async function POST(request: Request) {
         {
           error: "No active push subscription was found for this device. Refresh subscription or enable alerts again.",
           code: "no_subscription",
+          testPushId,
           diagnostics: {
             ...result,
             selectedRowId: subscription.id,
@@ -244,6 +248,7 @@ export async function POST(request: Request) {
         {
           error: "Push notifications are not configured on the server.",
           code: "server_push_not_configured",
+          testPushId,
           diagnostics: {
             ...result,
             selectedRowId: subscription.id,
@@ -286,6 +291,7 @@ export async function POST(request: Request) {
         {
           error: errorMsg,
           code: errorCode,
+          testPushId,
           diagnostics: {
             ...result,
             selectedRowId: subscription.id,
@@ -296,6 +302,22 @@ export async function POST(request: Request) {
             fingerprintMatches: fingerprintMatch,
             senderRuntime: "Vercel route handler",
             vapidSubjectValid: true,
+            providerStatusCode: result.providerStatus,
+            providerBodySummary: result.providerBodySummary,
+            providerHeaders: result.safeHeaders,
+            endpointOrigin: result.providerEndpointOrigin,
+            selectedSubscriptionRowId: subscription.id,
+            p256dhHash: shortHash(subscription.p256dh),
+            authHash: shortHash(subscription.auth),
+            payloadByteLength: result.payloadByteLength,
+            ttl: result.ttl,
+            urgency: result.urgency,
+            contentEncoding: result.contentEncoding,
+            selectedRowIdEqualsBrowserRowId: payload.deviceId ? subscription.device_id === payload.deviceId : false,
+            selectedEndpointHashEqualsBrowserEndpointHash: payload.endpoint ? subscription.endpoint === payload.endpoint : false,
+            selectedP256dhHashEqualsBrowserP256dhHash: p256dhHashMatch,
+            selectedAuthHashEqualsBrowserAuthHash: authHashMatch,
+            selectedFingerprintMatchesCurrentAppFingerprint: fingerprintMatch,
           },
         },
         { status: 502 }
@@ -305,6 +327,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       code: "success",
+      testPushId,
       diagnostics: {
         ...result,
         selectedRowId: subscription.id,
@@ -315,6 +338,22 @@ export async function POST(request: Request) {
         fingerprintMatches: fingerprintMatch,
         senderRuntime: "Vercel route handler",
         vapidSubjectValid: true,
+        providerStatusCode: result.providerStatus,
+        providerBodySummary: result.providerBodySummary,
+        providerHeaders: result.safeHeaders,
+        endpointOrigin: result.providerEndpointOrigin,
+        selectedSubscriptionRowId: subscription.id,
+        p256dhHash: shortHash(subscription.p256dh),
+        authHash: shortHash(subscription.auth),
+        payloadByteLength: result.payloadByteLength,
+        ttl: result.ttl,
+        urgency: result.urgency,
+        contentEncoding: result.contentEncoding,
+        selectedRowIdEqualsBrowserRowId: payload.deviceId ? subscription.device_id === payload.deviceId : false,
+        selectedEndpointHashEqualsBrowserEndpointHash: payload.endpoint ? subscription.endpoint === payload.endpoint : false,
+        selectedP256dhHashEqualsBrowserP256dhHash: p256dhHashMatch,
+        selectedAuthHashEqualsBrowserAuthHash: authHashMatch,
+        selectedFingerprintMatchesCurrentAppFingerprint: fingerprintMatch,
       }
     });
   } catch (err: any) {

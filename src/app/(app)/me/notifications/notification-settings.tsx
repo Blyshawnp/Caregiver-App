@@ -96,6 +96,45 @@ type PushDiagnostics = {
   installPromptSessionDismissed: boolean | null;
   installPromptCurrentRoute: string | null;
   installPromptReasonHidden: string | null;
+  installPromptAuthenticated: boolean | null;
+  installPromptDismissedUntilExpired: boolean | null;
+  installPromptShouldShowInstallPrompt: boolean | null;
+  installPromptHiddenReason: string | null;
+
+  // SW Scope & registrations (Phase 7)
+  swScriptUrl: string | null;
+  swScope: string | null;
+  swControllerScriptUrl: string | null;
+  swReadyScope: string | null;
+  swRegistrationsCount: number;
+  swReadyEndpointHash: string | null;
+  swReadyHasPushHandler: boolean | null;
+  auditMultipleRegistrations: string | null;
+  auditReadySubscription: string | null;
+  auditScopeHasPushHandler: string | null;
+  auditPwaOriginAndScope: string | null;
+  auditBrowserOriginAndScope: string | null;
+
+  // Test push diagnostics (Phase 3 & 5)
+  lastRequestedTestPushId: string | null;
+  providerAcceptedTestPushId: string | null;
+  lastSwReceivedTestPushId: string | null;
+  testPushIdsMatch: boolean | null;
+  lastTestPushRowId: string | null;
+  lastTestPushRowMatchesDiagnosticsRow: boolean | null;
+  lastTestPushEndpointMatchesBrowser: boolean | null;
+  lastTestPushP256dhMatchesBrowser: boolean | null;
+  lastTestPushAuthMatchesBrowser: boolean | null;
+  lastTestPushRowIsActive: boolean | null;
+  lastTestPushFingerprintMatchesApp: boolean | null;
+  lastTestPushProviderStatusCode: number | null;
+  lastTestPushProviderBodySummary: string | null;
+  lastTestPushProviderHeaders: Record<string, string> | null;
+  lastTestPushEndpointOrigin: string | null;
+  lastTestPushPayloadByteLength: number | null;
+  lastTestPushTtl: string | null;
+  lastTestPushUrgency: string | null;
+  lastTestPushContentEncoding: string | null;
 };
 
 export default function NotificationSettings({ 
@@ -189,11 +228,51 @@ export default function NotificationSettings({
     installPromptSessionDismissed: null,
     installPromptCurrentRoute: null,
     installPromptReasonHidden: null,
+    installPromptAuthenticated: null,
+    installPromptDismissedUntilExpired: null,
+    installPromptShouldShowInstallPrompt: null,
+    installPromptHiddenReason: null,
+
+    // SW Scope & registrations (Phase 7)
+    swScriptUrl: null,
+    swScope: null,
+    swControllerScriptUrl: null,
+    swReadyScope: null,
+    swRegistrationsCount: 0,
+    swReadyEndpointHash: null,
+    swReadyHasPushHandler: null,
+    auditMultipleRegistrations: null,
+    auditReadySubscription: null,
+    auditScopeHasPushHandler: null,
+    auditPwaOriginAndScope: null,
+    auditBrowserOriginAndScope: null,
+
+    // Test push diagnostics (Phase 3 & 5)
+    lastRequestedTestPushId: null,
+    providerAcceptedTestPushId: null,
+    lastSwReceivedTestPushId: null,
+    testPushIdsMatch: null,
+    lastTestPushRowId: null,
+    lastTestPushRowMatchesDiagnosticsRow: null,
+    lastTestPushEndpointMatchesBrowser: null,
+    lastTestPushP256dhMatchesBrowser: null,
+    lastTestPushAuthMatchesBrowser: null,
+    lastTestPushRowIsActive: null,
+    lastTestPushFingerprintMatchesApp: null,
+    lastTestPushProviderStatusCode: null,
+    lastTestPushProviderBodySummary: null,
+    lastTestPushProviderHeaders: null,
+    lastTestPushEndpointOrigin: null,
+    lastTestPushPayloadByteLength: null,
+    lastTestPushTtl: null,
+    lastTestPushUrgency: null,
+    lastTestPushContentEncoding: null,
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
   const [inAppAlertVolume, setInAppAlertVolume] = useState(0.8);
   const [urgentAlertsRepeat, setUrgentAlertsRepeat] = useState(true);
+  const [testOutcome, setTestOutcome] = useState<string | null>(null);
 
   // Monitor service worker controller change and readiness
   async function updateSwStatus() {
@@ -412,12 +491,17 @@ export default function NotificationSettings({
   async function handleSendTest() {
     setTestLoading(true);
     setTestMessage(null);
+    setTestOutcome(null);
     try {
       const currentSubscription = await getCurrentBrowserPushSubscription();
       const currentKeys = getPushSubscriptionKeys(currentSubscription);
       if (currentSubscription) {
         await saveCurrentPushSubscription(currentSubscription);
       }
+      const testPushId = `test_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${Math.random().toString(36).slice(2, 9)}`;
+      localStorage.setItem("pwa_last_requested_test_push_id", testPushId);
+      await refreshDiagnostics();
+
       const res = await fetch("/api/push/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -427,15 +511,58 @@ export default function NotificationSettings({
           keys: currentKeys,
           browserSubscriptionExists: Boolean(currentSubscription),
           appPublicKeyFingerprint: getPushSubscriptionApplicationServerKeyFingerprint(currentSubscription),
+          testPushId,
         }),
       });
       const d = await res.json().catch(() => null);
       if (res.ok) {
+        const acceptedId = d?.testPushId || testPushId;
         localStorage.setItem("pwa_last_test_push_result", "success");
         localStorage.removeItem("pwa_last_test_push_provider_status");
-        setTestMessage(
-          `Test push accepted by browser push service (${d?.diagnostics?.delivered ?? 1} delivered). If it does not appear, check OS/browser notification settings, battery optimization, or Focus/Do Not Disturb.`
-        );
+        localStorage.setItem("pwa_last_accepted_test_push_id", acceptedId);
+        if (d?.diagnostics) {
+          localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(d.diagnostics));
+        }
+        
+        setTestOutcome("provider_accepted_waiting_for_sw");
+        setTestMessage("Push provider accepted the message. Waiting for this browser’s service worker to report receiving it.");
+        await refreshDiagnostics();
+
+        // Start polling for service worker trace correlation match
+        const startTime = Date.now();
+        const interval = setInterval(async () => {
+          let swTrace: Record<string, any> = {};
+          if (typeof window !== "undefined" && "caches" in window) {
+            try {
+              const cache = await window.caches.open("sw-trace-cache");
+              const match = await cache.match("https://caregiver-app/sw-trace.json");
+              if (match) {
+                swTrace = await match.json().catch(() => ({}));
+              }
+            } catch {}
+          }
+
+          if (swTrace.receivedTestPushId === acceptedId) {
+            clearInterval(interval);
+            if (swTrace.lastShowNotificationResult === "success") {
+              setTestOutcome("sw_received_show_success");
+              setTestMessage("Test notification received and displayed successfully!");
+            } else {
+              setTestOutcome("sw_received_show_failed");
+              setTestMessage(`Test notification received, but the service worker failed to display it (Error: ${swTrace.lastShowNotificationError || "Unknown error"}).`);
+            }
+            await refreshDiagnostics();
+            return;
+          }
+
+          if (Date.now() - startTime > 10000) {
+            clearInterval(interval);
+            setTestOutcome("provider_accepted_but_no_sw_event");
+            setTestMessage("Push provider accepted the message, but this browser did not report a matching service worker push event for testPushId within 10 seconds. Try with the app closed, then opened, and check OS/browser notification settings.");
+            await refreshDiagnostics();
+          }
+        }, 1500);
+
       } else {
         const errCode = d?.code || "unknown_error";
         const providerStatus = d?.diagnostics?.failures?.[0]?.status;
@@ -445,6 +572,10 @@ export default function NotificationSettings({
         } else {
           localStorage.removeItem("pwa_last_test_push_provider_status");
         }
+        if (d?.diagnostics) {
+          localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(d.diagnostics));
+        }
+        setTestOutcome("provider_rejected");
         throw new Error(d?.error || "Failed to send test push.");
       }
     } catch (err: any) {
@@ -459,6 +590,7 @@ export default function NotificationSettings({
     setLoading(true);
     setError(null);
     setTestMessage(null);
+    setTestOutcome(null);
     try {
       const subscription = await refreshPushSubscription();
 
@@ -473,6 +605,9 @@ export default function NotificationSettings({
       setDeviceEnabled(true);
       await refreshDiagnostics(status);
 
+      const testPushId = `test_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${Math.random().toString(36).slice(2, 9)}`;
+      localStorage.setItem("pwa_last_requested_test_push_id", testPushId);
+
       const testRes = await fetch("/api/push/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -482,15 +617,58 @@ export default function NotificationSettings({
           keys: getPushSubscriptionKeys(subscription),
           browserSubscriptionExists: true,
           appPublicKeyFingerprint: getPushSubscriptionApplicationServerKeyFingerprint(subscription),
+          testPushId,
         }),
       });
       const testData = await testRes.json().catch(() => null);
       if (testRes.ok) {
+        const acceptedId = testData?.testPushId || testPushId;
         localStorage.setItem("pwa_last_test_push_result", "success");
         localStorage.removeItem("pwa_last_test_push_provider_status");
-        setTestMessage(
-          `Subscription refreshed and test push accepted (${testData?.diagnostics?.delivered ?? 1} delivered).`
-        );
+        localStorage.setItem("pwa_last_accepted_test_push_id", acceptedId);
+        if (testData?.diagnostics) {
+          localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(testData.diagnostics));
+        }
+
+        setTestOutcome("provider_accepted_waiting_for_sw");
+        setTestMessage("Push provider accepted the message. Waiting for this browser’s service worker to report receiving it.");
+        await refreshDiagnostics();
+
+        // Start polling for service worker trace correlation match
+        const startTime = Date.now();
+        const interval = setInterval(async () => {
+          let swTrace: Record<string, any> = {};
+          if (typeof window !== "undefined" && "caches" in window) {
+            try {
+              const cache = await window.caches.open("sw-trace-cache");
+              const match = await cache.match("https://caregiver-app/sw-trace.json");
+              if (match) {
+                swTrace = await match.json().catch(() => ({}));
+              }
+            } catch {}
+          }
+
+          if (swTrace.receivedTestPushId === acceptedId) {
+            clearInterval(interval);
+            if (swTrace.lastShowNotificationResult === "success") {
+              setTestOutcome("sw_received_show_success");
+              setTestMessage("Test notification received and displayed successfully!");
+            } else {
+              setTestOutcome("sw_received_show_failed");
+              setTestMessage(`Test notification received, but the service worker failed to display it (Error: ${swTrace.lastShowNotificationError || "Unknown error"}).`);
+            }
+            await refreshDiagnostics();
+            return;
+          }
+
+          if (Date.now() - startTime > 10000) {
+            clearInterval(interval);
+            setTestOutcome("provider_accepted_but_no_sw_event");
+            setTestMessage("Push provider accepted the message, but this browser did not report a matching service worker push event for testPushId within 10 seconds. Try with the app closed, then opened, and check OS/browser notification settings.");
+            await refreshDiagnostics();
+          }
+        }, 1500);
+
       } else {
         const errCode = testData?.code || "unknown_error";
         const providerStatus = testData?.diagnostics?.failures?.[0]?.status;
@@ -500,6 +678,10 @@ export default function NotificationSettings({
         } else {
           localStorage.removeItem("pwa_last_test_push_provider_status");
         }
+        if (testData?.diagnostics) {
+          localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(testData.diagnostics));
+        }
+        setTestOutcome("provider_rejected");
         throw new Error(testData?.error || "Subscription refreshed, but test push failed.");
       }
     } catch (err: any) {
@@ -528,6 +710,7 @@ export default function NotificationSettings({
         icon: "/icon-192.png",
         badge: "/icon-192.png",
         tag: "local-display-test",
+        data: { url: "/me/notifications", type: "local-test" }
       });
 
       localStorage.setItem("pwa_local_test_attempted", new Date().toISOString());
@@ -542,10 +725,39 @@ export default function NotificationSettings({
       localStorage.setItem("pwa_local_test_attempted", new Date().toISOString());
       localStorage.setItem("pwa_local_test_result", "failed");
       localStorage.setItem("pwa_local_test_error", errMsg);
+      setTestOutcome("local_display_failed");
       setLocalTestMessage(`❌ Local display test failed: ${errMsg}`);
     } finally {
       setLocalTestLoading(false);
       await refreshDiagnostics();
+    }
+  }
+
+  async function clientShortHash(value?: string | null) {
+    if (!value) return "None";
+    if (typeof window === "undefined" || !window.crypto?.subtle) return value.slice(-16);
+    try {
+      const bytes = new TextEncoder().encode(value);
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      return Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+        .slice(0, 16);
+    } catch {
+      return value.slice(-16);
+    }
+  }
+
+  async function clearSwTrace() {
+    if (typeof window !== "undefined" && "caches" in window) {
+      try {
+        const cache = await window.caches.open("sw-trace-cache");
+        await cache.delete("https://caregiver-app/sw-trace.json");
+        alert("Service Worker trace cleared.");
+        await refreshDiagnostics();
+      } catch (err) {
+        alert("Failed to clear SW trace: " + String(err));
+      }
     }
   }
 
@@ -624,6 +836,78 @@ export default function NotificationSettings({
       }
     } catch {}
 
+    // Load test push diagnostics from localStorage (Phase 5)
+    let testDiag: any = {};
+    try {
+      const stored = localStorage.getItem("pwa_last_test_push_diagnostics");
+      if (stored) {
+        testDiag = JSON.parse(stored);
+      }
+    } catch {}
+
+    // Service Worker Scope & Registrations Details (Phase 7)
+    const regs = ("serviceWorker" in navigator) ? await navigator.serviceWorker.getRegistrations() : [];
+    const swRegistrationsCount = regs.length;
+    const swScriptUrl = registration?.active?.scriptURL || "None";
+    const swScope = registration?.scope || "None";
+    const swControllerScriptUrl = navigator.serviceWorker?.controller?.scriptURL || "None";
+    
+    const readyReg = ("serviceWorker" in navigator) ? await navigator.serviceWorker.ready.catch(() => undefined) : undefined;
+    const swReadyScope = readyReg?.scope || "None";
+    const readySub = readyReg ? await readyReg.pushManager.getSubscription() : null;
+    const swReadyEndpointHash = readySub ? await clientShortHash(readySub.endpoint) : "None";
+    const swReadyHasPushHandler = !!readyReg?.active;
+
+    const auditMultipleRegistrations = swRegistrationsCount > 1 
+      ? `Yes (${swRegistrationsCount} registrations detected)` 
+      : "No (1 registration detected)";
+
+    const auditReadySubscription = (sub && readySub && sub.endpoint === readySub.endpoint)
+      ? "Yes (matches navigator.serviceWorker.ready subscription)"
+      : (sub && readySub) ? "No (endpoint mismatch between active and ready registrations)"
+      : "No subscription";
+
+    const auditScopeHasPushHandler = (swScriptUrl.endsWith("/sw.js") || swScriptUrl.endsWith("/sw.js?"))
+      ? "Yes (active script is /sw.js, which contains push event handler)"
+      : "No (active script is not /sw.js or missing)";
+
+    const auditPwaOriginAndScope = installedPwa
+      ? (window.location.origin === new URL(swScope, window.location.href).origin && swScope === "/")
+        ? "Yes (origin and scope match /)"
+        : `No (current origin: ${window.location.origin}, sw scope: ${swScope})`
+      : "Not in PWA mode";
+
+    const auditBrowserOriginAndScope = (window.location.origin === new URL(swScope, window.location.href).origin && swScope === "/")
+      ? "Yes (origin and scope match /)"
+      : `No (current origin: ${window.location.origin}, sw scope: ${swScope})`;
+
+    // Phase 3 & 5 Test Push diagnostics parsing
+    const lastRequestedTestPushId = localStorage.getItem("pwa_last_requested_test_push_id") || "None";
+    const providerAcceptedTestPushId = localStorage.getItem("pwa_last_accepted_test_push_id") || "None";
+    const lastSwReceivedTestPushId = swTrace.receivedTestPushId || "None";
+    const testPushIdsMatch = (lastRequestedTestPushId !== "None" && lastSwReceivedTestPushId !== "None")
+      ? lastRequestedTestPushId === lastSwReceivedTestPushId
+      : null;
+
+    const lastTestPushRowId = testDiag.selectedSubscriptionRowId || null;
+    const lastTestPushRowMatchesDiagnosticsRow = (lastTestPushRowId && status?.selectedSubscriptionId)
+      ? lastTestPushRowId === status.selectedSubscriptionId
+      : null;
+    const lastTestPushEndpointMatchesBrowser = testDiag.selectedEndpointHashEqualsBrowserEndpointHash ?? null;
+    const lastTestPushP256dhMatchesBrowser = testDiag.selectedP256dhHashEqualsBrowserP256dhHash ?? null;
+    const lastTestPushAuthMatchesBrowser = testDiag.selectedAuthHashEqualsBrowserAuthHash ?? null;
+    const lastTestPushRowIsActive = testDiag.rowActive ?? null;
+    const lastTestPushFingerprintMatchesApp = testDiag.selectedFingerprintMatchesCurrentAppFingerprint ?? null;
+
+    const lastTestPushProviderStatusCode = testDiag.providerStatusCode ?? null;
+    const lastTestPushProviderBodySummary = testDiag.providerBodySummary ?? null;
+    const lastTestPushProviderHeaders = testDiag.providerHeaders ?? null;
+    const lastTestPushEndpointOrigin = testDiag.endpointOrigin ?? null;
+    const lastTestPushPayloadByteLength = testDiag.payloadByteLength ?? null;
+    const lastTestPushTtl = testDiag.ttl ?? null;
+    const lastTestPushUrgency = testDiag.urgency ?? null;
+    const lastTestPushContentEncoding = testDiag.contentEncoding ?? null;
+
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
       serviceWorkerRegistered: !!registration,
@@ -688,11 +972,50 @@ export default function NotificationSettings({
       // Install Prompt Advanced fields
       installPromptInstalledPwaModeDetected: installDiag.installedPwaModeDetected ?? null,
       installPromptBeforeinstallpromptAvailable: installDiag.beforeinstallpromptAvailable ?? null,
-      installPromptNeverShowVal: installDiag.installPromptNeverShow ?? null,
-      installPromptDismissedUntilVal: installDiag.installPromptDismissedUntil ? new Date(installDiag.installPromptDismissedUntil).toLocaleString() : null,
+      installPromptNeverShowVal: installDiag.neverShow ?? null,
+      installPromptDismissedUntilVal: installDiag.dismissedUntil ? new Date(installDiag.dismissedUntil).toLocaleString() : null,
       installPromptSessionDismissed: installDiag.sessionDismissed ?? null,
       installPromptCurrentRoute: installDiag.currentRoute ?? null,
-      installPromptReasonHidden: installDiag.reasonPromptIsHidden ?? null,
+      installPromptReasonHidden: installDiag.hiddenReason ?? null,
+      installPromptAuthenticated: installDiag.authenticated ?? null,
+      installPromptDismissedUntilExpired: installDiag.dismissedUntilExpired ?? null,
+      installPromptShouldShowInstallPrompt: installDiag.shouldShowInstallPrompt ?? null,
+      installPromptHiddenReason: installDiag.hiddenReason ?? null,
+
+      // SW Scope & registrations (Phase 7)
+      swScriptUrl,
+      swScope,
+      swControllerScriptUrl,
+      swReadyScope,
+      swRegistrationsCount,
+      swReadyEndpointHash,
+      swReadyHasPushHandler,
+      auditMultipleRegistrations,
+      auditReadySubscription,
+      auditScopeHasPushHandler,
+      auditPwaOriginAndScope,
+      auditBrowserOriginAndScope,
+
+      // Test push diagnostics (Phase 3 & 5)
+      lastRequestedTestPushId,
+      providerAcceptedTestPushId,
+      lastSwReceivedTestPushId,
+      testPushIdsMatch,
+      lastTestPushRowId,
+      lastTestPushRowMatchesDiagnosticsRow,
+      lastTestPushEndpointMatchesBrowser,
+      lastTestPushP256dhMatchesBrowser,
+      lastTestPushAuthMatchesBrowser,
+      lastTestPushRowIsActive,
+      lastTestPushFingerprintMatchesApp,
+      lastTestPushProviderStatusCode,
+      lastTestPushProviderBodySummary,
+      lastTestPushProviderHeaders,
+      lastTestPushEndpointOrigin,
+      lastTestPushPayloadByteLength,
+      lastTestPushTtl,
+      lastTestPushUrgency,
+      lastTestPushContentEncoding,
     });
   }
 
@@ -711,7 +1034,7 @@ export default function NotificationSettings({
 
   function describeTestResult(code: string, trueServerMismatch = false) {
     switch (code) {
-      case "success": return "Success";
+      case "success": return "Provider Accepted";
       case "expired_subscription": return "Subscription expired (404/410)";
       case "invalid_vapid_key": return "Notification key mismatch (401/403)";
       case "server_vapid_mismatch":
@@ -746,10 +1069,16 @@ export default function NotificationSettings({
       return { label: "Service worker issue", color: "text-terracotta-600 font-semibold" };
     }
 
-    const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
-    if (diagnostics.serverVapidMismatch) {
-      return { label: "Server key mismatch", color: "text-terracotta-600 font-semibold" };
+    const localTestNotRun = !diagnostics.localDisplayTestAttempted || diagnostics.localDisplayTestAttempted === "None" || diagnostics.localDisplayTestAttempted === "Not run";
+    const localTestFailed = diagnostics.localDisplayTestResult === "failed";
+    if (localTestNotRun) {
+      return { label: "Local display test required", color: "text-amber-600 font-semibold" };
     }
+    if (localTestFailed) {
+      return { label: "Local display test failed", color: "text-terracotta-600 font-semibold" };
+    }
+
+    const lastTest = typeof window !== "undefined" ? localStorage.getItem("pwa_last_test_push_result") : null;
     if (lastTest === "server_push_not_configured") {
       return { label: "Server push not configured", color: "text-terracotta-600 font-semibold" };
     }
@@ -793,7 +1122,12 @@ export default function NotificationSettings({
     }
 
     if (lastTest === "success") {
-      return { label: "Active and test passed", color: "text-forest-700 font-semibold" };
+      const swTraceSuccess = diagnostics.lastSwShowNotificationResult === "success";
+      if (swTraceSuccess) {
+        return { label: "Active and test passed", color: "text-forest-700 font-semibold" };
+      } else {
+        return { label: "Active (provider accepted, visual display unconfirmed)", color: "text-amber-600 font-semibold" };
+      }
     }
 
     return { label: "Active but test not recently run", color: "text-forest-700 font-semibold" };
@@ -938,13 +1272,45 @@ export default function NotificationSettings({
           </div>
         )}
 
-        {hasPushNoTrace && (
+        {(!diagnostics.localDisplayTestAttempted || diagnostics.localDisplayTestAttempted === "None" || diagnostics.localDisplayTestAttempted === "Not run") && (
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-850 mb-4 font-semibold leading-relaxed animate-pulse">
+            ⚠️ Run the local notification display test first. This checks whether Chrome/Windows can show notifications from this app.
+          </div>
+        )}
+
+        {testOutcome && (
+          <div className={`p-4 rounded-2xl border text-xs mb-4 space-y-1.5 ${
+            testOutcome === "sw_received_show_success"
+              ? "bg-forest-50 border-forest-200 text-forest-850"
+              : testOutcome === "provider_accepted_waiting_for_sw"
+              ? "bg-cream-50 border-cream-200 text-ink-750 animate-pulse"
+              : testOutcome === "provider_accepted_but_no_sw_event"
+              ? "bg-amber-50 border-amber-200 text-amber-900"
+              : testOutcome === "sw_received_show_failed" || testOutcome === "local_display_failed" || testOutcome === "provider_rejected"
+              ? "bg-terracotta-50 border-terracotta-200 text-terracotta-900"
+              : "bg-cream-50 border-cream-200 text-ink-750"
+          }`}>
+            <p className="font-semibold text-sm">
+              Remote Push Test Outcome: {testOutcome}
+            </p>
+            <p className="leading-relaxed">
+              {testOutcome === "provider_rejected" && "Provider rejected the push request."}
+              {testOutcome === "provider_accepted_waiting_for_sw" && "Provider accepted the push. Waiting for this browser’s service worker to report receiving it."}
+              {testOutcome === "provider_accepted_but_no_sw_event" && "Provider accepted the push, but this browser did not report a matching service worker push event for testPushId within 10 seconds."}
+              {testOutcome === "sw_received_show_failed" && "Service worker received the push, but showNotification failed."}
+              {testOutcome === "sw_received_show_success" && "Service worker received the push and showNotification succeeded."}
+              {testOutcome === "local_display_failed" && "Local notification display failed, so OS/browser display is likely blocked."}
+            </p>
+          </div>
+        )}
+
+        {hasPushNoTrace && !testOutcome && (
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-850 mb-4 leading-relaxed">
             📢 <strong>Notice:</strong> The push provider accepted the message, but this browser did not report receiving the push event yet. Try with the app closed, then opened, and check OS/browser notification settings.
           </div>
         )}
 
-        {hasPushTraceButNoDisplay && (
+        {hasPushTraceButNoDisplay && !testOutcome && (
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-850 mb-4 leading-relaxed">
             📢 <strong>Notice:</strong> The browser reports that it displayed the notification, but the OS/browser may be suppressing it. Check system-level Focus/Do Not Disturb settings.
           </div>
@@ -1059,15 +1425,29 @@ export default function NotificationSettings({
           </button>
           {showAdvanced && (
             <div className="bg-white/70 border border-cream-200 rounded-2xl p-4 text-xs text-ink-600 mt-3">
+              {diagnostics.swRegistrationsCount > 1 && (
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-850 mb-3 font-semibold">
+                  ⚠️ Multiple service worker registrations detected! This can cause push delivery conflicts. Do not blindly unregister all; verify scopes in Chrome DevTools under Application → Service Workers.
+                </div>
+              )}
               <div className="flex justify-between items-center mb-2.5">
                 <p className="font-semibold text-ink-800">Notification diagnostics</p>
-                <button
-                  type="button"
-                  onClick={copyDiagnosticsToClipboard}
-                  className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
-                >
-                  Copy diagnostics
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={clearSwTrace}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
+                  >
+                    Clear SW trace
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyDiagnosticsToClipboard}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
+                  >
+                    Copy diagnostics
+                  </button>
+                </div>
               </div>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                 <Diag label="Browser permission" value={diagnostics.browserPermission} />
@@ -1130,14 +1510,60 @@ export default function NotificationSettings({
                 <Diag label="Last SW notification click url" value={diagnostics.lastSwClickUrl} />
 
                 {/* Install Prompt advanced diagnostics */}
+                <Diag label="Install prompt authenticated?" value={diagnostics.installPromptAuthenticated === null ? "Not checked" : diagnostics.installPromptAuthenticated ? "Yes" : "No"} />
                 <Diag label="Install prompt PWA mode detected" value={diagnostics.installPromptInstalledPwaModeDetected === null ? "Not checked" : diagnostics.installPromptInstalledPwaModeDetected ? "Yes" : "No"} />
                 <Diag label="Install prompt beforeinstallprompt" value={diagnostics.installPromptBeforeinstallpromptAvailable === null ? "Not checked" : diagnostics.installPromptBeforeinstallpromptAvailable ? "Yes" : "No"} />
                 <Diag label="Install prompt neverShow" value={diagnostics.installPromptNeverShowVal === null ? "Not checked" : diagnostics.installPromptNeverShowVal ? "Yes" : "No"} />
                 <Diag label="Install prompt dismissedUntil" value={diagnostics.installPromptDismissedUntilVal || "None"} />
+                <Diag label="Install prompt dismissedUntilExpired?" value={diagnostics.installPromptDismissedUntilExpired === null ? "Not checked" : diagnostics.installPromptDismissedUntilExpired ? "Yes" : "No"} />
                 <Diag label="Install prompt sessionDismissed" value={diagnostics.installPromptSessionDismissed === null ? "Not checked" : diagnostics.installPromptSessionDismissed ? "Yes" : "No"} />
                 <Diag label="Install prompt current route" value={diagnostics.installPromptCurrentRoute || "None"} />
-                <Diag label="Install prompt reason hidden" value={diagnostics.installPromptReasonHidden || "None"} />
+                <Diag label="Install prompt should show?" value={diagnostics.installPromptShouldShowInstallPrompt === null ? "Not checked" : diagnostics.installPromptShouldShowInstallPrompt ? "Yes" : "No"} />
+                <Diag label="Install prompt hidden reason" value={diagnostics.installPromptHiddenReason || "None"} />
               </dl>
+
+              {/* Service Worker Scope & Registrations Details (Phase 7) */}
+              <div className="mt-4 border-t border-cream-200 pt-3">
+                <p className="font-semibold text-ink-800 mb-2">Service Worker Registrations & Scope Audit</p>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                  <Diag label="SW script URL" value={diagnostics.swScriptUrl || "None"} />
+                  <Diag label="SW scope" value={diagnostics.swScope || "None"} />
+                  <Diag label="Controller script URL" value={diagnostics.swControllerScriptUrl || "None"} />
+                  <Diag label="Ready registration scope" value={diagnostics.swReadyScope || "None"} />
+                  <Diag label="Number of SW registrations" value={String(diagnostics.swRegistrationsCount)} />
+                  <Diag label="Ready registration endpoint hash" value={diagnostics.swReadyEndpointHash || "None"} />
+                  <Diag label="Multiple SW registrations?" value={diagnostics.auditMultipleRegistrations || "No"} />
+                  <Diag label="Subscription created from SW ready?" value={diagnostics.auditReadySubscription || "No"} />
+                  <Diag label="Script contains push handler?" value={diagnostics.auditScopeHasPushHandler || "No"} />
+                  <Diag label="Installed PWA origin/scope match?" value={diagnostics.auditPwaOriginAndScope || "No"} />
+                  <Diag label="Browser origin/scope match?" value={diagnostics.auditBrowserOriginAndScope || "No"} />
+                </dl>
+              </div>
+
+              {/* Test Push Send Correlation Details (Phase 3 & 5) */}
+              <div className="mt-4 border-t border-cream-200 pt-3">
+                <p className="font-semibold text-ink-800 mb-2">Remote Push Send Correlation Details</p>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                  <Diag label="Last requested testPushId" value={diagnostics.lastRequestedTestPushId || "None"} />
+                  <Diag label="Provider accepted testPushId" value={diagnostics.providerAcceptedTestPushId || "None"} />
+                  <Diag label="Last SW received testPushId" value={diagnostics.lastSwReceivedTestPushId || "None"} />
+                  <Diag label="Test push IDs match?" value={diagnostics.testPushIdsMatch === null ? "Not run" : diagnostics.testPushIdsMatch ? "Yes" : "No"} />
+                  <Diag label="Selected subscription row ID" value={diagnostics.lastTestPushRowId || "None"} />
+                  <Diag label="Selected row ID matches status row ID?" value={diagnostics.lastTestPushRowMatchesDiagnosticsRow === null ? "Not run" : diagnostics.lastTestPushRowMatchesDiagnosticsRow ? "Yes" : "No"} />
+                  <Diag label="Endpoint matches browser?" value={diagnostics.lastTestPushEndpointMatchesBrowser === null ? "Not run" : diagnostics.lastTestPushEndpointMatchesBrowser ? "Yes" : "No"} />
+                  <Diag label="p256dh matches browser?" value={diagnostics.lastTestPushP256dhMatchesBrowser === null ? "Not run" : diagnostics.lastTestPushP256dhMatchesBrowser ? "Yes" : "No"} />
+                  <Diag label="auth matches browser?" value={diagnostics.lastTestPushAuthMatchesBrowser === null ? "Not run" : diagnostics.lastTestPushAuthMatchesBrowser ? "Yes" : "No"} />
+                  <Diag label="Selected subscription is_active?" value={diagnostics.lastTestPushRowIsActive === null ? "Not run" : diagnostics.lastTestPushRowIsActive ? "Yes" : "No"} />
+                  <Diag label="Fingerprint matches app public key?" value={diagnostics.lastTestPushFingerprintMatchesApp === null ? "Not run" : diagnostics.lastTestPushFingerprintMatchesApp ? "Yes" : "No"} />
+                  <Diag label="Provider statusCode" value={diagnostics.lastTestPushProviderStatusCode === null ? "None" : String(diagnostics.lastTestPushProviderStatusCode)} />
+                  <Diag label="Provider body summary" value={diagnostics.lastTestPushProviderBodySummary || "None"} />
+                  <Diag label="Endpoint origin" value={diagnostics.lastTestPushEndpointOrigin || "None"} />
+                  <Diag label="Payload byte length" value={diagnostics.lastTestPushPayloadByteLength === null ? "None" : `${diagnostics.lastTestPushPayloadByteLength} bytes`} />
+                  <Diag label="TTL" value={diagnostics.lastTestPushTtl || "None"} />
+                  <Diag label="Urgency" value={diagnostics.lastTestPushUrgency || "None"} />
+                  <Diag label="Content encoding" value={diagnostics.lastTestPushContentEncoding || "None"} />
+                </dl>
+              </div>
               {saveDiagnosticsRows.length > 0 && (
                 <div className="mt-4 border-t border-cream-200 pt-3">
                   <p className="font-semibold text-ink-800 mb-2">Last save attempt</p>

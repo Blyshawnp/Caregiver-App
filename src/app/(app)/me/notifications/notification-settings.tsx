@@ -170,6 +170,7 @@ type PushDiagnostics = {
   subscriptionOriginInferred: string | null;
   deploymentCommit: string | null;
   senderRuntime: string | null;
+  lastTestPushPayloadKind: string | null;
 };
 
 const APP_VERSION = "20260607.01";
@@ -339,6 +340,7 @@ export default function NotificationSettings({
     subscriptionOriginInferred: null,
     deploymentCommit: null,
     senderRuntime: null,
+    lastTestPushPayloadKind: null,
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
@@ -643,7 +645,7 @@ export default function NotificationSettings({
     }, 2000);
   }
 
-  async function handleSendTest(options?: { delay?: number; noPayload?: boolean }) {
+  async function handleSendTest(options?: { delay?: number; noPayload?: boolean; payloadKind?: "none" | "text" | "minimal_json" | "full_json" }) {
     setTestLoading(true);
     setTestMessage(null);
     setTestOutcome(null);
@@ -663,6 +665,8 @@ export default function NotificationSettings({
         setTestMessage(`Please close or minimize the app immediately. Test push will be sent in ${delay} seconds.`);
       }
 
+      const payloadKind = options?.payloadKind || (options?.noPayload ? "none" : "full_json");
+
       const res = await fetch("/api/push/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -674,7 +678,8 @@ export default function NotificationSettings({
           appPublicKeyFingerprint: getPushSubscriptionApplicationServerKeyFingerprint(currentSubscription),
           testPushId,
           delay,
-          noPayload: options?.noPayload,
+          payloadKind,
+          noPayload: payloadKind === "none",
         }),
       });
       const d = await res.json().catch(() => null);
@@ -687,7 +692,7 @@ export default function NotificationSettings({
           localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(d.diagnostics));
         }
         
-        await runTestPushPolling(acceptedId, options?.noPayload);
+        await runTestPushPolling(acceptedId, payloadKind === "none");
 
       } else {
         const errCode = d?.code || "unknown_error";
@@ -1376,6 +1381,7 @@ export default function NotificationSettings({
       subscriptionOriginInferred: testDiag.subscriptionOriginInferred ?? null,
       deploymentCommit: testDiag.deploymentCommit ?? null,
       senderRuntime: testDiag.senderRuntime ?? "Vercel route handler",
+      lastTestPushPayloadKind: testDiag.payloadKind ?? null,
     });
   }
 
@@ -1860,14 +1866,6 @@ export default function NotificationSettings({
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => handleSendTest({ noPayload: true })}
-                    disabled={testLoading}
-                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition disabled:opacity-50"
-                  >
-                    {testLoading ? "Sending..." : "Send push without payload"}
-                  </button>
-                  <button
-                    type="button"
                     onClick={clearSwTrace}
                     className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
                   >
@@ -1886,6 +1884,48 @@ export default function NotificationSettings({
                     className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
                   >
                     Copy diagnostics
+                  </button>
+                </div>
+              </div>
+
+              {/* Compatibility Tests section */}
+              <div className="mt-4 border-t border-cream-200 pt-3">
+                <p className="font-semibold text-ink-800 mb-2">Remote Push Payload Compatibility Tests</p>
+                <p className="text-[11px] text-ink-500 mb-2.5 leading-normal">
+                  Test different payload structures to isolate browser decryption issues. In Carer Vista Pro, production push alerts now use the robust <strong>No-payload Wake Push</strong> strategy, where the service worker fetches the latest unread alert details dynamically.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSendTest({ payloadKind: "none" })}
+                    disabled={testLoading}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-3 py-1.5 rounded-xl text-[11px] font-semibold transition disabled:opacity-50"
+                  >
+                    1. No-payload Push (Wake)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendTest({ payloadKind: "text" })}
+                    disabled={testLoading}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-3 py-1.5 rounded-xl text-[11px] font-semibold transition disabled:opacity-50"
+                  >
+                    2. Minimal Text Payload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendTest({ payloadKind: "minimal_json" })}
+                    disabled={testLoading}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-3 py-1.5 rounded-xl text-[11px] font-semibold transition disabled:opacity-50"
+                  >
+                    3. Minimal JSON Payload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendTest({ payloadKind: "full_json" })}
+                    disabled={testLoading}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-3 py-1.5 rounded-xl text-[11px] font-semibold transition disabled:opacity-50"
+                  >
+                    4. Full Test JSON Payload
                   </button>
                 </div>
               </div>
@@ -2072,6 +2112,7 @@ export default function NotificationSettings({
                   <Diag label="Subscription Inferred Origin" value={diagnostics.subscriptionOriginInferred || "None"} />
                   <Diag label="Deployment Commit" value={diagnostics.deploymentCommit || "None"} />
                   <Diag label="Sender Runtime" value={diagnostics.senderRuntime || "None"} />
+                  <Diag label="Last test payload kind" value={diagnostics.lastTestPushPayloadKind || "None"} />
                 </dl>
               </div>
               {saveDiagnosticsRows.length > 0 && (

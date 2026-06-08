@@ -153,16 +153,9 @@ export async function sendPushForNotifications(
         const result = await sendWebPush(
           subscription,
           {
-            title: notification.title,
-            body:
-              prefs.privacy_safe_bodies === false
-                ? notification.body ?? ""
-                : "Open the app to view details.",
-            url: notification.link ?? "/notifications",
-            tag: notification.kind,
-            sound: payloadTone === "default" ? toneForNotificationKind(notification.kind) : payloadTone,
-            legacySound: soundForNotificationKind(notification.kind),
-            relatedShiftId: notification.related_shift_id ?? null,
+            noPayload: true,
+            ttl: "2419200",
+            urgency: payloadTone === "urgent_tone" || preferenceCategory === "urgent_alerts" ? "high" : "normal",
           },
           vapid.details
         );
@@ -208,7 +201,7 @@ export async function sendPushForNotifications(
 export async function sendPushToSubscription(
   admin: SupabaseAdmin,
   subscription: PushSubscriptionRow,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown> | string | null
 ): Promise<PushDeliveryResult & {
   providerStatus?: number;
   providerBodySummary?: string;
@@ -315,17 +308,18 @@ function toMinutes(value: string) {
 
 async function sendWebPush(
   subscription: PushSubscriptionRow,
-  payload: Record<string, unknown> | null,
+  payload: Record<string, unknown> | string | null,
   vapid: ServerVapidDetails
 ) {
   const endpoint = new URL(subscription.endpoint);
-  const isNoPayload = !payload || payload.noPayload === true;
+  const isNoPayload = !payload || (typeof payload === "object" && (payload as any).noPayload === true);
   let body: Buffer | null = null;
 
   if (!isNoPayload && payload) {
     try {
+      const payloadString = typeof payload === "string" ? payload : JSON.stringify(payload);
       body = encryptPayload(
-        JSON.stringify(payload),
+        payloadString,
         subscription.p256dh,
         subscription.auth
       );
@@ -344,11 +338,16 @@ async function sendWebPush(
   const jwt = createVapidJwt(endpoint.origin, vapid.subject, vapid.publicKey, vapid.privateKey);
 
   try {
+    const payloadObj = (payload && typeof payload === "object") ? (payload as Record<string, unknown>) : null;
+    const ttlOption = payloadObj?.ttl || "2419200";
+    const urgencyOption = payloadObj?.urgency || (payloadObj?.sound === "urgent" || payloadObj?.sound === "urgent_alert" ? "high" : "normal");
+    const topicOption = payloadObj?.topic;
+
     const headers: Record<string, string> = {
-      TTL: String(payload?.ttl || "2419200"),
+      TTL: String(ttlOption),
       Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
-      Urgency: String(payload?.urgency || (payload?.sound === "urgent" || payload?.sound === "urgent_alert" ? "high" : "normal")),
-      ...(payload?.topic ? { Topic: String(payload.topic) } : {}),
+      Urgency: String(urgencyOption),
+      ...(topicOption ? { Topic: String(topicOption) } : {}),
     };
 
     if (body) {
@@ -405,10 +404,10 @@ async function sendWebPush(
       endpointHost: endpoint.host,
       classification,
       payloadByteLength: body ? body.length : 0,
-      ttl: String(payload?.ttl || "2419200"),
-      urgency: String(payload?.urgency || (payload?.sound === "urgent" || payload?.sound === "urgent_alert" ? "high" : "normal")),
+      ttl: String(ttlOption),
+      urgency: String(urgencyOption),
       contentEncoding: body ? "aes128gcm" : "none",
-      topic: payload?.topic ? String(payload.topic) : undefined,
+      topic: topicOption ? String(topicOption) : undefined,
       safeHeaders,
     };
   } catch (err: any) {

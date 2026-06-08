@@ -17,7 +17,7 @@ const STATIC_ASSETS = [
   "/favicon-32.png",
 ];
 
-const SW_VERSION = "20260607.01";
+const SW_VERSION = "20260608.01";
 
 // Helper for saving service worker trace logs
 async function saveSwTrace(traceData) {
@@ -171,15 +171,46 @@ self.addEventListener("push", (event) => {
   let parseResult = "default_fallback";
   let parseError = null;
   let isDevtools = false;
+  let rawPayload = "";
 
   if (!event.data) {
+    parseResult = "no_data";
     isDevtools = true;
   } else {
     try {
-      payload = { ...payload, ...event.data.json() };
-      parseResult = "success";
+      rawPayload = event.data.text();
+      // Try to parse as JSON first
+      try {
+        const json = event.data.json();
+        if (json && typeof json === "object") {
+          // Check if nested in { notification: { title, body }, data }
+          if (json.notification && typeof json.notification === "object") {
+            payload = {
+              ...payload,
+              title: json.notification.title || payload.title,
+              body: json.notification.body || payload.body,
+              tag: json.notification.tag || json.tag || payload.tag,
+              url: json.data?.url || json.url || payload.url,
+              sound: json.data?.sound || json.sound || payload.sound,
+              testPushId: json.data?.testPushId || json.testPushId || null,
+            };
+            parseResult = "json_nested_notification";
+          } else {
+            payload = { ...payload, ...json };
+            parseResult = "json_object";
+          }
+        } else {
+          // JSON parsed but not an object (e.g. a number or string)
+          payload.body = String(json);
+          parseResult = "json_scalar";
+        }
+      } catch (jsonErr) {
+        // Not valid JSON, treat as plain text string
+        payload.body = rawPayload;
+        parseResult = "plain_text";
+      }
     } catch (err) {
-      parseResult = "failure";
+      parseResult = "parse_error";
       parseError = err instanceof Error ? err.message : String(err);
       isDevtools = true;
     }
@@ -187,7 +218,7 @@ self.addEventListener("push", (event) => {
 
   const traceData = {
     lastPushReceivedTime: receiveTime,
-    lastPushPayload: JSON.stringify(payload),
+    lastPushPayload: rawPayload ? rawPayload.slice(0, 100) : "None",
     lastPushParseResult: parseResult,
     lastPushParseError: parseError,
     lastNotificationTitle: payload.title || "Carer Vista Pro",
@@ -203,6 +234,31 @@ self.addEventListener("push", (event) => {
     const attemptTime = new Date().toISOString();
     let showResult = "attempted";
     let showError = null;
+
+    // Fetch latest unread details if no-payload push
+    if (parseResult === "no_data" || parseResult === "default_fallback") {
+      try {
+        const response = await fetch("/api/notifications/latest-for-push");
+        if (response.ok) {
+          const json = await response.json();
+          if (json && !json.no_notifications && json.title) {
+            payload.title = json.title;
+            payload.body = json.body || "";
+            payload.url = json.url || "/notifications";
+            payload.tag = json.tag || "caregiver-notification";
+            parseResult = "no_payload_wake_fetched";
+          } else {
+            parseResult = "no_payload_wake_empty_details";
+          }
+        } else {
+          parseResult = `no_payload_wake_fetch_http_${response.status}`;
+        }
+      } catch (err) {
+        parseResult = "no_payload_wake_fetch_error";
+        parseError = err instanceof Error ? err.message : String(err);
+      }
+    }
+
     try {
       await self.registration.showNotification(payload.title || "Carer Vista Pro", {
         body: payload.body || "",
@@ -224,6 +280,10 @@ self.addEventListener("push", (event) => {
 
     await saveSwTrace({
       ...traceData,
+      lastPushParseResult: parseResult, // update if it fetched details
+      lastPushParseError: parseError,
+      lastNotificationTitle: payload.title,
+      lastNotificationTag: payload.tag,
       lastShowNotificationAttemptedTime: attemptTime,
       lastShowNotificationResult: showResult,
       lastShowNotificationError: showError,

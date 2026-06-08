@@ -20,6 +20,7 @@ type TestPushRequest = {
   appPublicKeyFingerprint?: string;
   testPushId?: string;
   noPayload?: boolean;
+  payloadKind?: "none" | "text" | "minimal_json" | "full_json";
 };
 
 type PushSubscriptionRow = {
@@ -229,20 +230,37 @@ export async function POST(request: Request) {
       await new Promise(resolve => setTimeout(resolve, delay * 1000));
     }
 
-    const testPayload = payload.noPayload ? {
-      noPayload: true,
-      ttl: 60,
-      urgency: "high"
-    } : {
-      title: "DevTools test notification",
-      body: "The service worker received a direct push event.",
-      tag: "devtools-test",
-      url: "/me/notifications",
-      type: "devtools-test",
-      testPushId: testPushId,
-      ttl: 60,
-      urgency: "high",
-    };
+    const payloadKind = payload.payloadKind || (payload.noPayload ? "none" : "full_json");
+    let testPayload: any = null;
+
+    if (payloadKind === "none") {
+      testPayload = {
+        noPayload: true,
+        ttl: 60,
+        urgency: "high"
+      };
+    } else if (payloadKind === "text") {
+      testPayload = "ping";
+    } else if (payloadKind === "minimal_json") {
+      testPayload = {
+        title: "Ping",
+        body: "Payload push test",
+        type: "test",
+        ttl: 60,
+        urgency: "high"
+      };
+    } else {
+      testPayload = {
+        title: "Test notification",
+        body: "Push alerts are working.",
+        tag: "test-push",
+        url: "/me/notifications",
+        type: "test",
+        testPushId: testPushId,
+        ttl: 60,
+        urgency: "high"
+      };
+    }
 
     const result = await sendPushToSubscription(
       admin,
@@ -274,6 +292,7 @@ export async function POST(request: Request) {
             serverRequestOrigin,
             subscriptionOriginInferred: subscription.endpoint ? new URL(subscription.endpoint).origin : null,
             deploymentCommit,
+            payloadKind,
           },
         },
         { status: 409 }
@@ -298,6 +317,7 @@ export async function POST(request: Request) {
             serverRequestOrigin,
             subscriptionOriginInferred: subscription.endpoint ? new URL(subscription.endpoint).origin : null,
             deploymentCommit,
+            payloadKind,
           },
         },
         { status: 500 }
@@ -364,6 +384,7 @@ export async function POST(request: Request) {
             locationPresent: result.safeHeaders && (result.safeHeaders["location"] || result.safeHeaders["Location"]) ? "Yes" : "No",
             retryAfter: result.safeHeaders && (result.safeHeaders["retry-after"] || result.safeHeaders["Retry-After"]) || "None",
             warningHeader: result.safeHeaders && (result.safeHeaders["warning"] || result.safeHeaders["Warning"]) || "None",
+            payloadKind,
           },
         },
         { status: 502 }
@@ -407,6 +428,7 @@ export async function POST(request: Request) {
         locationPresent: result.safeHeaders && (result.safeHeaders["location"] || result.safeHeaders["Location"]) ? "Yes" : "No",
         retryAfter: result.safeHeaders && (result.safeHeaders["retry-after"] || result.safeHeaders["Retry-After"]) || "None",
         warningHeader: result.safeHeaders && (result.safeHeaders["warning"] || result.safeHeaders["Warning"]) || "None",
+        payloadKind,
       }
     });
   } catch (err: any) {

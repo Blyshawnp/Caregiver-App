@@ -315,42 +315,53 @@ function toMinutes(value: string) {
 
 async function sendWebPush(
   subscription: PushSubscriptionRow,
-  payload: Record<string, unknown>,
+  payload: Record<string, unknown> | null,
   vapid: ServerVapidDetails
 ) {
   const endpoint = new URL(subscription.endpoint);
-  let body: Buffer;
-  try {
-    body = encryptPayload(
-      JSON.stringify(payload),
-      subscription.p256dh,
-      subscription.auth
-    );
-  } catch (err: any) {
-    return {
-      ok: false,
-      status: 400,
-      bodyText: "Invalid push subscription keys",
-      endpointOrigin: endpoint.origin,
-      endpointHost: endpoint.host,
-      classification: "subscription_invalid",
-    };
+  const isNoPayload = !payload || payload.noPayload === true;
+  let body: Buffer | null = null;
+
+  if (!isNoPayload && payload) {
+    try {
+      body = encryptPayload(
+        JSON.stringify(payload),
+        subscription.p256dh,
+        subscription.auth
+      );
+    } catch (err: any) {
+      return {
+        ok: false,
+        status: 400,
+        bodyText: "Invalid push subscription keys",
+        endpointOrigin: endpoint.origin,
+        endpointHost: endpoint.host,
+        classification: "subscription_invalid",
+      };
+    }
   }
 
   const jwt = createVapidJwt(endpoint.origin, vapid.subject, vapid.publicKey, vapid.privateKey);
 
   try {
+    const headers: Record<string, string> = {
+      TTL: String(payload?.ttl || "2419200"),
+      Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
+      Urgency: String(payload?.urgency || (payload?.sound === "urgent" || payload?.sound === "urgent_alert" ? "high" : "normal")),
+      ...(payload?.topic ? { Topic: String(payload.topic) } : {}),
+    };
+
+    if (body) {
+      headers["Content-Encoding"] = "aes128gcm";
+      headers["Content-Type"] = "application/octet-stream";
+    } else {
+      headers["Content-Length"] = "0";
+    }
+
     const response = await fetch(subscription.endpoint, {
       method: "POST",
-      headers: {
-        TTL: String(payload.ttl || "2419200"),
-        "Content-Encoding": "aes128gcm",
-        "Content-Type": "application/octet-stream",
-        Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
-        Urgency: String(payload.urgency || (payload.sound === "urgent" || payload.sound === "urgent_alert" ? "high" : "normal")),
-        ...(payload.topic ? { Topic: String(payload.topic) } : {}),
-      },
-      body: new Uint8Array(body),
+      headers,
+      body: body ? new Uint8Array(body) : undefined,
     });
 
     const bodyText = await response.text().catch(() => "");
@@ -378,7 +389,9 @@ async function sendWebPush(
         lowerKey.startsWith("x-") ||
         lowerKey === "location" ||
         lowerKey === "content-length" ||
-        lowerKey === "date"
+        lowerKey === "date" ||
+        lowerKey === "retry-after" ||
+        lowerKey === "warning"
       ) {
         safeHeaders[key] = val;
       }
@@ -391,11 +404,11 @@ async function sendWebPush(
       endpointOrigin: endpoint.origin,
       endpointHost: endpoint.host,
       classification,
-      payloadByteLength: body.length,
-      ttl: String(payload.ttl || "2419200"),
-      urgency: String(payload.urgency || (payload.sound === "urgent" || payload.sound === "urgent_alert" ? "high" : "normal")),
-      contentEncoding: "aes128gcm",
-      topic: payload.topic ? String(payload.topic) : undefined,
+      payloadByteLength: body ? body.length : 0,
+      ttl: String(payload?.ttl || "2419200"),
+      urgency: String(payload?.urgency || (payload?.sound === "urgent" || payload?.sound === "urgent_alert" ? "high" : "normal")),
+      contentEncoding: body ? "aes128gcm" : "none",
+      topic: payload?.topic ? String(payload.topic) : undefined,
       safeHeaders,
     };
   } catch (err: any) {

@@ -164,6 +164,12 @@ type PushDiagnostics = {
   isInstallPromptPreferenceStoredInSupabase: string;
   installPromptNeverShowSource: string;
   lastDevtoolsPushReceivedTime: string;
+
+  // Phase 8 origin/domain diagnostics
+  serverRequestOrigin: string | null;
+  subscriptionOriginInferred: string | null;
+  deploymentCommit: string | null;
+  senderRuntime: string | null;
 };
 
 const APP_VERSION = "20260607.01";
@@ -327,6 +333,12 @@ export default function NotificationSettings({
     isInstallPromptPreferenceStoredInSupabase: "No",
     installPromptNeverShowSource: "none",
     lastDevtoolsPushReceivedTime: "Not recorded",
+
+    // Phase 8 origin/domain diagnostics
+    serverRequestOrigin: null,
+    subscriptionOriginInferred: null,
+    deploymentCommit: null,
+    senderRuntime: null,
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
@@ -577,7 +589,7 @@ export default function NotificationSettings({
     }
   }
 
-  async function runTestPushPolling(acceptedId: string) {
+  async function runTestPushPolling(acceptedId: string, isNoPayload = false) {
     setTestOutcome("provider_accepted_waiting_for_sw");
     setTestMessage("Push provider accepted the message. Waiting for this browser’s service worker to report receiving it.");
     await refreshDiagnostics();
@@ -600,7 +612,9 @@ export default function NotificationSettings({
         } catch {}
       }
 
-      const received = swTrace.receivedTestPushId === acceptedId;
+      const received = isNoPayload
+        ? (swTrace.lastPushReceivedTime && (new Date(swTrace.lastPushReceivedTime).getTime() >= startTime))
+        : (swTrace.receivedTestPushId === acceptedId);
       const statusText = received ? "received" : "not received";
 
       setTestMessage(`Waiting for service worker push event... checked ${secondsChecked} seconds (Status: ${statusText})`);
@@ -629,7 +643,7 @@ export default function NotificationSettings({
     }, 2000);
   }
 
-  async function handleSendTest(options?: { delay?: number }) {
+  async function handleSendTest(options?: { delay?: number; noPayload?: boolean }) {
     setTestLoading(true);
     setTestMessage(null);
     setTestOutcome(null);
@@ -660,6 +674,7 @@ export default function NotificationSettings({
           appPublicKeyFingerprint: getPushSubscriptionApplicationServerKeyFingerprint(currentSubscription),
           testPushId,
           delay,
+          noPayload: options?.noPayload,
         }),
       });
       const d = await res.json().catch(() => null);
@@ -672,7 +687,7 @@ export default function NotificationSettings({
           localStorage.setItem("pwa_last_test_push_diagnostics", JSON.stringify(d.diagnostics));
         }
         
-        await runTestPushPolling(acceptedId);
+        await runTestPushPolling(acceptedId, options?.noPayload);
 
       } else {
         const errCode = d?.code || "unknown_error";
@@ -1355,6 +1370,12 @@ export default function NotificationSettings({
       isInstallPromptPreferenceStoredInSupabase: "No",
       installPromptNeverShowSource: neverShowSource,
       lastDevtoolsPushReceivedTime: swTrace.lastDevtoolsPushReceivedTime ? new Date(swTrace.lastDevtoolsPushReceivedTime).toLocaleString() : "Not recorded",
+
+      // Phase 8 origin/domain diagnostics
+      serverRequestOrigin: testDiag.serverRequestOrigin ?? null,
+      subscriptionOriginInferred: testDiag.subscriptionOriginInferred ?? null,
+      deploymentCommit: testDiag.deploymentCommit ?? null,
+      senderRuntime: testDiag.senderRuntime ?? "Vercel route handler",
     });
   }
 
@@ -1666,7 +1687,11 @@ export default function NotificationSettings({
             <p className="leading-relaxed">
               {testOutcome === "provider_rejected" && "Provider rejected the push request."}
               {testOutcome === "provider_accepted_waiting_for_sw" && "Provider accepted the push. Waiting for this browser’s service worker to report receiving it."}
-              {(testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") && "Push provider accepted the message, but this browser has not reported receiving the push event."}
+              {(testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") && (
+                diagnostics.lastDevtoolsPushReceivedTime !== "Not recorded"
+                  ? "Remote provider accepted the push, but Chrome did not deliver it to this service worker. Local and DevTools push both work, so the remaining issue is remote provider delivery or the server send path."
+                  : "Push provider accepted the message, but this browser has not reported receiving the push event."
+              )}
               {testOutcome === "sw_received_show_failed" && "Service worker received the push, but showNotification failed."}
               {testOutcome === "sw_received_show_success" && "Service worker received the push and showNotification succeeded."}
               {testOutcome === "sw_received_after_delay" && "Service worker received the push after a delay."}
@@ -1677,7 +1702,10 @@ export default function NotificationSettings({
 
         {hasPushNoTrace && !testOutcome && (
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-850 mb-4 leading-relaxed">
-            📢 <strong>Notice:</strong> The push provider accepted the message, but this browser did not report receiving the push event yet. Try with the app closed, then opened, and check OS/browser notification settings.
+            📢 <strong>Notice:</strong> {diagnostics.lastDevtoolsPushReceivedTime !== "Not recorded"
+              ? "Remote provider accepted the push, but Chrome did not deliver it to this service worker. Local and DevTools push both work, so the remaining issue is remote provider delivery or the server send path."
+              : "The push provider accepted the message, but this browser did not report receiving the push event yet. Try with the app closed, then opened, and check OS/browser notification settings."
+            }
           </div>
         )}
 
@@ -1687,7 +1715,7 @@ export default function NotificationSettings({
           </div>
         )}
 
-        {diagnostics.localDisplayTestResult === "success" && (
+        {diagnostics.localDisplayTestResult === "success" && diagnostics.lastDevtoolsPushReceivedTime === "Not recorded" && (
           <div className="bg-cream-50 border border-cream-200 p-4 rounded-2xl text-xs text-ink-700 mb-4 leading-relaxed">
             ℹ️ <strong>Notice:</strong> Your browser accepted the display request, but Windows/Chrome may be suppressing notifications. Check Windows notification settings for Chrome and the installed app.
           </div>
@@ -1827,9 +1855,17 @@ export default function NotificationSettings({
                   </ul>
                 </div>
               )}
-              <div className="flex justify-between items-center mb-2.5">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2.5">
                 <p className="font-semibold text-ink-800">Notification diagnostics</p>
-                <div className="flex gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSendTest({ noPayload: true })}
+                    disabled={testLoading}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition disabled:opacity-50"
+                  >
+                    {testLoading ? "Sending..." : "Send push without payload"}
+                  </button>
                   <button
                     type="button"
                     onClick={clearSwTrace}
@@ -1842,7 +1878,7 @@ export default function NotificationSettings({
                     onClick={resetInstallPromptPreferences}
                     className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
                   >
-                    Reset install prompt preferences
+                    Reset preferences
                   </button>
                   <button
                     type="button"
@@ -1970,6 +2006,24 @@ export default function NotificationSettings({
                 </div>
               </div>
 
+              {/* Test in a fresh Chrome profile instructions (Phase 7) */}
+              <div className="mt-4 border-t border-cream-200 pt-3">
+                <p className="font-semibold text-ink-800 mb-2">Test in a Fresh Chrome Profile</p>
+                <div className="bg-cream-50 border border-cream-200 rounded-xl p-3.5 text-xs mb-3 text-ink-700 space-y-1.5 leading-relaxed">
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>Create temporary Chrome profile.</li>
+                    <li>Visit private app origin ({diagnostics.locationOrigin}).</li>
+                    <li>Log in.</li>
+                    <li>Enable notifications.</li>
+                    <li>Run local display test.</li>
+                    <li>Run remote push test.</li>
+                  </ol>
+                  <p className="mt-1 text-[11px] text-ink-500">
+                    This helps detect whether the current browser profile has a corrupted FCM subscription state.
+                  </p>
+                </div>
+              </div>
+
               {/* Service Worker Scope & Registrations Details (Phase 7) */}
               <div className="mt-4 border-t border-cream-200 pt-3">
                 <p className="font-semibold text-ink-800 mb-2">Service Worker Registrations & Scope Audit</p>
@@ -2013,6 +2067,11 @@ export default function NotificationSettings({
                   <Diag label="TTL" value={diagnostics.lastTestPushTtl || "None"} />
                   <Diag label="Urgency" value={diagnostics.lastTestPushUrgency || "None"} />
                   <Diag label="Content encoding" value={diagnostics.lastTestPushContentEncoding || "None"} />
+                  <Diag label="Client Origin" value={diagnostics.locationOrigin || "None"} />
+                  <Diag label="Server Request Origin" value={diagnostics.serverRequestOrigin || "None"} />
+                  <Diag label="Subscription Inferred Origin" value={diagnostics.subscriptionOriginInferred || "None"} />
+                  <Diag label="Deployment Commit" value={diagnostics.deploymentCommit || "None"} />
+                  <Diag label="Sender Runtime" value={diagnostics.senderRuntime || "None"} />
                 </dl>
               </div>
               {saveDiagnosticsRows.length > 0 && (

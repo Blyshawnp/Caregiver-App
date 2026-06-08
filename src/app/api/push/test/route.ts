@@ -19,6 +19,7 @@ type TestPushRequest = {
   browserSubscriptionExists?: boolean;
   appPublicKeyFingerprint?: string;
   testPushId?: string;
+  noPayload?: boolean;
 };
 
 type PushSubscriptionRow = {
@@ -47,6 +48,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized", code: "permission_denied" }, { status: 401 });
     }
 
+    const requestHost = request.headers.get("host");
+    const requestProto = request.headers.get("x-forwarded-proto") || "https";
+    const serverRequestOrigin = requestHost ? `${requestProto}://${requestHost}` : null;
+    const deploymentCommit = process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || "local_development";
+
     const admin = createAdminClient();
     const payload = (await request.json().catch(() => ({}))) as TestPushRequest;
     const serverVapid = getServerVapidStatus();
@@ -70,6 +76,8 @@ export async function POST(request: Request) {
             deviceIdProvided: Boolean(payload.deviceId),
             endpointProvided: Boolean(payload.endpoint),
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            serverRequestOrigin,
+            deploymentCommit,
             ...lookup.diagnostics,
           },
         },
@@ -91,6 +99,8 @@ export async function POST(request: Request) {
             serverRowExists: true,
             serverRowActive: false,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            serverRequestOrigin,
+            deploymentCommit,
             ...lookup.diagnostics,
           },
         },
@@ -112,6 +122,8 @@ export async function POST(request: Request) {
             serverRowActive: subscription.is_active,
             subscriptionKeysPresent: false,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            serverRequestOrigin,
+            deploymentCommit,
             ...lookup.diagnostics,
           },
         },
@@ -145,6 +157,8 @@ export async function POST(request: Request) {
             p256dhHashMatches: p256dhHashMatch,
             authHashMatches: authHashMatch,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            serverRequestOrigin,
+            deploymentCommit,
             ...lookup.diagnostics,
           },
         },
@@ -160,6 +174,8 @@ export async function POST(request: Request) {
           code: "server_push_not_configured",
           diagnostics: {
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            serverRequestOrigin,
+            deploymentCommit,
           },
         },
         { status: 500 }
@@ -175,6 +191,8 @@ export async function POST(request: Request) {
           code: serverVapid.error === "invalid_vapid_subject" ? "invalid_vapid_subject" : "server_vapid_mismatch",
           diagnostics: {
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
+            serverRequestOrigin,
+            deploymentCommit,
           },
         },
         { status: 500 }
@@ -194,6 +212,8 @@ export async function POST(request: Request) {
             savedSubscriptionFingerprint: subscription.vapid_key_fingerprint,
             serverVapid: getSafeServerVapidDiagnostics(serverVapid),
             fingerprintMatches: false,
+            serverRequestOrigin,
+            deploymentCommit,
             ...lookup.diagnostics,
           },
         },
@@ -209,6 +229,21 @@ export async function POST(request: Request) {
       await new Promise(resolve => setTimeout(resolve, delay * 1000));
     }
 
+    const testPayload = payload.noPayload ? {
+      noPayload: true,
+      ttl: 60,
+      urgency: "high"
+    } : {
+      title: "DevTools test notification",
+      body: "The service worker received a direct push event.",
+      tag: "devtools-test",
+      url: "/me/notifications",
+      type: "devtools-test",
+      testPushId: testPushId,
+      ttl: 60,
+      urgency: "high",
+    };
+
     const result = await sendPushToSubscription(
       admin,
       {
@@ -217,18 +252,7 @@ export async function POST(request: Request) {
         p256dh: subscription.p256dh,
         auth: subscription.auth,
       },
-      {
-        title: "Test notification",
-        body: "Push alerts are working.",
-        tag: `test-push-${testPushId}`,
-        url: "/me/notifications",
-        type: "test",
-        testPushId: testPushId,
-        sound: "normal",
-        ttl: 60,
-        urgency: "high",
-        topic: "test-push",
-      }
+      testPayload
     );
 
     if (result.skipped === "no_subscriptions") {
@@ -247,6 +271,9 @@ export async function POST(request: Request) {
             fingerprintMatches: fingerprintMatch,
             senderRuntime: "Vercel route handler",
             vapidSubjectValid: true,
+            serverRequestOrigin,
+            subscriptionOriginInferred: subscription.endpoint ? new URL(subscription.endpoint).origin : null,
+            deploymentCommit,
           },
         },
         { status: 409 }
@@ -268,6 +295,9 @@ export async function POST(request: Request) {
             fingerprintMatches: fingerprintMatch,
             senderRuntime: "Vercel route handler",
             vapidSubjectValid: false,
+            serverRequestOrigin,
+            subscriptionOriginInferred: subscription.endpoint ? new URL(subscription.endpoint).origin : null,
+            deploymentCommit,
           },
         },
         { status: 500 }
@@ -328,6 +358,12 @@ export async function POST(request: Request) {
             selectedP256dhHashEqualsBrowserP256dhHash: p256dhHashMatch,
             selectedAuthHashEqualsBrowserAuthHash: authHashMatch,
             selectedFingerprintMatchesCurrentAppFingerprint: fingerprintMatch,
+            serverRequestOrigin,
+            subscriptionOriginInferred: subscription.endpoint ? new URL(subscription.endpoint).origin : null,
+            deploymentCommit,
+            locationPresent: result.safeHeaders && (result.safeHeaders["location"] || result.safeHeaders["Location"]) ? "Yes" : "No",
+            retryAfter: result.safeHeaders && (result.safeHeaders["retry-after"] || result.safeHeaders["Retry-After"]) || "None",
+            warningHeader: result.safeHeaders && (result.safeHeaders["warning"] || result.safeHeaders["Warning"]) || "None",
           },
         },
         { status: 502 }
@@ -365,6 +401,12 @@ export async function POST(request: Request) {
         selectedP256dhHashEqualsBrowserP256dhHash: p256dhHashMatch,
         selectedAuthHashEqualsBrowserAuthHash: authHashMatch,
         selectedFingerprintMatchesCurrentAppFingerprint: fingerprintMatch,
+        serverRequestOrigin,
+        subscriptionOriginInferred: subscription.endpoint ? new URL(subscription.endpoint).origin : null,
+        deploymentCommit,
+        locationPresent: result.safeHeaders && (result.safeHeaders["location"] || result.safeHeaders["Location"]) ? "Yes" : "No",
+        retryAfter: result.safeHeaders && (result.safeHeaders["retry-after"] || result.safeHeaders["Retry-After"]) || "None",
+        warningHeader: result.safeHeaders && (result.safeHeaders["warning"] || result.safeHeaders["Warning"]) || "None",
       }
     });
   } catch (err: any) {

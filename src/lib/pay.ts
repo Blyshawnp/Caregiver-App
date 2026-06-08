@@ -1,3 +1,5 @@
+import { formatCurrency as sharedFormatCurrency } from "./format-currency";
+
 /**
  * Pay calculation helpers.
  *
@@ -25,14 +27,9 @@ export function formatPay(amount: number): string {
 }
 
 export function formatCurrency(amount: number | string | null | undefined): string {
-  if (amount == null) return "$0.00";
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  if (isNaN(num)) return "$0.00";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(num);
+  return sharedFormatCurrency(amount);
 }
+
 
 /**
  * Format hours with one decimal place.

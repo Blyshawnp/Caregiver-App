@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { soundForNotificationKind } from "@/lib/push-categories";
 import { playNotificationSound, playNotificationTone } from "@/lib/notification-sounds";
 import { BellIcon } from "./icons";
+import { formatCurrencyInText } from "@/lib/format-currency";
 
 export default function NotificationBell({
   initialCount,
@@ -89,8 +90,8 @@ export default function NotificationBell({
 
                 setActiveUrgentAlert({
                   id: data.id || Math.random().toString(),
-                  title: data.title || "Urgent Alert",
-                  body: data.body || "Please check details.",
+                  title: formatCurrencyInText(data.title) || "Urgent Alert",
+                  body: formatCurrencyInText(data.body) || "Please check details.",
                 });
 
                 if (localStorage.getItem("pwa_urgent_alerts_repeat") === "true") {
@@ -115,8 +116,8 @@ export default function NotificationBell({
             }
 
             if ("Notification" in window && Notification.permission === "granted") {
-              new Notification(data.title || "Carer Vista Pro", {
-                body: data.body || "",
+              new Notification(formatCurrencyInText(data.title) || "Carer Vista Pro", {
+                body: formatCurrencyInText(data.body) || "",
                 icon: "/icon-192.png",
               });
             }

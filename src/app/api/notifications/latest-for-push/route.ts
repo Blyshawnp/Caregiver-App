@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatCurrencyInText } from "@/lib/format-currency";
 
 export const dynamic = "force-dynamic";
 
@@ -33,8 +34,8 @@ export async function GET() {
 
     return NextResponse.json({
       id: data.id,
-      title: data.title,
-      body: data.body,
+      title: formatCurrencyInText(data.title),
+      body: formatCurrencyInText(data.body),
       url: data.link || "/notifications",
       tag: data.kind || "caregiver-notification",
     });

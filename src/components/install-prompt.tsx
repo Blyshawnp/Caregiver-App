@@ -269,10 +269,12 @@ export default function InstallPrompt() {
 
     window.addEventListener(ALERT_PROMPT_DISMISSED_EVENT, onPromptClosed);
     window.addEventListener("push-prompt-dismissed", onPromptClosed);
+    window.addEventListener("install-prompt-preference-reset", onPromptClosed);
 
     return () => {
       window.removeEventListener(ALERT_PROMPT_DISMISSED_EVENT, onPromptClosed);
       window.removeEventListener("push-prompt-dismissed", onPromptClosed);
+      window.removeEventListener("install-prompt-preference-reset", onPromptClosed);
     };
   }, []);
 

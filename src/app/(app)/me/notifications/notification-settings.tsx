@@ -154,6 +154,16 @@ type PushDiagnostics = {
   readySubMatchesDbSub: string;
   controllerMatchesActive: string;
   swRegistrationsList: any[];
+
+  // Phase 1 verification and Phase 4 DevTools fields
+  locationOrigin: string;
+  locationHostname: string;
+  appEnvironment: string;
+  localStorageInstallPromptKeys: string;
+  sessionStorageInstallPromptKeys: string;
+  isInstallPromptPreferenceStoredInSupabase: string;
+  installPromptNeverShowSource: string;
+  lastDevtoolsPushReceivedTime: string;
 };
 
 const APP_VERSION = "20260607.01";
@@ -300,13 +310,23 @@ export default function NotificationSettings({
     localTestTraceWriteTime: "Not run",
     localTestTraceReadTime: "Not run",
     traceStorageType: "Cache Storage",
-    traceStorageKey: "sw-trace-cache / https://caregiver-app/sw-trace.json",
+    traceStorageKey: "sw-trace-cache / " + (typeof window !== "undefined" ? window.location.origin : "") + "/sw-trace.json",
     traceReadSuccess: "Not run",
     traceWriteSuccess: "Not run",
     readySubMatchesActiveSub: "Not checked",
     readySubMatchesDbSub: "Not checked",
     controllerMatchesActive: "Not checked",
     swRegistrationsList: [],
+
+    // Phase 1 verification and Phase 4 DevTools fields
+    locationOrigin: typeof window !== "undefined" ? window.location.origin : "",
+    locationHostname: typeof window !== "undefined" ? window.location.hostname : "",
+    appEnvironment: "unknown",
+    localStorageInstallPromptKeys: "{}",
+    sessionStorageInstallPromptKeys: "{}",
+    isInstallPromptPreferenceStoredInSupabase: "No",
+    installPromptNeverShowSource: "none",
+    lastDevtoolsPushReceivedTime: "Not recorded",
   });
 
   const [inAppAlertSound, setInAppAlertSound] = useState("default");
@@ -366,6 +386,19 @@ export default function NotificationSettings({
       setSwStatus("unsupported");
     }
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleVisibilityOrFocus = () => {
+      refreshDiagnostics();
+    };
+    window.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -557,7 +590,10 @@ export default function NotificationSettings({
       if (typeof window !== "undefined" && "caches" in window) {
         try {
           const cache = await window.caches.open("sw-trace-cache");
-          const match = await cache.match("https://caregiver-app/sw-trace.json");
+          let match = await cache.match(window.location.origin + "/sw-trace.json");
+          if (!match) {
+            match = await cache.match("https://caregiver-app/sw-trace.json");
+          }
           if (match) {
             swTrace = await match.json().catch(() => ({}));
           }
@@ -587,7 +623,7 @@ export default function NotificationSettings({
       if (Date.now() - startTime > 60000) {
         clearInterval(interval);
         setTestOutcome("provider_accepted_but_no_sw_event_after_60s");
-        setTestMessage("Push provider accepted the message, but this browser did not report a matching service worker push event for testPushId within 60 seconds. Try with the app closed, then opened, and check OS/browser notification settings.");
+        setTestMessage("Push provider accepted the message, but this browser has not reported receiving the push event.");
         await refreshDiagnostics();
       }
     }, 2000);
@@ -762,7 +798,11 @@ export default function NotificationSettings({
       try {
         if ("caches" in window) {
           const cache = await window.caches.open("sw-trace-cache");
-          const existingResponse = await cache.match("https://caregiver-app/sw-trace.json");
+          const traceUrl = window.location.origin + "/sw-trace.json";
+          let existingResponse = await cache.match(traceUrl);
+          if (!existingResponse) {
+            existingResponse = await cache.match("https://caregiver-app/sw-trace.json");
+          }
           let existingData = {};
           if (existingResponse) {
             existingData = await existingResponse.json().catch(() => ({}));
@@ -774,7 +814,7 @@ export default function NotificationSettings({
             lastUpdateTime: writeTime,
           };
           await cache.put(
-            "https://caregiver-app/sw-trace.json",
+            traceUrl,
             new Response(JSON.stringify(newData), {
               headers: { "Content-Type": "application/json" },
             })
@@ -796,7 +836,10 @@ export default function NotificationSettings({
         if ("caches" in window) {
           const cache = await window.caches.open("sw-trace-cache");
           readTime = new Date().toISOString();
-          const match = await cache.match("https://caregiver-app/sw-trace.json");
+          let match = await cache.match(window.location.origin + "/sw-trace.json");
+          if (!match) {
+            match = await cache.match("https://caregiver-app/sw-trace.json");
+          }
           if (match) {
             const data = await match.json().catch(() => ({}));
             if (data.localTestTraceWriteTime === writeTime) {
@@ -848,12 +891,53 @@ export default function NotificationSettings({
     if (typeof window !== "undefined" && "caches" in window) {
       try {
         const cache = await window.caches.open("sw-trace-cache");
+        await cache.delete(window.location.origin + "/sw-trace.json");
         await cache.delete("https://caregiver-app/sw-trace.json");
         alert("Service Worker trace cleared.");
         await refreshDiagnostics();
       } catch (err) {
         alert("Failed to clear SW trace: " + String(err));
       }
+    }
+  }
+
+  async function resetInstallPromptPreferences() {
+    try {
+      const keysToRemove = [
+        "cvp_install_prompt_never_show",
+        "cvp_install_prompt_dismissed_until",
+        "cvp_install_prompt_session_dismissed",
+        "cvp_install_prompt_last_prompted_at",
+        "cvp_install_prompt_last_action",
+        "cvp_install_prompt_diagnostics",
+        "caregiver-app:pwa-install-never-show",
+        "caregiver_app_pwa_install_never_show",
+        "pwa_install_never_show",
+        "caregiver-app:pwa-install-dismissed-until",
+        "caregiver_app_pwa_install_dismissed_until",
+        "pwa_install_dismissed_until",
+        "caregiver-app:pwa-install-last-prompted-at",
+        "caregiver_app_pwa_install_last_prompted_at",
+        "pwa_install_last_prompted_at",
+        "caregiver-app:pwa-install-not-now-cooldown",
+        "caregiver-app:install-prompt-diagnostics"
+      ];
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      const sessionKeysToRemove = [
+        "cvp_install_prompt_session_dismissed",
+        "caregiver-app:pwa-install-dismissed-session"
+      ];
+      sessionKeysToRemove.forEach(k => sessionStorage.removeItem(k));
+
+      // Dispatch event to force InstallPrompt component to re-evaluate immediately
+      window.dispatchEvent(new Event("push-prompt-dismissed"));
+      window.dispatchEvent(new Event("install-prompt-preference-reset"));
+
+      await refreshDiagnostics();
+      alert("Install prompt preferences reset successfully!");
+    } catch (err) {
+      alert("Error resetting preferences: " + (err instanceof Error ? err.message : String(err)));
     }
   }
 
@@ -922,7 +1006,10 @@ export default function NotificationSettings({
     if ("caches" in window) {
       try {
         const cache = await window.caches.open("sw-trace-cache");
-        const match = await cache.match("https://caregiver-app/sw-trace.json");
+        let match = await cache.match(window.location.origin + "/sw-trace.json");
+        if (!match) {
+          match = await cache.match("https://caregiver-app/sw-trace.json");
+        }
         if (match) {
           swTrace = await match.json().catch(() => ({}));
         }
@@ -1064,6 +1151,71 @@ export default function NotificationSettings({
       setTestOutcome("local_display_failed");
     }
 
+    // Gather all localStorage install prompt keys and values
+    const lsKeys: Record<string, string | null> = {};
+    const installPromptKeysList = [
+      "cvp_install_prompt_never_show",
+      "cvp_install_prompt_dismissed_until",
+      "cvp_install_prompt_session_dismissed",
+      "cvp_install_prompt_last_prompted_at",
+      "cvp_install_prompt_last_action",
+      "cvp_install_prompt_diagnostics",
+      "caregiver-app:pwa-install-never-show",
+      "caregiver_app_pwa_install_never_show",
+      "pwa_install_never_show",
+      "caregiver-app:pwa-install-dismissed-until",
+      "caregiver_app_pwa_install_dismissed_until",
+      "pwa_install_dismissed_until",
+      "caregiver-app:pwa-install-last-prompted-at",
+      "caregiver_app_pwa_install_last_prompted_at",
+      "pwa_install_last_prompted_at",
+      "caregiver-app:pwa-install-not-now-cooldown",
+      "caregiver-app:install-prompt-diagnostics"
+    ];
+    for (const key of installPromptKeysList) {
+      const val = localStorage.getItem(key);
+      if (val !== null) {
+        lsKeys[key] = val;
+      }
+    }
+    const localStorageInstallPromptKeysStr = JSON.stringify(lsKeys);
+
+    // Gather all sessionStorage install prompt keys and values
+    const ssKeys: Record<string, string | null> = {};
+    const sessionPromptKeysList = [
+      "cvp_install_prompt_session_dismissed",
+      "caregiver-app:pwa-install-dismissed-session"
+    ];
+    for (const key of sessionPromptKeysList) {
+      const val = sessionStorage.getItem(key);
+      if (val !== null) {
+        ssKeys[key] = val;
+      }
+    }
+    const sessionStorageInstallPromptKeysStr = JSON.stringify(ssKeys);
+
+    // Determine the source of installPromptNeverShow
+    let neverShowSource = "none";
+    if (neverShow) {
+      const storedInLocalStorage = localStorage.getItem("cvp_install_prompt_never_show") === "true" ||
+        localStorage.getItem("caregiver-app:pwa-install-never-show") === "true" ||
+        localStorage.getItem("caregiver_app_pwa_install_never_show") === "true";
+      const storedInSessionStorage = sessionStorage.getItem("cvp_install_prompt_session_dismissed") === "true" ||
+        sessionStorage.getItem("caregiver-app:pwa-install-dismissed-session") === "true";
+      
+      if (storedInLocalStorage) {
+        neverShowSource = "localStorage";
+      } else if (storedInSessionStorage) {
+        neverShowSource = "sessionStorage";
+      } else if (installedPwa) {
+        neverShowSource = "computed installed mode";
+      } else {
+        neverShowSource = "unknown";
+      }
+    } else if (installedPwa) {
+      neverShowSource = "computed installed mode";
+    }
+
     setDiagnostics({
       browserPermission: "Notification" in window ? Notification.permission : "unsupported",
       serviceWorkerRegistered: !!registration,
@@ -1186,13 +1338,23 @@ export default function NotificationSettings({
       localTestTraceWriteTime: localTraceWriteTime,
       localTestTraceReadTime: localTraceReadTime,
       traceStorageType: "Cache Storage",
-      traceStorageKey: "sw-trace-cache / https://caregiver-app/sw-trace.json",
+      traceStorageKey: "sw-trace-cache / " + (typeof window !== "undefined" ? window.location.origin : "") + "/sw-trace.json",
       traceReadSuccess: localTraceReadSuccess === "true" ? "Yes" : localTraceReadSuccess === "false" ? "No" : "Not run",
       traceWriteSuccess: localTraceWriteSuccess === "true" ? "Yes" : localTraceWriteSuccess === "false" ? "No" : "Not run",
       readySubMatchesActiveSub: readySubMatchesActiveSub ? "Yes" : "No",
       readySubMatchesDbSub: readySubMatchesDbSub ? "Yes" : "No",
       controllerMatchesActive: controllerMatchesActive ? "Yes" : "No",
       swRegistrationsList,
+
+      // Phase 1 verification and Phase 4 DevTools fields
+      locationOrigin: typeof window !== "undefined" ? window.location.origin : "",
+      locationHostname: typeof window !== "undefined" ? window.location.hostname : "",
+      appEnvironment: process.env.NODE_ENV || "development",
+      localStorageInstallPromptKeys: localStorageInstallPromptKeysStr,
+      sessionStorageInstallPromptKeys: sessionStorageInstallPromptKeysStr,
+      isInstallPromptPreferenceStoredInSupabase: "No",
+      installPromptNeverShowSource: neverShowSource,
+      lastDevtoolsPushReceivedTime: swTrace.lastDevtoolsPushReceivedTime ? new Date(swTrace.lastDevtoolsPushReceivedTime).toLocaleString() : "Not recorded",
     });
   }
 
@@ -1280,7 +1442,7 @@ export default function NotificationSettings({
       return { label: "Provider accepted, waiting for SW", color: "text-amber-600 font-semibold animate-pulse" };
     }
     if (testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") {
-      return { label: "Active, but remote delivery unconfirmed", color: "text-amber-600 font-semibold" };
+      return { label: "Active, remote delivery unconfirmed", color: "text-amber-600 font-semibold" };
     }
     if (testOutcome === "sw_received_show_failed") {
       return { label: "Service worker received but display failed", color: "text-terracotta-600 font-semibold" };
@@ -1504,7 +1666,7 @@ export default function NotificationSettings({
             <p className="leading-relaxed">
               {testOutcome === "provider_rejected" && "Provider rejected the push request."}
               {testOutcome === "provider_accepted_waiting_for_sw" && "Provider accepted the push. Waiting for this browser’s service worker to report receiving it."}
-              {(testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") && "Provider accepted the push, but this browser did not report a matching service worker push event for testPushId within the timeout limits."}
+              {(testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") && "Push provider accepted the message, but this browser has not reported receiving the push event."}
               {testOutcome === "sw_received_show_failed" && "Service worker received the push, but showNotification failed."}
               {testOutcome === "sw_received_show_success" && "Service worker received the push and showNotification succeeded."}
               {testOutcome === "sw_received_after_delay" && "Service worker received the push after a delay."}
@@ -1677,6 +1839,13 @@ export default function NotificationSettings({
                   </button>
                   <button
                     type="button"
+                    onClick={resetInstallPromptPreferences}
+                    className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
+                  >
+                    Reset install prompt preferences
+                  </button>
+                  <button
+                    type="button"
                     onClick={copyDiagnosticsToClipboard}
                     className="bg-cream-200 hover:bg-cream-300 text-ink-750 px-2 py-1 rounded text-[10px] font-semibold transition"
                   >
@@ -1741,6 +1910,7 @@ export default function NotificationSettings({
                 <Diag label="SW install time" value={diagnostics.swInstallTime} />
                 <Diag label="SW activate time" value={diagnostics.swActivateTime} />
                 <Diag label="Last SW push received time" value={diagnostics.lastSwPushReceivedTime} />
+                <Diag label="Last DevTools push received time" value={diagnostics.lastDevtoolsPushReceivedTime} />
                 <Diag label="Last SW push payload" value={diagnostics.lastSwPushPayload.slice(0, 50)} />
                 <Diag label="Last SW push parse result" value={diagnostics.lastSwPushParseResult} />
                 <Diag label="Last SW push parse error" value={diagnostics.lastSwPushParseError || "None"} />
@@ -1769,7 +1939,36 @@ export default function NotificationSettings({
                 <Diag label="Install prompt hidden reason" value={diagnostics.installPromptHiddenReason || "None"} />
                 <Diag label="Install prompt last action" value={diagnostics.installPromptLastAction || "None"} />
                 <Diag label="Install prompt storage keys" value={diagnostics.installPromptStorageKeysUsed || "None"} />
+                <Diag label="Current location origin" value={diagnostics.locationOrigin} />
+                <Diag label="Current hostname" value={diagnostics.locationHostname} />
+                <Diag label="App environment" value={diagnostics.appEnvironment} />
+                <Diag label="LocalStorage install prompt keys" value={diagnostics.localStorageInstallPromptKeys} />
+                <Diag label="SessionStorage install prompt keys" value={diagnostics.sessionStorageInstallPromptKeys} />
+                <Diag label="Stored server-side in Supabase" value={diagnostics.isInstallPromptPreferenceStoredInSupabase} />
+                <Diag label="Source of installPromptNeverShow" value={diagnostics.installPromptNeverShowSource} />
               </dl>
+
+              {/* Chrome/Edge direct service worker push test instructions */}
+              <div className="mt-4 border-t border-cream-200 pt-3">
+                <p className="font-semibold text-ink-800 mb-2">Chrome/Edge Direct Service Worker Push Test</p>
+                <div className="bg-cream-50 border border-cream-200 rounded-xl p-3.5 text-xs mb-3 text-ink-700 space-y-1.5 leading-relaxed">
+                  <p className="font-medium text-ink-800">Instructions:</p>
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>Open DevTools (F12 or Right Click &gt; Inspect).</li>
+                    <li>Go to the <strong>Application</strong> tab.</li>
+                    <li>Select <strong>Service Workers</strong> in the left sidebar.</li>
+                    <li>Click <strong>Push</strong> on this app’s active service worker.</li>
+                    <li>Return here and check if the SW trace updates.</li>
+                  </ol>
+                  {diagnostics.lastDevtoolsPushReceivedTime !== "Not recorded" && 
+                   diagnostics.providerAcceptedTestPushId !== "None" && 
+                   diagnostics.lastSwReceivedTestPushId !== diagnostics.providerAcceptedTestPushId && (
+                    <div className="mt-2.5 p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg font-medium">
+                      ⚠️ Service worker push handler works locally. Remote provider push is accepted but not delivered to this browser.
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Service Worker Scope & Registrations Details (Phase 7) */}
               <div className="mt-4 border-t border-cream-200 pt-3">

@@ -23,7 +23,8 @@ const SW_VERSION = "20260607.01";
 async function saveSwTrace(traceData) {
   try {
     const cache = await caches.open("sw-trace-cache");
-    const existingResponse = await cache.match("https://caregiver-app/sw-trace.json");
+    const traceUrl = self.location.origin + "/sw-trace.json";
+    const existingResponse = await cache.match(traceUrl);
     let existingData = {};
     if (existingResponse) {
       try {
@@ -39,7 +40,7 @@ async function saveSwTrace(traceData) {
       lastUpdateTime: new Date().toISOString(),
     };
     await cache.put(
-      "https://caregiver-app/sw-trace.json",
+      traceUrl,
       new Response(JSON.stringify(newData), {
         headers: { "Content-Type": "application/json" }
       })
@@ -169,14 +170,19 @@ self.addEventListener("push", (event) => {
 
   let parseResult = "default_fallback";
   let parseError = null;
-  try {
-    if (event.data) {
+  let isDevtools = false;
+
+  if (!event.data) {
+    isDevtools = true;
+  } else {
+    try {
       payload = { ...payload, ...event.data.json() };
       parseResult = "success";
+    } catch (err) {
+      parseResult = "failure";
+      parseError = err instanceof Error ? err.message : String(err);
+      isDevtools = true;
     }
-  } catch (err) {
-    parseResult = "failure";
-    parseError = err instanceof Error ? err.message : String(err);
   }
 
   const traceData = {
@@ -188,6 +194,10 @@ self.addEventListener("push", (event) => {
     lastNotificationTag: payload.tag || "caregiver-notification",
     receivedTestPushId: payload.testPushId || null,
   };
+
+  if (isDevtools) {
+    traceData.lastDevtoolsPushReceivedTime = receiveTime;
+  }
 
   const showPromise = async () => {
     const attemptTime = new Date().toISOString();

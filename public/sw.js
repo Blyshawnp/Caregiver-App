@@ -17,7 +17,7 @@ const STATIC_ASSETS = [
   "/favicon-32.png",
 ];
 
-const SW_VERSION = "20260608.01";
+const SW_VERSION = "20260608.02";
 
 // Helper for saving service worker trace logs
 async function saveSwTrace(traceData) {
@@ -238,7 +238,16 @@ self.addEventListener("push", (event) => {
     // Fetch latest unread details if no-payload push
     if (parseResult === "no_data" || parseResult === "default_fallback") {
       try {
-        const response = await fetch("/api/notifications/latest-for-push");
+        let fetchUrl = "/api/notifications/latest-for-push";
+        try {
+          const sub = await self.registration.pushManager.getSubscription();
+          if (sub && sub.endpoint) {
+            fetchUrl += `?endpoint=${encodeURIComponent(sub.endpoint)}`;
+          }
+        } catch (subErr) {
+          console.warn("[sw] failed to get subscription for fetchUrl", subErr);
+        }
+        const response = await fetch(fetchUrl);
         if (response.ok) {
           const json = await response.json();
           if (json && !json.no_notifications && json.title) {

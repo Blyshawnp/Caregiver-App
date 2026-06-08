@@ -173,7 +173,7 @@ type PushDiagnostics = {
   lastTestPushPayloadKind: string | null;
 };
 
-const APP_VERSION = "20260607.01";
+const APP_VERSION = "20260608.02";
 
 export default function NotificationSettings({ 
   initialPreferences 
@@ -347,6 +347,7 @@ export default function NotificationSettings({
   const [inAppAlertVolume, setInAppAlertVolume] = useState(0.8);
   const [urgentAlertsRepeat, setUrgentAlertsRepeat] = useState(true);
   const [testOutcome, setTestOutcome] = useState<string | null>(null);
+  const [lastTestPayloadKind, setLastTestPayloadKind] = useState<string | null>(null);
 
   // Monitor service worker controller change and readiness
   async function updateSwStatus() {
@@ -579,15 +580,30 @@ export default function NotificationSettings({
     try {
       const reg = await navigator.serviceWorker.getRegistration("/");
       if (reg) {
-        await reg.update();
+        const trackInstalling = (worker: ServiceWorker) => {
+          worker.addEventListener("statechange", () => {
+            if (worker.state === "installed") {
+              worker.postMessage({ type: "SKIP_WAITING" });
+            }
+          });
+        };
+
         if (reg.waiting) {
           reg.waiting.postMessage({ type: "SKIP_WAITING" });
         } else {
-          alert("Service worker update requested. If it is already updating, it will reload automatically.");
+          if (reg.installing) {
+            trackInstalling(reg.installing);
+          }
+          reg.addEventListener("updatefound", () => {
+            if (reg.installing) {
+              trackInstalling(reg.installing);
+            }
+          });
+          await reg.update();
         }
       }
     } catch (err) {
-      alert("Failed to update service worker: " + String(err));
+      console.error("Failed to update service worker:", err);
     }
   }
 
@@ -665,7 +681,8 @@ export default function NotificationSettings({
         setTestMessage(`Please close or minimize the app immediately. Test push will be sent in ${delay} seconds.`);
       }
 
-      const payloadKind = options?.payloadKind || (options?.noPayload ? "none" : "full_json");
+      const payloadKind = options?.payloadKind || "none";
+      setLastTestPayloadKind(payloadKind);
 
       const res = await fetch("/api/push/test", {
         method: "POST",
@@ -1428,7 +1445,7 @@ export default function NotificationSettings({
 
     const isSwStale = diagnostics.swVersion !== "None" && diagnostics.swVersion !== APP_VERSION;
     if (isSwStale) {
-      return { label: "Service worker is stale. Refresh/update service worker.", color: "text-amber-600 font-semibold" };
+      return { label: "Service worker stale", color: "text-amber-600 font-semibold" };
     }
 
     if (diagnostics.traceWriteSuccess === "No" || diagnostics.traceReadSuccess === "No") {
@@ -1466,16 +1483,16 @@ export default function NotificationSettings({
       return { label: "Provider rejected push", color: "text-terracotta-600 font-semibold" };
     }
     if (testOutcome === "provider_accepted_waiting_for_sw") {
-      return { label: "Provider accepted, waiting for SW", color: "text-amber-600 font-semibold animate-pulse" };
+      return { label: "Active, provider accepted but display unconfirmed", color: "text-amber-600 font-semibold animate-pulse" };
     }
     if (testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") {
-      return { label: "Active, remote delivery unconfirmed", color: "text-amber-600 font-semibold" };
+      return { label: "Active, provider accepted but display unconfirmed", color: "text-amber-600 font-semibold" };
     }
     if (testOutcome === "sw_received_show_failed") {
       return { label: "Service worker received but display failed", color: "text-terracotta-600 font-semibold" };
     }
     if (testOutcome === "sw_received_show_success" || testOutcome === "sw_received_after_delay") {
-      return { label: "Active and test passed", color: "text-forest-700 font-semibold" };
+      return { label: "Active and push displayed", color: "text-forest-700 font-semibold" };
     }
 
     if (diagnostics.browserSubscriptionExists && diagnostics.subscriptionSaved && !diagnostics.subscriptionActive) {
@@ -1694,9 +1711,9 @@ export default function NotificationSettings({
               {testOutcome === "provider_rejected" && "Provider rejected the push request."}
               {testOutcome === "provider_accepted_waiting_for_sw" && "Provider accepted the push. Waiting for this browser’s service worker to report receiving it."}
               {(testOutcome === "provider_accepted_but_no_sw_event_after_60s" || testOutcome === "provider_accepted_but_no_sw_event") && (
-                diagnostics.lastDevtoolsPushReceivedTime !== "Not recorded"
-                  ? "Remote provider accepted the push, but Chrome did not deliver it to this service worker. Local and DevTools push both work, so the remaining issue is remote provider delivery or the server send path."
-                  : "Push provider accepted the message, but this browser has not reported receiving the push event."
+                lastTestPayloadKind && lastTestPayloadKind !== "none"
+                  ? "The push provider accepted the encrypted payload, but it was not received by the service worker. This indicates encrypted payload delivery is unsupported/broken on this device. This is not a production failure because the app uses No-payload Wake Push by default."
+                  : "The push provider accepted the notification, but the service worker did not receive it. Check network status, Focus/Do Not Disturb, or battery optimization."
               )}
               {testOutcome === "sw_received_show_failed" && "Service worker received the push, but showNotification failed."}
               {testOutcome === "sw_received_show_success" && "Service worker received the push and showNotification succeeded."}

@@ -26,6 +26,7 @@ type TestPushRequest = {
 type PushSubscriptionRow = {
   id: string;
   user_id: string;
+  organization_id: string;
   device_id: string | null;
   endpoint: string;
   p256dh: string | null;
@@ -231,6 +232,37 @@ export async function POST(request: Request) {
     }
 
     const payloadKind = payload.payloadKind || (payload.noPayload ? "none" : "full_json");
+
+    if (payloadKind === "none") {
+      // Create a dedicated test notification row first in DB
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single();
+      const orgId = profile?.organization_id || subscription.organization_id || "00000000-0000-0000-0000-000000000000";
+
+      const { error: insertError } = await admin
+        .from("notifications")
+        .insert({
+          organization_id: orgId,
+          recipient_id: user.id,
+          kind: "test",
+          title: "Test notification",
+          body: "Push alerts are working.",
+          link: `/me/notifications?testPushId=${testPushId}&endpoint=${subscription ? encodeURIComponent(subscription.endpoint) : ""}`,
+          is_read: false,
+        });
+
+      if (insertError) {
+        console.error("[push-test] Failed to create test notification row", insertError);
+        return NextResponse.json(
+          { error: "Failed to create test notification row: " + insertError.message },
+          { status: 500 }
+        );
+      }
+    }
+
     let testPayload: any = null;
 
     if (payloadKind === "none") {
@@ -450,7 +482,7 @@ async function findCurrentDeviceSubscription(
   endpoint?: string
 ) {
   const selectFields =
-    "id, user_id, device_id, endpoint, p256dh, auth, is_active, vapid_key_fingerprint, updated_at";
+    "id, user_id, organization_id, device_id, endpoint, p256dh, auth, is_active, vapid_key_fingerprint, updated_at";
 
   if (endpoint) {
     let exactQuery = admin

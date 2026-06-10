@@ -213,7 +213,7 @@ export default function ScheduleView({
       {canCreate && !isMultiSelectMode && (
         <Link
           href="/schedule/new"
-          className="fixed bottom-28 right-5 z-20 w-14 h-14 rounded-full bg-forest-600 hover:bg-forest-700 text-cream-50 shadow-lifted grid place-items-center transition active:scale-95"
+          className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] right-5 z-20 w-14 h-14 rounded-full bg-forest-600 hover:bg-forest-700 text-cream-50 shadow-lifted grid place-items-center transition active:scale-95"
           aria-label="Create new shift"
         >
           <PlusIcon size={24} />
@@ -221,7 +221,7 @@ export default function ScheduleView({
       )}
 
       {isMultiSelectMode && selectedShiftIds.size > 0 && (
-        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-30 bg-white border border-cream-200 shadow-lifted rounded-2xl px-5 py-3.5 flex items-center justify-between gap-4 max-w-sm w-[90%] animate-in fade-in slide-in-from-bottom-5">
+        <div className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-30 bg-white border border-cream-200 shadow-lifted rounded-2xl px-5 py-3.5 flex items-center justify-between gap-4 max-w-sm w-[90%] animate-in fade-in slide-in-from-bottom-5">
           <span className="text-xs font-semibold text-ink-900">
             {selectedShiftIds.size} selected
           </span>

@@ -388,7 +388,7 @@ export default function InstallPrompt() {
   return (
     <>
       {show && !showIosSheet && !showManualSheet && (
-        <div className="fixed bottom-24 left-3 right-3 z-40 max-w-md mx-auto pb-[env(safe-area-inset-bottom)] animate-slide-up">
+        <div className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] left-3 right-3 z-40 max-w-md mx-auto animate-slide-up">
           <div className="bg-forest-600 text-cream-50 rounded-3xl shadow-lifted p-5 flex flex-col gap-3.5 border border-forest-500/30">
             <div className="flex items-start justify-between">
               <div className="flex gap-3">

@@ -173,7 +173,7 @@ export default async function AppLayout({
         lang={lang}
       />
 
-      <div className="flex-1 pb-24">
+      <div className="flex-1 pb-[calc(7.5rem+env(safe-area-inset-bottom))]">
         {activeWatch && (
           <div className="px-5 pt-4 max-w-2xl mx-auto">
             <ShiftWatcher active={activeWatch} />

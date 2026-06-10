@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type ClientPhotoProps = {
   name: string;
@@ -21,6 +22,12 @@ export default function ClientPhoto({
 }: ClientPhotoProps) {
   const [failed, setFailed] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   useEffect(() => {
     setFailed(false);
@@ -33,6 +40,17 @@ export default function ClientPhoto({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [previewOpen]);
+
+  useEffect(() => {
+    if (previewOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [previewOpen]);
 
   const initials = name
@@ -60,6 +78,58 @@ export default function ClientPhoto({
     </div>
   );
 
+  const preview = previewOpen && photoUrl && !failed && mounted && createPortal(
+    <div
+      className="fixed inset-0 z-[1200] bg-ink-950/80 backdrop-blur-sm p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-center justify-center cursor-pointer"
+      onClick={() => setPreviewOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${name} photo preview`}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-lifted w-[calc(100vw-2rem)] max-w-[420px] max-h-[85dvh] p-5 flex flex-col cursor-default"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="w-full flex items-center justify-between mb-4">
+          <h3 className="font-display text-lg font-bold text-ink-900 truncate pr-2">
+            {name}
+          </h3>
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(false)}
+            className="bg-cream-100 hover:bg-cream-200 text-ink-700 px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0"
+          >
+            Close
+          </button>
+        </div>
+
+        {/* Image Container */}
+        <div className="w-full flex justify-center items-center bg-cream-50 rounded-2xl p-2 overflow-hidden mb-4">
+          <img
+            src={photoUrl}
+            alt={`${name} profile photo`}
+            className="object-contain rounded-xl mx-auto"
+            style={{ maxWidth: "min(280px, 70vw)", maxHeight: "min(320px, 45dvh)" }}
+            onError={() => setFailed(true)}
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="w-full flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(false)}
+            className="w-full text-center bg-cream-100 hover:bg-cream-200 text-ink-700 py-2.5 rounded-xl text-xs font-semibold transition"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+
   if (photoUrl && !failed) {
     return (
       <>
@@ -71,39 +141,7 @@ export default function ClientPhoto({
         >
           {content}
         </button>
-        {previewOpen && (
-          <div
-            className="fixed inset-0 z-[1200] bg-ink-950/80 backdrop-blur-sm p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-center justify-center"
-            onClick={() => setPreviewOpen(false)}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${name} photo preview`}
-          >
-            <button
-              type="button"
-              onClick={() => setPreviewOpen(false)}
-              className="fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-[1201] bg-white/95 hover:bg-white text-ink-900 px-3 py-2 rounded-xl text-sm font-medium shadow-lifted"
-              aria-label="Close photo preview"
-            >
-              Close
-            </button>
-            <div
-              className="w-full max-w-3xl"
-            >
-              <div
-                className="bg-white rounded-3xl shadow-lifted w-full max-h-[85dvh] p-3 flex flex-col"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <img
-                  src={photoUrl}
-                  alt={`${name} profile photo`}
-                  className="w-full max-h-[76dvh] object-contain rounded-2xl bg-cream-100"
-                  onError={() => setFailed(true)}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        {preview}
       </>
     );
   }

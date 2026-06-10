@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { resolveAvatarPresetPath } from "@/lib/avatar-presets";
+import { createPortal } from "react-dom";
+import { resolveAvatarPresetPath, isAvatarPresetPath } from "@/lib/avatar-presets";
 
 export type AvatarProfile = {
   full_name: string | null;
@@ -26,6 +27,12 @@ export default function UserAvatar({
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +82,17 @@ export default function UserAvatar({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [previewOpen]);
 
+  useEffect(() => {
+    if (previewOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [previewOpen]);
+
   const initials = person.full_name
     ? person.full_name
         .split(" ")
@@ -114,50 +132,64 @@ export default function UserAvatar({
     </div>
   );
 
-  const preview = previewOpen && displayUrl && !failed && (
+  const preview = previewOpen && displayUrl && !failed && mounted && createPortal(
     <div
-      className="fixed inset-0 z-[1200] bg-ink-950/80 backdrop-blur-sm p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-center justify-center"
+      className="fixed inset-0 z-[1200] bg-ink-950/80 backdrop-blur-sm p-4 pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] flex items-center justify-center cursor-pointer"
       onClick={() => setPreviewOpen(false)}
       role="dialog"
       aria-modal="true"
       aria-label={`${person.full_name || "User"} profile photo preview`}
     >
-      <button
-        type="button"
-        onClick={() => setPreviewOpen(false)}
-        className="fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-[1201] bg-white/95 hover:bg-white text-ink-900 px-3 py-2 rounded-xl text-sm font-medium shadow-lifted"
-        aria-label="Close profile photo preview"
-      >
-        Close
-      </button>
       <div
-        className="w-full max-w-3xl"
+        className="bg-white rounded-3xl shadow-lifted w-[calc(100vw-2rem)] max-w-[420px] max-h-[85dvh] p-5 flex flex-col cursor-default"
+        onClick={(event) => event.stopPropagation()}
       >
-        <div
-          className="bg-white rounded-3xl shadow-lifted w-full max-h-[85dvh] p-3 flex flex-col"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div className="w-full flex items-center justify-between mb-4">
+          <h3 className="font-display text-lg font-bold text-ink-900 truncate pr-2">
+            {person.full_name || "Profile Photo"}
+          </h3>
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(false)}
+            className="bg-cream-100 hover:bg-cream-200 text-ink-700 px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0"
+          >
+            Close
+          </button>
+        </div>
+        <div className="w-full flex justify-center items-center bg-cream-50 rounded-2xl p-2 overflow-hidden mb-4">
           <img
             src={displayUrl}
             alt={`${person.full_name || "User"} profile photo`}
-            className="w-full max-h-[76dvh] object-contain rounded-2xl bg-cream-100"
+            className="object-contain rounded-xl mx-auto"
+            style={{ maxWidth: "min(280px, 70vw)", maxHeight: "min(320px, 45dvh)" }}
           />
-          <div className="flex gap-2 mt-3">
-            {person.id && (
-              <Link
-                href={`/profiles/${person.id}`}
-                className="flex-1 text-center bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-sm font-medium transition"
-              >
-                View profile
-              </Link>
-            )}
-          </div>
+        </div>
+        <div className="w-full flex flex-col gap-2">
+          {person.id && (
+            <Link
+              href={`/profiles/${person.id}`}
+              onClick={() => setPreviewOpen(false)}
+              className="w-full text-center bg-forest-600 hover:bg-forest-700 text-cream-50 py-2.5 rounded-xl text-sm font-semibold transition"
+            >
+              View profile
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(false)}
+            className="w-full text-center bg-cream-100 hover:bg-cream-200 text-ink-700 py-2.5 rounded-xl text-xs font-semibold transition"
+          >
+            Dismiss
+          </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 
-  if (displayUrl && !failed) {
+  const isPreset = person.avatar_url ? isAvatarPresetPath(person.avatar_url) : true;
+
+  if (displayUrl && !isPreset && !failed) {
     return (
       <>
         <button

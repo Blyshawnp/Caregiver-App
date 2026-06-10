@@ -58,7 +58,7 @@ export default function PushPermissionPrompt() {
   if (state === "hidden" || state === "unsupported") return null;
 
   return (
-    <div className="fixed left-3 right-3 bottom-24 z-40 max-w-md mx-auto pb-[env(safe-area-inset-bottom)]">
+    <div className="fixed left-3 right-3 bottom-[calc(6.25rem+env(safe-area-inset-bottom))] z-40 max-w-md mx-auto">
       <div className="bg-white border border-cream-200 rounded-3xl shadow-lifted p-4">
         <p className="font-display text-xl text-ink-900 mb-1">
           Get important alerts
